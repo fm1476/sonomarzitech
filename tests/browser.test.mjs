@@ -16,6 +16,9 @@ test('React login and original feature screens use only local C# API',async()=>{
   await page.locator('#view-home').getByRole('button',{name:'Master Calendar'}).click();
   assert.equal(await page.locator('#workCalendarTitle').textContent(),'Master Calendar');
   await page.locator('#view-home').getByRole('button',{name:'My Calendar'}).click();
+  await page.evaluate(()=>window.SonoMarziLegacy.navigate('readiness'));
+  await page.locator('#view-readiness').getByRole('heading',{name:'Operational readiness'}).waitFor();
+  assert.equal(await page.locator('#view-readiness .readiness-items').count(),5);
   await page.getByRole('searchbox',{name:'Filter navigation'}).fill('Inventory');
   await page.locator('#suiteNav').getByRole('button',{name:'Inventory',exact:true}).click();
   assert.equal(await page.locator('#page-title').textContent(),'Equipment Inventory');

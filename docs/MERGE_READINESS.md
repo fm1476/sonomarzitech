@@ -6,7 +6,7 @@ Status: **not ready to merge**. This branch contains the AWS v14 source and the 
 
 - TypeScript checks, the C# Debug build, API integration tests, and browser smoke tests pass with isolated local data.
 - The C# Release publish succeeds. `npm audit --omit=dev --audit-level=high` reports no production dependency advisories.
-- Authentication, role-filtered workspace reads, optimistic version checks, Field Training, in-app notices, notification reads, primary feature navigation, and one real record edit are covered locally. Shared navigation, My Work, and the Workspaces, Reports, and Administration launchers render in React.
+- Authentication, role-filtered workspace reads, optimistic version checks, Field Training, in-app notices, notification reads, primary feature navigation, and one real record edit are covered locally. Shared navigation, My Work, Readiness, and the Workspaces, Reports, and Administration launchers render in React.
 - The C# catalog returns the selected tenant/agency to members and the full tenant/agency list to platform administrators. Its RDS path still needs live validation.
 - The review removed legacy account records from administrator workspace responses and strips authentication/account fields from the workspace template. An unavailable push service now reports 503 instead of a successful delivery response.
 

@@ -19,7 +19,7 @@ npm run dev
 
 Open `http://localhost:3002`. The local login is `admin@local.test` with the password you set in `.env`. `officer@local.test`, `trainer@local.test`, and `supervisor@local.test` use the same local password for role tests. The local API listens on 5092. Local records live under `backend/SonoMarzi.Api/.local/`, are ignored by Git, and never contact AWS. To reset local test data, stop the API and delete that directory.
 
-`npm run build` makes the frontend in `dist/`. `npm test` builds the C# API and runs isolated integration tests. `npm run backend:test` checks the C# build alone. React owns login, workspace selection, shared navigation, My Work, and the Workspaces, Reports, and Administration launchers; the module feature screens retain their behavior in ordered TypeScript modules while their forms are converted incrementally.
+`npm run build` makes the frontend in `dist/`. `npm test` builds the C# API and runs isolated integration tests. `npm run backend:test` checks the C# build alone. React owns login, workspace selection, shared navigation, My Work, Readiness, and the Workspaces, Reports, and Administration launchers; the module feature screens retain their behavior in ordered TypeScript modules while their forms are converted incrementally.
 
 ## AWS deployment target
 

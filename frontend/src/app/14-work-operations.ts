@@ -66,27 +66,18 @@ const WorkOperations: any = ((): any => {
     }
     function readinessTasks(): any { return readiness().filter((x?: any): any => (x.group === 'People' && (x.owner === CURRENT_USER_ID || allowed('pm_training_manage'))) || (x.group === 'Staffing' && allowed('pm_overtime_manage'))).slice(0, 25).map((x?: any): any => ({ title: x.title, owner: x.owner === CURRENT_USER_ID ? 'You' : x.group === 'Staffing' ? 'Scheduling' : 'Training', due: x.due, type: x.owner === CURRENT_USER_ID ? 'mine' : 'attention', consequence: x.detail, action: (): any => SuiteUX.go(x.route) } as any)); }
     function renderReadiness(el?: any): any {
-        const items: any = readiness(), groups: any = ['Staffing', 'People', 'Fleet', 'Equipment', 'Specialty'];
-        const cards: any = groups.map((g?: any): any => ({ g, rows: items.filter((i?: any): any => i.group === g) } as any));
-        el.innerHTML = `<div class="work-hero"><div><div class="work-eyebrow">Agency operations</div><h2>Operational readiness</h2><p>Live exceptions from the records available to your role. Clear each item in its source workspace.</p></div><div class="work-date">${esc(SuiteUX.displayDate(date()))}</div></div><div class="work-metrics">${cards.map(({ g, rows }: any): any => `<div class="work-metric ${rows.some((x?: any): any => x.urgent) ? 'urgent' : 'good'}"><span>${esc(g)}</span><strong>${rows.length}</strong><small>${rows.filter((x?: any): any => x.urgent).length} overdue</small></div>`).join('')}</div><div class="work-layout"><div>${cards.map(({ g, rows }: any): any => `<section class="panel"><div class="panel-head"><h2>${esc(g)}</h2><span class="hint">${rows.length} items</span></div><div class="readiness-items" data-readiness-group="${g}"></div></section>`).join('')}</div><aside class="work-aside"><section class="panel"><div class="panel-head"><h2>How this view works</h2></div><div class="panel-body"><p>Only records loaded for your role appear here. Expirations enter the list 60 days before their due date. Staffing gaps use the next seven days of shift minimums and actual coverage. Vehicle and equipment exceptions remain until their source status is cleared.</p><p>This view does not certify that every employee is deployable.</p></div></section></aside></div>`;
-        for (const { g, rows } of cards) {
-            const box: any = el.querySelector(`[data-readiness-group="${g}"]`);
-            if (!rows.length) {
-                box.innerHTML = '<div class="panel-body">No visible exceptions.</div>';
-                continue;
-            }
-            for (const x of rows.slice(0, 80)) {
-                const row: any = (document as any).createElement('div');
-                row.className = 'work-item';
-                row.innerHTML = `<div class="work-priority ${x.urgent ? 'urgent' : ''}"></div><div><h3>${esc(x.title)}</h3><p>${esc(x.detail)}${x.due ? ' · ' + esc(SuiteUX.displayDate(x.due)) : ''}</p></div>`;
-                const b: any = (document as any).createElement('button');
-                b.className = 'btn btn-outline btn-sm';
-                b.textContent = 'Open';
-                b.onclick = (): any => SuiteUX.go(x.route);
-                row.append(b);
-                box.append(row);
-            }
-        }
+        const items: any = readiness();
+        const groups: any = ['Staffing', 'People', 'Fleet', 'Equipment', 'Specialty'].map((name?: any): any => ({
+            name,
+            rows: items.filter((item?: any): any => item.group === name).map((item?: any): any => ({
+                title: item.title,
+                detail: item.detail,
+                due: item.due ? SuiteUX.displayDate(item.due) : '',
+                urgent: item.urgent,
+                open: (): any => SuiteUX.go(item.route)
+            } as any))
+        } as any));
+        (window as any).SonoMarziReact.renderReadiness(el, { date: SuiteUX.displayDate(date()), groups });
     }
     const key: any = (): any => { const c: any = SuiteStore.remoteContext(); return SuiteStore.mode() === 'shared' ? `${c.tenantId}/${c.agencyId}/${CURRENT_USER_ID}` : `local/${CURRENT_USER_ID}`; };
     function localData(): any { STATE.workflows ||= { templates: [], items: [] } as any; return STATE.workflows; }
