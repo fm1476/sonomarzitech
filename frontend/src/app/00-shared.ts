@@ -2158,13 +2158,7 @@ function openForgotPasswordStep2(account?: any): any {
    ========================================================================= */
 let STATE: any = null;
 const STORAGE_KEY: any = "pss_state_v1";
-/* =========================================================================
-   SUPABASE (shared, persistent, multi-user storage)
-   Falls back to Claude's window.storage (if running as a Claude artifact),
-   then to an in-memory/seed-only session if neither is reachable, so the
-   app never hard-fails just because a network/storage layer is missing.
-   ========================================================================= */
-const SUPABASE_ROW_ID: any = "main";
+/* The initial seed supports the local demo while SuiteStore loads the authenticated workspace. */
 const backendClient: any = (window as any).SonoMarziClient;
 // Supabase fires this once it has parsed a password-recovery link's token out of the URL
 // and established a temporary recovery session from it. That's the ONLY trustworthy signal
@@ -2210,49 +2204,23 @@ async function buildSeedState(): Promise<any> {
 }
 async function loadState(): Promise<any> {
     setSyncStatus('loading');
-    // 1) Try the shared Supabase database first - this is the real "everyone sees the same data" source.
-    //    A short timeout guards against a slow/unreachable network hanging the login screen forever.
-    if (backendClient) {
-        try {
-            const timeout: any = new Promise((_?: any, reject?: any): any => setTimeout((): any => reject(new Error('timeout')), 6000));
-            const { data, error }: any = await Promise.race([
-                backendClient.from('app_state').select('data').eq('id', SUPABASE_ROW_ID).maybeSingle(),
-                timeout,
-            ]);
-            if (!error && data && data.data) {
-                STATE = data.data;
-                await migrateState();
-                setSyncStatus('saved');
-                return;
-            }
-            if (!error) {
-                // table reachable, just no row yet - seed it as the shared starting point
-                STATE = await buildSeedState();
-                await persist();
-                setSyncStatus('saved');
-                return;
-            }
-            // table/query errored (e.g., table not created yet) - fall through to other sources
-        }
-        catch (e: any) { /* network/config issue - fall through */ }
-    }
-    // 2) Fall back to Claude's own artifact storage, when running inside claude.ai
+    // Restore the optional local artifact session before using fresh demo seed data.
     try {
         if ((window as any).storage) {
             const res: any = await (window as any).storage.get(STORAGE_KEY, false);
             if (res && res.value) {
                 STATE = JSON.parse(res.value);
                 await migrateState();
-                setSyncStatus(backendClient ? 'offline' : 'saved');
+                setSyncStatus('saved');
                 return;
             }
         }
     }
     catch (e: any) { /* key not found or storage unavailable -> fall through to seed */ }
-    // 3) Last resort: fresh seed data, session-only if nothing above is reachable
+    // The authenticated workspace is loaded after this initial seed.
     STATE = await buildSeedState();
     persist();
-    setSyncStatus(backendClient ? 'offline' : 'saved');
+    setSyncStatus('saved');
 }
 function runCoreMigrations(): any {
     // Every step below runs in its own try/catch. This function used to be one long sequence where
@@ -2677,7 +2645,6 @@ async function syncTextZoomFromProfile(): Promise<any> {
         console.error('Could not load text size from the account:', e.message);
     }
 }
-let PERSIST_DEBOUNCE_TIMER: any = null;
 function persist(): any {
     // window.storage save (only relevant when running inside a Claude artifact) happens immediately -
     // it's local/fast and doesn't need debouncing.
@@ -2687,22 +2654,6 @@ function persist(): any {
         }
     }
     catch (e: any) { /* non-fatal */ }
-    // Supabase save (the real shared, multi-user copy) is debounced, since persist() gets called
-    // after nearly every edit throughout the app and a network round-trip on every keystroke-adjacent
-    // action would be wasteful. The in-memory STATE is already correct immediately either way.
-    if (backendClient) {
-        setSyncStatus('saving');
-        clearTimeout(PERSIST_DEBOUNCE_TIMER);
-        PERSIST_DEBOUNCE_TIMER = setTimeout(async (): Promise<any> => {
-            try {
-                const { error }: any = await backendClient.from('app_state').upsert({ id: SUPABASE_ROW_ID, data: STATE, updated_at: (new Date() as any).toISOString() } as any);
-                setSyncStatus(error ? 'offline' : 'saved');
-            }
-            catch (e: any) {
-                setSyncStatus('offline');
-            }
-        }, 700);
-    }
     const bellBtn: any = (document as any).getElementById('btnNotifBell');
     if (bellBtn)
         renderNotifBell();

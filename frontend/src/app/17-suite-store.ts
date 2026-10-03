@@ -1,7 +1,6 @@
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
    No writes are made to the legacy all-in-one app_state row. */
 const SuiteStore: any = ((): any => {
-    const AWS_DEV_MODE: any = true;
     (window as any).SONOMARZI_AWS_DEV = true;
     const AWS_DEV: any = {
         apiBase: (window as any).SonoMarziConfig.apiBase,
@@ -54,8 +53,6 @@ const SuiteStore: any = ((): any => {
         }
     }
     async function remoteRpc(name?: any, args: any = {} as any): Promise<any> {
-        if (!AWS_DEV_MODE)
-            return backendClient.rpc(name, args);
         if (name === 'suite_load_workspace') {
             try {
                 const tenantId: any = args?.p_tenant_id || AWS_DEV.tenantId;
@@ -606,108 +603,39 @@ const SuiteStore: any = ((): any => {
     const notificationKey: any = (module?: any, id?: any): any => (notificationModule[module] || module) + '|' + id;
     function isNotificationRead(module?: any, id?: any): any { return notificationReads.has(notificationKey(module, id)); }
     async function loadNotificationReads(): Promise<any> {
-        if (AWS_DEV_MODE) {
-            notificationReads = new Set();
-            return;
-        }
-        if (mode !== 'shared' || !remoteContext.tenantId)
-            return;
-        const { data, error }: any = await backendClient.from('suite_notification_reads').select('module,notification_id').eq('tenant_id', remoteContext.tenantId).eq('agency_id', remoteContext.agencyId).limit(10000);
-        if (error) {
-            console.error('Could not load notification read status:', error);
-            return;
-        }
-        notificationReads = new Set((data || []).map((row?: any): any => notificationKey(row.module, row.notification_id)));
-        if ((document as any).getElementById('app')?.classList.contains('authenticated'))
-            renderNotifBell();
+        notificationReads = new Set();
     }
     async function markNotificationsRead(items?: any): Promise<any> {
         if (!items.length)
             return true;
-        if (AWS_DEV_MODE) {
-            items.forEach((item?: any): any => notificationReads.add(notificationKey(item.module, item.id)));
-            return true;
-        }
-        if (mode !== 'shared') {
-            for (const item of items) {
-                const key: any = notificationModule[item.module] || item.module;
-                const found: any = STATE[key]?.notifications?.find((n?: any): any => n.id === item.id);
-                if (found) {
-                    found.readBy = found.readBy || [];
-                    if (!found.readBy.includes(CURRENT_USER_ID))
-                        found.readBy.push(CURRENT_USER_ID);
-                }
-            }
-            persist();
-            return true;
-        }
-        const unseen: any = items.filter((item?: any): any => !isNotificationRead(item.module, item.id));
-        if (!unseen.length)
-            return true;
-        const rows: any = unseen.map((item?: any): any => ({ tenant_id: remoteContext.tenantId, agency_id: remoteContext.agencyId, module: notificationModule[item.module] || item.module, notification_id: item.id } as any));
-        const { error }: any = await backendClient.from('suite_notification_reads').upsert(rows, { onConflict: 'tenant_id,agency_id,user_id,module,notification_id', ignoreDuplicates: true } as any);
-        if (error) {
-            console.error('Notification read status failed:', error);
-            return false;
-        }
-        unseen.forEach((item?: any): any => notificationReads.add(notificationKey(item.module, item.id)));
+        items.forEach((item?: any): any => notificationReads.add(notificationKey(item.module, item.id)));
         return true;
     }
     async function signIn(email?: any, password?: any): Promise<any> {
-        if (AWS_DEV_MODE) {
-            if (!awsToken())
-                throw Error('Sign in to continue.');
-            const { data, error }: any = await remoteRpc('suite_load_workspace', {
-                p_tenant_id: AWS_DEV.tenantId,
-                p_agency_id: AWS_DEV.agencyId
-            } as any);
-            if (error)
-                throw error;
-            acceptRemote(data);
-            await loadNotificationReads();
-            logAuditEntry('Shared', `${personName(CURRENT_USER_ID)} signed in.`, 'auth');
-            return true;
-        }
-        if (!backendClient)
-            throw Error('The agency connection could not load. Check your connection and try again.');
-        const { error }: any = await backendClient.auth.signInWithPassword({ email, password } as any);
+        if (!awsToken())
+            throw Error('Sign in to continue.');
+        const { data, error }: any = await remoteRpc('suite_load_workspace', {
+            p_tenant_id: AWS_DEV.tenantId,
+            p_agency_id: AWS_DEV.agencyId
+        } as any);
         if (error)
-            throw Error('Unable to sign in with those credentials.');
-        const { data, error: readError }: any = await backendClient.rpc('suite_load_workspace');
-        if (readError)
-            throw Error('The agency workspace is not configured for this application version.');
+            throw error;
         acceptRemote(data);
         await loadNotificationReads();
         logAuditEntry('Shared', `${personName(CURRENT_USER_ID)} signed in.`, 'auth');
         return true;
     }
     async function resumeSession(): Promise<any> {
-        if (AWS_DEV_MODE) {
-            if (!awsToken())
-                return false;
-            const { data, error }: any = await remoteRpc('suite_load_workspace', {
-                p_tenant_id: AWS_DEV.tenantId,
-                p_agency_id: AWS_DEV.agencyId
-            } as any);
-            if (error) {
-                console.error('AWS workspace resume failed:', error);
-                if (error.status === 401 || error.status === 403) {
-                    sessionStorage.removeItem(AWS_DEV.tokenKey);
-                }
-                return false;
-            }
-            acceptRemote(data);
-            await loadNotificationReads();
-            return true;
-        }
-        if (!backendClient)
+        if (!awsToken())
             return false;
-        const { data: { session } }: any = await backendClient.auth.getSession();
-        if (!session)
-            return false;
-        const { data, error }: any = await backendClient.rpc('suite_load_workspace');
+        const { data, error }: any = await remoteRpc('suite_load_workspace', {
+            p_tenant_id: AWS_DEV.tenantId,
+            p_agency_id: AWS_DEV.agencyId
+        } as any);
         if (error) {
-            await backendClient.auth.signOut();
+            console.error('AWS workspace resume failed:', error);
+            if (error.status === 401 || error.status === 403)
+                sessionStorage.removeItem(AWS_DEV.tokenKey);
             return false;
         }
         acceptRemote(data);
@@ -741,10 +669,7 @@ const SuiteStore: any = ((): any => {
                 new Promise((_?: any, reject?: any): any => setTimeout((): any => reject(Error('Sign-out timed out')), 5000)),
             ]).catch((error?: any): any => {
                 console.error('Auth sign-out failed; removing the local session:', error);
-                try {
-                    localStorage.removeItem('sb-gtmdigvuwjyfpgpdjmph-auth-token');
-                }
-                catch { }
+                sessionStorage.removeItem(AWS_DEV.tokenKey);
                 setTimeout((): any => location.replace(location.pathname), 0);
             });
         }

@@ -45,7 +45,6 @@ export function createCompatibilityClient() {
     functions:{invoke:(name: string,options: {body:unknown})=>result(()=>post(`/services/${encodeURIComponent(name)}`,options.body))},
     storage:{from:(_bucket: string)=>({
       createSignedUrl:(key:string,_seconds:number,_options?:unknown)=>result(async()=>{const context=window.SonoMarziLegacy.context();const data=await post<{download_url:string}>('/attachments/download-url',{tenant_id:context.tenantId,agency_id:context.agencyId,key});return {signedUrl:data.download_url};})
-    })},
-    from:(_table:string)=>{throw new Error('Direct table access has been replaced by the C# API.');}
+    })}
   };
 }
