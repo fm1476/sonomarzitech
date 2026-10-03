@@ -118,189 +118,69 @@ const SuiteUX: any = ((): any => {
         enterModule(id);
         return;
     } go(id); }
-    let NAV_FILTER_TEXT: any = '';
-    // Pure visibility toggling, no rebuild -- keeps focus in the search box while typing. Matches
-    // against every top-level nav line AND, when a module is open, its nested sub-pages, and
-    // auto-opens (or hides, if empty) each category so a match never sits inside a collapsed group.
-    function applyNavFilter(): any {
-        const q: any = NAV_FILTER_TEXT.trim().toLowerCase();
-        const sidebar: any = (document as any).getElementById('sidebar');
-        sidebar.querySelectorAll('.navgroup').forEach((group?: any): any => {
-            let anyVisible: any = false;
-            group.querySelectorAll(':scope > .navline').forEach((line?: any): any => {
-                const match: any = !q || (line.dataset.searchText || '').includes(q);
-                line.style.display = match ? '' : 'none';
-                if (match)
-                    anyVisible = true;
-            });
-            group.style.display = (!q || anyVisible) ? '' : 'none';
-            if (q)
-                group.open = anyVisible;
-        });
-        const nested: any = (document as any).getElementById('navlist');
-        if (nested)
-            nested.querySelectorAll('.navitem').forEach((item?: any): any => {
-                const match: any = !q || (item.dataset.searchText || item.textContent || '').toLowerCase().includes(q);
-                item.style.display = match ? '' : 'none';
-            });
-    }
-    function setSidebarCollapsed(collapsed?: any): any {
-        preferences.set('sidebarCollapsed', collapsed);
-        (document as any).getElementById('sidebar').classList.toggle('sidebar-collapsed', collapsed);
-        if (collapsed)
-            (document as any).querySelectorAll('#suiteNav .navgroup').forEach((g?: any): any => g.open = true);
-        else
-            (document as any).querySelectorAll('#suiteNav .navgroup').forEach((g?: any): any => g.open = preferences.get('group.' + g.dataset.label, true));
-    }
     function navigation(): any {
         const nav: any = (document as any).getElementById('suiteNav');
-        const navlistEl: any = (document as any).getElementById('navlist');
-        if (navlistEl.parentElement === nav || navlistEl.parentElement?.closest('#suiteNav'))
-            (document as any).getElementById('sidebar').insertBefore(navlistEl, nav.nextSibling);
-        nav.innerHTML = '';
-        const top: any = (document as any).createElement('div');
-        top.style.padding = '0 10px';
-        top.append(button('My Work', 'dashboard', home, 'navitem' + (route === 'home' ? ' active' : '')));
-        top.append(button('Workspaces', 'grid', workspaces, 'navitem' + (route === 'workspaces' ? ' active' : '')));
-        top.append(button('Readiness', 'checklist', readinessView, 'navitem' + (route === 'readiness' ? ' active' : '')));
+        const sidebar: any = (document as any).getElementById('sidebar');
+        const navlist: any = (document as any).getElementById('navlist');
+        if (navlist.parentElement === nav || navlist.parentElement?.closest('#suiteNav'))
+            sidebar.insertBefore(navlist, nav.nextSibling);
+        navlist.classList.remove('navlist-nested');
+        navlist.replaceChildren();
+        navlist.style.display = 'none';
+        sidebar.querySelector('.nav-context')?.remove();
+        const collapsed: any = preferences.get('sidebarCollapsed', false) && (window as any).innerWidth > 860;
+        sidebar.classList.toggle('sidebar-collapsed', collapsed);
+        const link: any = (id?: any, label?: any, icon?: any, onClick?: any, active?: any): any =>
+            ({ id, label, icon: ICONS[icon] || '', onClick, active } as any);
+        const top: any = [
+            link('home', 'My Work', 'dashboard', home, route === 'home'),
+            link('workspaces', 'Workspaces', 'grid', workspaces, route === 'workspaces'),
+            link('readiness', 'Readiness', 'checklist', readinessView, route === 'readiness')
+        ];
         if (WorkOperations.available())
-            top.append(button('Workflows', 'briefcase', workflowView, 'navitem' + (route === 'workflows' ? ' active' : '')));
+            top.push(link('workflows', 'Workflows', 'briefcase', workflowView, route === 'workflows'));
         if (FieldTraining.available())
-            top.append(button('Field Training', 'award', fieldTrainingView, 'navitem' + (route === 'fieldtraining' ? ' active' : '')));
-        if (SuiteStore.mode() === 'shared') {
-            const noticeNav: any = button('Staff Notices', 'bell', (): any => shared('notices', 'Staff Notices', 'Scheduling and staff messages'), 'navitem staff-notices-nav' + (route === 'shared/notices' ? ' active' : ''));
-            noticeNav.id = 'staffNoticesNav';
-            const count: any = (document as any).createElement('strong');
-            count.id = 'staffNoticeCount';
-            count.className = 'staff-notice-count';
-            count.hidden = true;
-            noticeNav.append(count);
-            top.append(noticeNav);
-        }
-        nav.append(top);
+            top.push(link('fieldtraining', 'Field Training', 'award', fieldTrainingView, route === 'fieldtraining'));
+        if (SuiteStore.mode() === 'shared')
+            top.push(link('notices', 'Staff Notices', 'bell', (): any => shared('notices', 'Staff Notices', 'Scheduling and staff messages'), route === 'shared/notices'));
+        const pins: any = preferences.get('pins', []);
+        const pinned: any = pins.map((id?: any): any => {
+            const m: any = metaFor(id);
+            return m && allowedView(id) ? link(id, m.title, m.icon, (): any => go(id), route === 'view/' + id) : null;
+        }).filter(Boolean);
+        const groups: any = accessibleModules().slice().sort((a?: any, b?: any): any => MODULE_META[a].name.localeCompare(MODULE_META[b].name)).map((key?: any): any => {
+            const items: any = modules()[key].NAV_ITEMS.filter((n?: any): any => allowedView(n.id)).map((item?: any): any => {
+                const result: any = link(item.id, item.label, item.icon, (): any => go(item.id), route === 'view/' + item.id);
+                result.pinned = pins.includes(item.id);
+                result.onPin = (): any => {
+                    preferences.set('pins', pins.includes(item.id) ? pins.filter((id?: any): any => id !== item.id) : [...pins, item.id]);
+                    navigation();
+                };
+                return result;
+            });
+            return { id: key, label: MODULE_META[key].name, icon: ICONS[MODULE_META[key].icon] || '',
+                open: collapsed || ACTIVE_MODULE === key || preferences.get('group.mod:' + key, false), items,
+                onToggle: (open?: any): any => { if (!collapsed) preferences.set('group.mod:' + key, open); } } as any;
+        }).filter((group?: any): any => group.items.length);
+        const bottom: any = [];
+        if ((Object.values(modules()) as any).some((m?: any): any => m.NAV_ITEMS.some((n?: any): any => n.id.endsWith('-reports') && allowedView(n.id))))
+            bottom.push(link('reports', 'Reports', 'chart', reports, route === 'reports'));
+        if (adminDestinations().length)
+            bottom.push(link('administration', 'Administration', 'gear', administration, route === 'administration'));
+        (window as any).SonoMarziReact.renderNavigation(nav, {
+            top, pinned, groups, bottom, searchIcon: ICONS.search || '', collapsed,
+            onCollapse: (): any => {
+                preferences.set('sidebarCollapsed', !collapsed);
+                navigation();
+            },
+            onCollapseAll: (): any => {
+                for (const key of accessibleModules())
+                    preferences.set('group.mod:' + key, false);
+                navigation();
+            }
+        });
         if (SuiteStore.mode() === 'shared')
             StaffNotices.updateNavBadge();
-        const searchWrap: any = (document as any).createElement('div');
-        searchWrap.className = 'nav-search-wrap';
-        const searchInput: any = (document as any).createElement('input');
-        searchInput.type = 'search';
-        searchInput.placeholder = 'Jump to anything';
-        searchInput.className = 'nav-search';
-        searchInput.value = NAV_FILTER_TEXT;
-        searchInput.setAttribute('aria-label', 'Filter navigation');
-        searchInput.addEventListener('input', (): any => { NAV_FILTER_TEXT = searchInput.value; applyNavFilter(); });
-        searchWrap.append(ICONS.search ? Object.assign((document as any).createElement('span'), { className: 'nav-search-icon', innerHTML: ICONS.search } as any) : (document as any).createTextNode(''));
-        searchWrap.append(searchInput);
-        const collapseBtn: any = (document as any).createElement('button');
-        collapseBtn.className = 'nav-collapse-btn';
-        collapseBtn.type = 'button';
-        const isCollapsed: any = (document as any).getElementById('sidebar').classList.contains('sidebar-collapsed');
-        collapseBtn.title = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
-        collapseBtn.setAttribute('aria-label', collapseBtn.title);
-        collapseBtn.textContent = isCollapsed ? '\u00bb' : '\u00ab';
-        collapseBtn.onclick = (): any => setSidebarCollapsed(!(document as any).getElementById('sidebar').classList.contains('sidebar-collapsed'));
-        // Distinct from collapseBtn above: that one shrinks the whole sidebar to icon-only, this one
-        // folds every module's accordion group shut without changing the sidebar's width. A role with
-        // broad access accumulates open groups over time -- every module ever visited stays expanded
-        // by design (see the toggle handler below), which is exactly right for one or two modules but
-        // becomes clutter once someone's touched all of them. This button resets that accumulation in
-        // one click rather than making someone close a dozen groups by hand. The currently active
-        // module still reopens itself on the very next render regardless (see group.open below), since
-        // losing sight of where you currently are would be a worse problem than the clutter this fixes.
-        const collapseAllBtn: any = (document as any).createElement('button');
-        collapseAllBtn.className = 'nav-collapse-btn nav-collapse-all-btn';
-        collapseAllBtn.type = 'button';
-        collapseAllBtn.title = 'Collapse all module groups';
-        collapseAllBtn.setAttribute('aria-label', 'Collapse all module groups');
-        collapseAllBtn.textContent = '\u2261\u2212';
-        collapseAllBtn.onclick = (): any => { for (const key of accessibleModules())
-            preferences.set('group.mod:' + key, false); navigation(); };
-        const topRow: any = (document as any).createElement('div');
-        topRow.className = 'nav-top-row';
-        topRow.append(searchWrap);
-        topRow.append(collapseAllBtn);
-        topRow.append(collapseBtn);
-        nav.append(topRow);
-        const navDivider: any = (document as any).createElement('div');
-        navDivider.style.cssText = 'height:1px;background:#2B3B54;margin:2px 14px 12px;flex-shrink:0;';
-        nav.append(navDivider);
-        const pins: any = preferences.get('pins', []);
-        if (pins.length) {
-            const d: any = (document as any).createElement('div');
-            d.className = 'navgroup';
-            d.dataset.label = '__pins';
-            for (const id of pins) {
-                const m: any = metaFor(id);
-                if (m && allowedView(id)) {
-                    const line: any = (document as any).createElement('div');
-                    line.className = 'navline';
-                    line.dataset.searchText = m.title.toLowerCase();
-                    line.append(button(m.title, m.icon, (): any => go(id), 'navitem'));
-                    d.append(line);
-                }
-            }
-            nav.append(d);
-        }
-        // Modules are listed alphabetically by display name, one per accordion group. Each group's
-        // own sub-pages (from that module's NAV_ITEMS, filtered to what this role can see) render
-        // directly inside it, so opening a module always reveals its submenu right there -- no
-        // dependence on which specific sub-page happens to be active.
-        const moduleKeys: any = accessibleModules().slice().sort((a?: any, b?: any): any => MODULE_META[a].name.localeCompare(MODULE_META[b].name));
-        for (const key of moduleKeys) {
-            const items: any = modules()[key].NAV_ITEMS.filter((n?: any): any => allowedView(n.id));
-            if (!items.length)
-                continue;
-            const group: any = (document as any).createElement('details');
-            group.className = 'navgroup module-navgroup';
-            group.dataset.label = 'mod:' + key;
-            group.open = ACTIVE_MODULE === key || preferences.get('group.mod:' + key, false);
-            const s: any = (document as any).createElement('summary');
-            s.innerHTML = '<span class="nav-mod-icon">' + (ICONS[MODULE_META[key].icon] || '') + '</span><span>' + esc(MODULE_META[key].name) + '</span>';
-            group.append(s);
-            group.addEventListener('toggle', (): any => preferences.set('group.mod:' + key, group.open));
-            for (const item of items) {
-                const isActive: any = route === 'view/' + item.id;
-                const line: any = (document as any).createElement('div');
-                line.className = 'navline';
-                line.dataset.searchText = item.label.toLowerCase();
-                line.append(button(item.label, item.icon, (): any => go(item.id), 'navitem' + (isActive ? ' active' : '')));
-                const pin: any = (document as any).createElement('button');
-                pin.className = 'nav-favorite';
-                pin.textContent = pins.includes(item.id) ? '★' : '☆';
-                pin.title = (pins.includes(item.id) ? 'Unpin ' : 'Pin ') + item.label;
-                pin.setAttribute('aria-label', pin.title);
-                pin.onclick = (): any => { preferences.set('pins', pins.includes(item.id) ? pins.filter((p?: any): any => p !== item.id) : [...pins, item.id]); navigation(); };
-                line.append(pin);
-                group.append(line);
-            }
-            nav.append(group);
-        }
-        const bottom: any = (document as any).createElement('div');
-        bottom.style.padding = '5px 10px';
-        if ((Object.values(modules()) as any).some((m?: any): any => m.NAV_ITEMS.some((n?: any): any => n.id.endsWith('-reports') && allowedView(n.id))))
-            bottom.append(button('Reports', 'chart', reports, 'navitem' + (route === 'reports' ? ' active' : '')));
-        if (adminDestinations().length)
-            bottom.append(button('Administration', 'gear', administration, 'navitem' + (route === 'administration' ? ' active' : '')));
-        nav.append(bottom);
-        (document as any).getElementById('sidebar').querySelector('.nav-context')?.remove();
-        // Each module's submenu now renders inline inside its own accordion group above, so the old
-        // shared #navlist (previously repositioned under whichever category line was active) is no
-        // longer part of the visible tree. It's left empty/hidden rather than removed outright, since
-        // individual modules still populate it internally on their own view switches.
-        const navlist: any = (document as any).getElementById('navlist');
-        navlist.classList.remove('navlist-nested');
-        navlist.innerHTML = '';
-        navlist.style.display = 'none';
-        // Collapse-to-icons is a desktop affordance for a persistent rail. Below the drawer
-        // breakpoint the sidebar is already a temporary overlay (see toggleSidebar()), so
-        // collapsing it to icons on top of that would stack two different "smaller sidebar"
-        // behaviors and leave no visible way to read or re-expand it. Only apply the saved
-        // preference when there's room for a persistent rail in the first place.
-        if (preferences.get('sidebarCollapsed', false) && (window as any).innerWidth > 860)
-            (document as any).getElementById('sidebar').classList.add('sidebar-collapsed');
-        else
-            (document as any).getElementById('sidebar').classList.remove('sidebar-collapsed');
-        applyNavFilter();
     }
     function tasks(): any {
         const p: any = currentPerson(), out: any = [], today: any = fmt(new Date() as any);
@@ -352,59 +232,40 @@ const SuiteUX: any = ((): any => {
         if (!isAdmin())
             dashboardCalendar = 'mine';
         const filtered: any = all.filter((t?: any): any => activeTab === 'all' || (activeTab === 'urgent' ? t.urgent : t.type === activeTab));
-        el.innerHTML = `<div class="work-hero"><div><div class="work-eyebrow">Your operational workspace</div><h2>${esc(greeting())}, ${esc(p.name.replace(/^(Sgt\.|Ofc\.|Officer|Deputy|Lt\.|Capt\.)\s*/, '').split(' ')[0])}.</h2><p>One place to see what needs you and move work forward.</p></div><div class="work-date">${esc(new Intl.DateTimeFormat('en-US', { timeZone: userTimeZone, weekday: 'long', month: '2-digit', day: '2-digit', year: 'numeric' } as any).format(new Date() as any))}<br>${esc(p.unit || 'Agency workspace')}</div></div><div class="work-metrics">${[['urgent', 'Overdue', all.filter((t?: any): any => t.urgent).length, 'Review deadlines and follow-up'], ['mine', 'My assignments', all.filter((t?: any): any => t.type === 'mine').length, 'Court, civil process, and equipment'], ['approvals', 'Awaiting approval', all.filter((t?: any): any => t.type === 'approvals').length, 'Requests needing a decision'], ['attention', 'Needs attention', all.filter((t?: any): any => t.type === 'attention').length, 'Exceptions routed to your role']].map(([id, l, n, h]: any): any => `<button class="work-metric ${n === 0 ? 'good' : 'urgent'}" data-task-filter="${id}"><span>${l}</span><strong>${n}</strong><small>${h}</small></button>`).join('')}</div><div class="work-layout"><div><section class="panel"><div class="panel-head"><h2>Priority work</h2><span class="hint">${filtered.length} items</span></div><div class="work-tabs">${[['mine', 'My Work'], ['all', 'All Work'], ['approvals', 'Approvals'], ['attention', 'Attention'], ['urgent', 'Overdue']].map(([id, l]: any): any => `<button class="work-tab ${activeTab === id ? 'active' : ''}" aria-pressed="${activeTab === id}" data-task-filter="${id}">${l}</button>`).join('')}</div><div id="workQueue"></div></section><section class="panel"><div class="panel-head"><h2>Continue working</h2><span class="hint">Recent records on this device</span></div><div class="panel-body" id="recentRecords"></div></section></div><aside class="work-aside"><section class="panel"><div class="panel-head"><h2>Quick actions</h2></div><div class="panel-body quick-grid" id="quickActions"></div></section><section class="panel"><div class="panel-head"><h2>Workspace readiness</h2></div><div class="panel-body" id="readiness"></div></section></aside></div><section class="panel work-calendar-panel" aria-labelledby="workCalendarTitle"><div class="panel-head work-calendar-head"><div><h2 id="workCalendarTitle">${dashboardCalendar === 'master' ? 'Master Calendar' : 'My Calendar'}</h2><span class="hint">${dashboardCalendar === 'master' ? 'Department-wide training schedule' : 'Your training sessions and court dates'}</span></div>${isAdmin() ? `<div class="work-tabs work-calendar-tabs" aria-label="Calendar view">${[['mine', 'My Calendar'], ['master', 'Master Calendar']].map(([id, l]: any): any => `<button class="work-tab ${dashboardCalendar === id ? 'active' : ''}" aria-pressed="${dashboardCalendar === id}" data-calendar-view="${id}">${l}</button>`).join('')}</div>` : ''}</div><div class="panel-body" id="workCalendarBody"></div></section>`;
-        const queue: any = el.querySelector('#workQueue');
-        if (!filtered.length)
-            queue.innerHTML = '<div class="empty-state"><div class="msg">Nothing in this queue</div><div class="sub">No matching items are visible to your current role.</div></div>';
-        filtered.slice(0, 100).forEach((t?: any): any => { const row: any = (document as any).createElement('div'); row.className = 'work-item'; row.innerHTML = `<div class="work-priority ${t.urgent ? 'urgent' : ''}"></div><div><h3>${esc(t.title)}</h3><p>${esc(t.owner)} · ${esc(t.consequence)}</p>${t.due ? `<div class="${t.urgent ? 'due' : ''}" style="font-size:12px">${t.urgent ? 'Overdue · ' : t.due === today ? 'Today · ' : ''}${esc(t.due)}</div>` : ''}</div>`; row.append(button('Review', '', t.action, 'btn btn-outline btn-sm')); queue.append(row); });
-        if (filtered.length > 100) {
-            const note: any = (document as any).createElement('p');
-            note.className = 'panel-body';
-            note.textContent = 'Showing the first 100 priority items. Use the relevant workspace to review all records.';
-            queue.append(note);
-        }
-        el.querySelectorAll('[data-task-filter]').forEach((b?: any): any => b.onclick = (): any => { activeTab = b.dataset.taskFilter; home(); });
-        const actions: any = [['Inspect a vehicle', 'checklist', 'fleet-inspections', 'btnNewInspection', 'fleet_inspection_conduct'], ['Request equipment', 'box', 'qm-requests', 'btnNewRequest', 'qm_request_submit'], ['Log K9 deployment', 'pawprint', 'k9-deployments', 'btnLogDeployQuick', 'k9_deployment_log'], ['Log a UAS flight', 'drone', 'drone-flights', 'btnLogFlightQuick', 'drone_flight_log'], ['Intake civil paper', 'scale', 'civil-board', 'btnIntakePaper', 'civil_paper_intake'], ['Review training', 'award', 'pm-training', null, null]];
-        const quick: any = el.querySelector('#quickActions');
-        for (const [label, icon, id, btn, ability] of actions)
-            if (allowedView(id) && (!ability || can(ability)))
-                quick.append(button(label, icon, (): any => { go(id); if (btn)
-                    (document as any).getElementById(btn)?.click(); }));
-        if (!quick.children.length)
-            quick.append(button('Open workspaces', 'grid', workspaces));
-        const recents: any = preferences.get('recent', []).filter((r?: any): any => recordAllowed(r));
-        const recBox: any = el.querySelector('#recentRecords');
-        for (const r of recents.slice(0, 6)) {
-            const b: any = (document as any).createElement('button');
-            b.className = 'recent-item';
-            b.innerHTML = esc(r.title) + `<small>${esc(MODULE_META[r.mod].name)}</small>`;
-            b.onclick = (): any => dispatchRecord(r);
-            recBox.append(b);
-        }
-        if (!recents.length)
-            recBox.innerHTML = '<p style="color:var(--text-dim);font-size:13px">Records you open will appear here.</p>';
-        const readiness: any = el.querySelector('#readiness');
+        const actionDefinitions: any = [['Inspect a vehicle', 'checklist', 'fleet-inspections', 'btnNewInspection', 'fleet_inspection_conduct'], ['Request equipment', 'box', 'qm-requests', 'btnNewRequest', 'qm_request_submit'], ['Log K9 deployment', 'pawprint', 'k9-deployments', 'btnLogDeployQuick', 'k9_deployment_log'], ['Log a UAS flight', 'drone', 'drone-flights', 'btnLogFlightQuick', 'drone_flight_log'], ['Intake civil paper', 'scale', 'civil-board', 'btnIntakePaper', 'civil_paper_intake'], ['Review training', 'award', 'pm-training', null, null]];
+        const actions: any = actionDefinitions.filter(([label, icon, id, btn, ability]: any): any => allowedView(id) && (!ability || can(ability))).map(([label, icon, id, btn]: any): any => ({
+            id, label, icon: ICONS[icon] || '', action: (): any => { go(id); if (btn)
+                (document as any).getElementById(btn)?.click(); }
+        } as any));
+        if (!actions.length)
+            actions.push({ id: 'workspaces', label: 'Open workspaces', icon: ICONS.grid || '', action: workspaces } as any);
+        const recents: any = preferences.get('recent', []).filter((r?: any): any => recordAllowed(r)).slice(0, 6).map((r?: any): any => ({
+            id: r.mod + '/' + r.kind + '/' + r.id, title: r.title, module: MODULE_META[r.mod].name, action: (): any => dispatchRecord(r)
+        } as any));
         const exceptions: any = WorkOperations.readiness();
-        const urgent: any = exceptions.filter((x?: any): any => x.urgent).length;
-        readiness.innerHTML = `<div class="readiness-line"><span>Visible exceptions</span><strong>${exceptions.length}</strong></div><div class="readiness-line"><span>Overdue</span><strong>${urgent}</strong></div>`;
-        const openReadiness: any = (document as any).createElement('button');
-        openReadiness.className = 'btn btn-outline btn-sm';
-        openReadiness.textContent = 'Open readiness';
-        openReadiness.onclick = readinessView;
-        readiness.append(openReadiness);
-        if (WorkOperations.available()) {
-            const openFlow: any = (document as any).createElement('button');
-            openFlow.className = 'btn btn-outline btn-sm';
-            openFlow.textContent = 'Agency workflows';
-            openFlow.style.marginLeft = '8px';
-            openFlow.onclick = workflowView;
-            readiness.append(openFlow);
+        const workflowsAvailable: any = WorkOperations.available();
+        (window as any).SonoMarziReact.renderWorkDashboard(el, {
+            greeting: greeting(),
+            firstName: p.name.replace(/^(Sgt\.|Ofc\.|Officer|Deputy|Lt\.|Capt\.)\s*/, '').split(' ')[0],
+            date: new Intl.DateTimeFormat('en-US', { timeZone: userTimeZone, weekday: 'long', month: '2-digit', day: '2-digit', year: 'numeric' } as any).format(new Date() as any),
+            unit: p.unit || 'Agency workspace',
+            today,
+            metrics: [
+                { id: 'urgent', label: 'Overdue', count: all.filter((t?: any): any => t.urgent).length, hint: 'Review deadlines and follow-up' },
+                { id: 'mine', label: 'My assignments', count: all.filter((t?: any): any => t.type === 'mine').length, hint: 'Court, civil process, and equipment' },
+                { id: 'approvals', label: 'Awaiting approval', count: all.filter((t?: any): any => t.type === 'approvals').length, hint: 'Requests needing a decision' },
+                { id: 'attention', label: 'Needs attention', count: all.filter((t?: any): any => t.type === 'attention').length, hint: 'Exceptions routed to your role' }
+            ],
+            tasks: filtered.slice(0, 100), totalTasks: filtered.length, activeTab, actions, recents,
+            visibleExceptions: exceptions.length, overdueExceptions: exceptions.filter((x?: any): any => x.urgent).length,
+            workflowsAvailable, canMasterCalendar: isAdmin(), calendar: dashboardCalendar,
+            selectTab: (id?: any): any => { activeTab = id; home(); },
+            selectCalendar: (id?: any): any => { dashboardCalendar = id; home(); },
+            openReadiness: readinessView, openWorkflows: workflowView,
+            renderCalendar: (host?: any): any => { PM.renderCalendarSub(host, dashboardCalendar === 'master' ? null : CURRENT_USER_ID); host.querySelector('#btnScheduleSession')?.remove(); }
+        });
+        if (workflowsAvailable)
             WorkOperations.refresh();
-        }
-        const calendar: any = el.querySelector('#workCalendarBody');
-        PM.renderCalendarSub(calendar, dashboardCalendar === 'master' ? null : CURRENT_USER_ID);
-        calendar.querySelector('#btnScheduleSession')?.remove();
-        el.querySelectorAll('[data-calendar-view]').forEach((b?: any): any => b.onclick = (): any => { dashboardCalendar = b.dataset.calendarView; home(); });
     }
     function readinessView(): any { const el: any = showCustom('readiness', 'Operational readiness', 'Exceptions from your authorized workspaces'); if (!el)
         return; WorkOperations.renderReadiness(el); }
@@ -416,9 +277,10 @@ const SuiteUX: any = ((): any => {
     function workspaces(): any { const el: any = showCustom('workspaces', 'Workspaces', 'Your authorized public safety tools'); if (!el)
         return; (window as any).SonoMarziReact.renderWorkspaces(el, accessibleModules().map((key?: any): any => { const m: any = MODULE_META[key]; return { id:key, name:m.name, tagline:m.tagline, icon:ICONS[m.icon], enter:(): any => enterModule(key) } as any; })); }
     function reports(): any { const el: any = showCustom('reports', 'Reports', 'Reporting across your authorized workspaces'); if (!el)
-        return; el.innerHTML = '<div class="workspace-grid"></div>'; for (const [key, m] of Object.entries(modules()) as any)
+        return; const items: any = []; for (const [key, m] of Object.entries(modules()) as any)
         for (const n of m.NAV_ITEMS.filter((n?: any): any => n.id.endsWith('-reports') && allowedView(n.id)))
-            el.firstChild.append(button(MODULE_META[key].name, 'chart', (): any => go(n.id), 'workspace-tile')); }
+            items.push({ id:n.id, name:MODULE_META[key].name, icon:ICONS.chart, enter:(): any => go(n.id) } as any);
+        (window as any).SonoMarziReact.renderActionGrid(el, items, 'No reports available'); }
     function adminDestinations(): any { const list: any = []; for (const [id, label, ability] of [['roles', 'Roles & Abilities', 'admin_roles'], ['fieldlabels', 'Field Labels', 'manage_field_labels'], ['branding', 'Agency Branding', 'manage_branding'], ['sso', 'Single Sign-On', 'admin_sso']])
         if (can(ability))
             list.push({ id, label, shared: true } as any); if (ALL_ABILITY_IDS.some((a?: any): any => a.endsWith('_admin_audit') && can(a)))
@@ -426,9 +288,9 @@ const SuiteUX: any = ((): any => {
         for (const n of m.NAV_ITEMS.filter((n?: any): any => n.id.endsWith('-admin') && allowedView(n.id)))
             list.push({ id: n.id, label: MODULE_META[metaFor(n.id).mod].name + ' settings' } as any); list.sort((a?: any, b?: any): any => a.label.localeCompare(b.label)); return list; }
     function administration(): any { const el: any = showCustom('administration', 'Administration', 'Access, configuration, and accountability'); if (!el)
-        return; el.innerHTML = '<div class="workspace-grid"></div>'; for (const d of adminDestinations())
-        el.firstChild.append(button(d.label, 'gear', (): any => d.shared ? shared(d.id, d.label, 'Platform administration') : go(d.id), 'workspace-tile')); if (isAdmin())
-        el.firstChild.append(button('Data & connection', 'database', dataSettings, 'workspace-tile')); }
+        return; const items: any = adminDestinations().map((d?: any): any => ({ id:d.id, name:d.label, icon:ICONS.gear, enter:(): any => d.shared ? shared(d.id, d.label, 'Platform administration') : go(d.id) } as any));
+        if (isAdmin()) items.push({ id:'data-settings', name:'Data & connection', icon:ICONS.database, enter:dataSettings } as any);
+        (window as any).SonoMarziReact.renderActionGrid(el, items, 'No administration tools available'); }
     function shared(id?: any, title?: any, sub?: any): any { if (!guard())
         return; modalDirty = false; leaveRecord(); const ok: any = id === 'personnel' ? can('personnel_view') : id === 'roles' ? can('admin_roles') : id === 'branding' ? can('manage_branding') : id === 'fieldlabels' ? can('manage_field_labels') : id === 'sso' ? can('admin_sso') : id === 'notices' ? SuiteStore.mode() === 'shared' : ALL_ABILITY_IDS.some((a?: any): any => a.endsWith('_admin_audit') && can(a)); if (!ok)
         return; enterSharedView(id, title, sub); rememberRoute('shared/' + id); navigation(); }

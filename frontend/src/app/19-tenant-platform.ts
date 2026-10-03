@@ -46,12 +46,8 @@ const TenantPlatform: any = ((): any => {
     function currentPersonMemberships(): any { const p: any = STATE?.personnel?.find((p?: any): any => p.id === CURRENT_USER_ID); return p?.tenantMemberships || [{ tenantId: current.tenantId, agencyId: current.agencyId, roleIds: p?.roleIds || [] } as any]; }
     function activeModules(): any { const t: any = tenant(); return t?.enabledModules || []; }
     function moduleEnabled(key?: any): any {
-        // The tenant catalog behind this is only readable by admins (suite_list_contexts). For an
-        // ordinary user it comes back empty, and treating that "I don't know" as "not licensed"
-        // hides every module from them permanently, no matter what their role grants. Module
-        // licensing is a vendor/billing concern, not the per-user security boundary -- that's the
-        // role ability check, which is applied separately and is unaffected by this. So when the
-        // catalog genuinely isn't available to this user, defer to their role instead of denying.
+        // The catalog may be temporarily unavailable while the workspace is loading. Role abilities
+        // remain the security boundary; an absent catalog must not hide every module.
         const t: any = tenant();
         if (!t || !Array.isArray(t.enabledModules) || !t.enabledModules.length)
             return true;

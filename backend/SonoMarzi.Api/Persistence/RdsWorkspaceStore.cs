@@ -61,6 +61,50 @@ public sealed class RdsWorkspaceStore(RdsConnectionFactory factory, WorkspacePol
         await using var connection = await factory.Open(ct);
         return new(await Query(connection, "SELECT to_jsonb(x)::text FROM (SELECT m.tenant_id,m.agency_id,m.person_id,m.role_ids,m.status,t.slug AS tenant_slug,t.name AS tenant_name,t.timezone,t.plan,t.status AS tenant_status,t.enabled_modules,a.name AS agency_name,a.abbreviation,a.agency_type,a.status AS agency_status FROM suite_memberships m JOIN suite_tenants t ON t.id=m.tenant_id JOIN suite_agencies a ON a.tenant_id=m.tenant_id AND a.id=m.agency_id WHERE m.user_id=$1 ORDER BY t.name,a.name) x", ct, Id(actor.Id)));
     }
+    public async Task<JsonArray> TenantCatalog(Actor actor, WorkspaceContext context, CancellationToken ct)
+    {
+        await using var connection = await factory.Open(ct);
+        await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        var tenants = await Query(connection,
+            "SELECT to_jsonb(x)::text FROM (SELECT id,slug,name,timezone,plan,status,enabled_modules FROM suite_tenants WHERE ($1 OR id=$2) ORDER BY name) x",
+            ct, actor.PlatformAdmin, Id(context.TenantId));
+        var agencies = await Query(connection,
+            "SELECT to_jsonb(x)::text FROM (SELECT id,tenant_id,name,abbreviation,agency_type,ori,status,branding FROM suite_agencies WHERE ($1 OR (tenant_id=$2 AND id=$3)) ORDER BY name) x",
+            ct, actor.PlatformAdmin, Id(context.TenantId), Id(context.AgencyId));
+        var admins = context.Admin ? await Query(connection,
+            "SELECT to_jsonb(x)::text FROM (SELECT m.user_id,m.tenant_id,m.agency_id,m.person_id,m.role_ids,m.status,u.display_name,u.email FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id WHERE ($1 OR (m.tenant_id=$2 AND m.agency_id=$3)) AND 'role_admin'=ANY(m.role_ids) ORDER BY u.display_name) x",
+            ct, actor.PlatformAdmin, Id(context.TenantId), Id(context.AgencyId)) : new JsonArray();
+        await transaction.CommitAsync(ct);
+        var catalog = new JsonArray();
+        foreach (var tenantNode in tenants)
+        {
+            var id = Json.String(tenantNode, "id");
+            var agencyItems = new JsonArray();
+            foreach (var agencyNode in agencies.Where(a => Json.String(a, "tenant_id") == id))
+                agencyItems.Add(new JsonObject {
+                    ["id"] = Json.String(agencyNode, "id"), ["name"] = Json.String(agencyNode, "name"),
+                    ["abbreviation"] = Json.String(agencyNode, "abbreviation"), ["type"] = Json.String(agencyNode, "agency_type"),
+                    ["ori"] = Json.String(agencyNode, "ori"), ["status"] = Json.String(agencyNode, "status"),
+                    ["branding"] = agencyNode?["branding"]?.DeepClone() ?? new JsonObject()
+                });
+            var adminItems = new JsonArray();
+            foreach (var adminNode in admins.Where(a => Json.String(a, "tenant_id") == id))
+                adminItems.Add(new JsonObject {
+                    ["id"] = Json.String(adminNode, "user_id"), ["personId"] = Json.String(adminNode, "person_id"),
+                    ["agencyId"] = Json.String(adminNode, "agency_id"), ["name"] = Json.String(adminNode, "display_name"),
+                    ["email"] = Json.String(adminNode, "email"), ["roleIds"] = adminNode?["role_ids"]?.DeepClone() ?? new JsonArray(),
+                    ["status"] = Json.String(adminNode, "status")
+                });
+            catalog.Add(new JsonObject {
+                ["id"] = id, ["slug"] = Json.String(tenantNode, "slug"), ["name"] = Json.String(tenantNode, "name"),
+                ["timezone"] = Json.String(tenantNode, "timezone"), ["plan"] = Json.String(tenantNode, "plan"),
+                ["status"] = Json.String(tenantNode, "status"), ["enabledModules"] = tenantNode?["enabled_modules"]?.DeepClone() ?? new JsonArray(),
+                ["agencies"] = agencyItems, ["admins"] = adminItems, ["invites"] = new JsonArray(),
+                ["regionalWorkspaces"] = new JsonArray(), ["supportSessions"] = new JsonArray(), ["audit"] = new JsonArray()
+            });
+        }
+        return catalog;
+    }
     private static async Task<WorkspaceContext> ResolveOn(NpgsqlConnection connection, Actor actor, string tenant, string agency, CancellationToken ct)
     {
         var rows = await Query(connection, "SELECT to_jsonb(x)::text FROM (SELECT t.status AS tenant_status,t.enabled_modules,a.status AS agency_status,m.person_id,m.role_ids,m.status AS membership_status FROM suite_tenants t JOIN suite_agencies a ON a.tenant_id=t.id AND a.id=$2 LEFT JOIN suite_memberships m ON m.tenant_id=t.id AND m.agency_id=a.id AND m.user_id=$3 WHERE t.id=$1 LIMIT 1) x", ct, Id(tenant), Id(agency), Id(actor.Id));

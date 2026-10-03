@@ -17,6 +17,19 @@ test('authentication, membership and filtered workspace',async()=>{
  assert.ok(!limited.data.records.some(r=>JSON.parse(r.key)[0][0]==='accounts'));
  const personnel=limited.data.records.find(r=>JSON.parse(r.key)[0][0]==='personnel'&&JSON.parse(r.key)[1]==='p1');assert.deepEqual(Object.keys(personnel.value).sort(),['badge','email','id','name','qualifications','roleIds','unit'].sort());
 });
+test('tenant catalog follows workspace scope',async()=>{
+ const admin=await identity('admin@local.test'),officer=await identity('officer@local.test');
+ const scope={p_tenant_id:tenant,p_agency_id:agency};
+ const catalog=await call('/rpc/suite_list_contexts',scope,admin);
+ assert.equal(catalog.status,200,JSON.stringify(catalog.data));
+ assert.deepEqual(catalog.data.current,{tenantId:tenant,agencyId:agency});
+ assert.equal(catalog.data.tenants.length,1);
+ assert.equal(catalog.data.tenants[0].agencies[0].id,agency);
+ const limited=await call('/rpc/suite_list_contexts',scope,officer);
+ assert.equal(limited.status,200);
+ assert.equal(limited.data.tenants.length,1);
+ assert.deepEqual(limited.data.tenants[0].admins,[]);
+});
 test('atomic versioned saves, conflict and restricted writes',async()=>{
  const admin=await identity('admin@local.test'),officer=await identity('officer@local.test');const key=JSON.stringify([['qm','equipment'],'test-atomic-'+Date.now()]);
  const value={id:JSON.parse(key)[1],name:'Test fixture'};

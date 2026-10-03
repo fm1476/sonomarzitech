@@ -15,7 +15,7 @@
 ## Still separate work
 
 - The old Supabase backend, SQL migrations, and Supabase health hook are not suitable for the AWS deployment path.
-- The older flat React navigation cannot replace the current nested navigation, search, favorites, and permissions without a dedicated migration.
+- The older flat React navigation was not copied. The current nested navigation, search, favorites, and permissions have since been migrated into a typed React component adapted to the AWS application.
 - Older feature screen changes have a different source baseline. Each workflow needs comparison against v14 and its own React conversion and browser coverage; this reconciliation does not claim those screens are converted.
 
 `staging` does not contain the old branch commit history. These are selected, adapted changes. The remaining merge gates are tracked in [MERGE_READINESS.md](MERGE_READINESS.md).

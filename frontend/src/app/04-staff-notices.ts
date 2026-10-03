@@ -13,15 +13,9 @@ const StaffNotices: any = ((): any => {
             })]).finally((): any => clearTimeout(timer));
     }
     function updateNavBadge(unread: any = lastUnread): any {
-        const nav: any = (document as any).getElementById('staffNoticesNav'), count: any = (document as any).getElementById('staffNoticeCount');
-        if (!nav || !count)
-            return;
         const number: any = Math.max(0, unread);
-        count.hidden = number === 0;
-        count.textContent = number > 99 ? '99+' : String(number);
-        nav.classList.toggle('has-unread', number > 0);
-        nav.setAttribute('aria-label', number ? 'Staff Notices, ' + number + ' unread' : 'Staff Notices');
-        nav.title = number ? number + ' unread staff notice' + (number === 1 ? '' : 's') : 'Staff Notices';
+        (window as any).SonoMarziNoticeCount = number;
+        (window as any).dispatchEvent(new CustomEvent('sonomarzi:notice-count', { detail: number }));
     }
     const selected: any = (selector?: any): any => [...(document as any).querySelectorAll(selector + ':checked')].map((x?: any): any => x.value);
     const activeAssignments: any = (onDate?: any): any => STATE.pm.scheduleAssignments.filter((a?: any): any => a.startDate <= onDate && (!a.endDate || a.endDate >= onDate));

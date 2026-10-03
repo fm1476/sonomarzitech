@@ -72,6 +72,15 @@ public sealed class LocalWorkspaceStore : IWorkspaceStore
         new JsonObject { ["user_id"]="local-trainer",["person_id"]="p3",["display_name"]="Local Trainer",["role_ids"]=new JsonArray("role_fto") },
         new JsonObject { ["user_id"]="local-supervisor",["person_id"]="p4",["display_name"]="Local Supervisor",["role_ids"]=new JsonArray("role_supervisor") }));
     public Task<JsonArrayResult> Memberships(Actor actor, CancellationToken ct) => Task.FromResult(new JsonArrayResult(new JsonArray(new JsonObject { ["tenant_id"] = TenantId, ["agency_id"] = AgencyId, ["person_id"] = actor.PlatformPersonId, ["role_ids"] = new JsonArray(Role(actor.Subject)), ["status"] = "active", ["tenant_name"] = "Local Test Tenant", ["agency_name"] = "Local Test Agency" })));
+    public Task<JsonArray> TenantCatalog(Actor actor, WorkspaceContext context, CancellationToken ct)
+    {
+        return Task.FromResult(new JsonArray(new JsonObject {
+            ["id"] = TenantId, ["slug"] = "local", ["name"] = "Local Test Tenant", ["timezone"] = "America/Chicago", ["plan"] = "enterprise", ["status"] = "active",
+            ["enabledModules"] = new JsonArray(context.EnabledModules.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()),
+            ["agencies"] = new JsonArray(new JsonObject { ["id"] = AgencyId, ["name"] = "Local Test Agency", ["abbreviation"] = "TEST", ["type"] = "Municipal Police", ["status"] = "active", ["branding"] = new JsonObject() }),
+            ["admins"] = new JsonArray(), ["invites"] = new JsonArray(), ["regionalWorkspaces"] = new JsonArray(), ["supportSessions"] = new JsonArray(), ["audit"] = new JsonArray()
+        }));
+    }
     public Task<WorkspaceContext> Resolve(Actor actor, string tenant, string agency, CancellationToken ct)
     {
         if (tenant != TenantId || agency != AgencyId) throw new ApiException(403, "Active agency membership required.");
