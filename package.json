@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "npm run check && node scripts/build.mjs",
-    "check": "tsc -p frontend/tsconfig.json && node scripts/check.mjs",
+    "check": "tsc -p frontend/tsconfig.json && tsc -p frontend/tsconfig.sw.json && node scripts/check.mjs",
     "test": "npm run check && npm run backend:test && node --test tests/api.test.mjs",
     "backend:local": "node --env-file-if-exists=.env scripts/backend.mjs local",
     "backend:test": "node --env-file-if-exists=.env scripts/backend.mjs test",

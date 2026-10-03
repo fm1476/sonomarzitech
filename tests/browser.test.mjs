@@ -14,6 +14,11 @@ test('React login and original feature screens use only local C# API',async()=>{
   assert.equal(await page.locator('#page-title').textContent(),'My Work');
   await page.evaluate(()=>window.SonoMarziLegacy.navigate('fieldtraining'));await page.getByText('No trainees enrolled.').waitFor();
   await page.evaluate(()=>window.SonoMarziLegacy.navigate('view/qm-inventory'));assert.ok((await page.locator('#page-title').textContent()).length>0);
+  for(const route of ['pm-records','pm-training','pm-scheduling','fleet-vehicles','k9-roster','drone-fleet','eod-technicians','subpoena','civil','grants-awards','grants-seizures']){
+   await page.evaluate(id=>window.SonoMarziLegacy.navigate('view/'+id),route);
+   assert.ok((await page.locator('#page-title').textContent()).trim(),`Missing title for ${route}`);
+   assert.deepEqual(errors,[],`Page error while opening ${route}`);
+  }
   const token=await page.evaluate(()=>sessionStorage.getItem('sonomarzi.aws.id_token'));const response=await fetch(base+'/api/workspace',{headers:{Authorization:'Bearer '+token}});const workspace=await response.json();
   const flat=await page.evaluate(()=>window.SonoMarziLegacy.flatKeys());const serverKeys=new Set(workspace.records.filter(r=>!r.deleted).map(r=>r.key));
   const missing=flat.filter(k=>!serverKeys.has(k));const extra=[...serverKeys].filter(k=>!flat.includes(k)&&!['ft','workflows','notices','serverAudit'].includes(JSON.parse(k)[0][0]) && JSON.parse(k)[0][1]!=='notifications');
