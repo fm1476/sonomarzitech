@@ -1,6 +1,6 @@
 # AWS v14 C# / TypeScript conversion
 
-Source revision: `origin/aws-migration` at `2456874`. Working branch: `feature/csharp-typescript-v14`. The checkout is separate from the earlier Supabase branch. Nothing in this branch has been deployed or merged.
+Source revision: `origin/aws-migration` at `2456874`. Working branch: `staging`. The checkout is separate from the earlier Supabase branch. Nothing in this branch has been deployed or merged.
 
 ## Run locally
 
