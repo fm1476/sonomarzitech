@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+<!-- SONOMARZI_AWS_S3_SHARED_PHOTOS_V1 -->
+
 <meta charset="UTF-8">
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
      like this one for free: https://netlify.new/?utm_campaign=ai-legible&utm_source=comment&utm_medium=referral&utm_id=fdbf3627-9d8e-49b8-88dc-36a7c2633055
@@ -995,8 +997,7 @@ const ICONS = {
    This shared version is what every table built from here forward uses,
    avoiding yet another one-off duplicate per screen.
    ========================================================================= */
-const SHARED_SORT = {};
-function sharedSortHeader(tableName, label, key){
+const SHARED_SORT = {};function sharedSortHeader(tableName, label, key){
   if(!SHARED_SORT[tableName]) SHARED_SORT[tableName] = {key:null, dir:'asc'};
   const s = SHARED_SORT[tableName];
   const active = s.key===key;
@@ -1619,7 +1620,7 @@ function logAuditEntry(moduleName, action, entityType){
   // user from tampering with their own audit trail through the generic save path). This is the
   // actual durable write, through the dedicated, restricted function built for exactly this,
   // fired without blocking whatever code just called logAuditEntry synchronously.
-  if(typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared' && typeof supabaseClient!=='undefined' && supabaseClient){
+  if(!window.SONOMARZI_AWS_DEV && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared' && typeof supabaseClient!=='undefined' && supabaseClient){
     const ctx = SuiteStore.remoteContext();
     if(ctx.tenantId && ctx.agencyId){
       supabaseClient.rpc('suite_log_activity', {
@@ -1890,53 +1891,151 @@ function photoManagerHtml(photos, idPrefix, canManage){
     <div id="${idPrefix}PhotoDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
       <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.camera || ICONS.paperclip}</span>
       <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop photos here, or click to browse</div>
-      <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">On a phone, this also lets you take a new photo directly with your camera.</div>
+      <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">Photos are stored privately in AWS S3. On a phone, you can also take a new photo with the camera.</div>
       <input type="file" id="${idPrefix}PhotoFileInput" accept="image/*" multiple style="display:none;">
     </div>` : ''}
     <div class="civil-photo-grid">
       ${(photos||[]).map((ph,pi)=>`
         <div class="civil-photo-card">
-          <img src="${ph.dataUrl}" alt="${escapeHtml(ph.description||'Photo')}">
-          <div class="civil-photo-meta">${ph.uploadedDate} \u2014 ${escapeHtml(ph.uploadedBy)}</div>
+          ${ph.storageKey
+            ? `<img data-aws-photo-key="${escapeHtml(ph.storageKey)}" data-photo-idx="${pi}" alt="${escapeHtml(ph.description||'Photo')}" style="opacity:.45;">`
+            : `<img src="${ph.dataUrl||''}" alt="${escapeHtml(ph.description||'Photo')}">`}
+          <div class="civil-photo-meta">${ph.uploadedDate||''} — ${escapeHtml(ph.uploadedBy||'')}</div>
           <textarea class="civil-photo-desc" data-photo-idx="${pi}" placeholder="Describe this photo if needed..." ${!canManage?'disabled':''}>${escapeHtml(ph.description||'')}</textarea>
-          ${canManage ? `<button class="btn btn-sm btn-danger" data-remove-photo="${pi}" style="width:100%;margin-top:6px;">${ICONS.trash} Remove</button>` : ''}
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="btn btn-sm btn-outline" data-open-photo="${pi}" style="flex:1;">Open</button>
+            ${canManage ? `<button class="btn btn-sm btn-danger" data-remove-photo="${pi}" style="flex:1;">${ICONS.trash} Remove</button>` : ''}
+          </div>
         </div>
       `).join('') || `<div class="empty-state" style="grid-column:1/-1;">${ICONS.camera || ICONS.paperclip}<div class="msg">No photos attached yet</div></div>`}
     </div>
   `;
 }
+
+function resizeImageForAwsUpload(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    if(!file || !file.type || !file.type.startsWith('image/')){
+      reject(Error("Please choose an image file."));
+      return;
+    }
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(Error("Could not read that image."));
+    reader.onload = (ev)=>{
+      img.onerror = ()=>reject(Error("Could not process that image."));
+      img.onload = ()=>{
+        const scale = Math.min(1, maxDim/Math.max(img.width, img.height));
+        const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob)=>{
+          if(!blob){ reject(Error("Could not prepare that image for upload.")); return; }
+          const base = (file.name||'photo').replace(/\.[^.]+$/,'');
+          resolve(new File([blob], `${base}.jpg`, {type:'image/jpeg'}));
+        }, 'image/jpeg', quality||0.82);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function hydrateAwsPhotoImages(container, photos){
+  const imgs = Array.from(container.querySelectorAll('img[data-aws-photo-key]'));
+  await Promise.all(imgs.map(async img=>{
+    const idx = Number(img.dataset.photoIdx);
+    const ph = photos[idx];
+    if(!ph?.storageKey) return;
+    try{
+      img.src = await AWS_ATTACHMENTS.signedUrl(ph);
+      img.style.opacity = '1';
+    }catch(error){
+      img.removeAttribute('src');
+      img.alt = 'Photo unavailable';
+      img.style.opacity = '.35';
+    }
+  }));
+}
+
 function wirePhotoManager(containerId, photos, idPrefix, canManage, afterChange){
   const container = document.getElementById(containerId);
   if(!container) return;
+
+  hydrateAwsPhotoImages(container, photos);
+
+  container.querySelectorAll('[data-open-photo]').forEach(b=>b.addEventListener('click', async ()=>{
+    const idx = Number(b.dataset.openPhoto);
+    try{
+      await AWS_ATTACHMENTS.download(photos[idx]);
+    }catch(error){
+      toast(error.message || "Photo could not be opened.", true);
+    }
+  }));
+
   if(canManage){
     const dropZone = document.getElementById(idPrefix+'PhotoDropZone');
     if(dropZone){
       const input = document.getElementById(idPrefix+'PhotoFileInput');
-      const processFiles = (fileList)=>{
-        Array.from(fileList).forEach(file=>{
-          if(!file.type || !file.type.startsWith('image/')) return;
-          resizeImageForStorage(file, 1100, 0.82, (dataUrl)=>{
-            photos.push({id:'photo'+Date.now()+Math.random().toString(36).slice(2,7), dataUrl, filename:file.name,
-              uploadedDate: fmt(new Date()), uploadedBy: personName(CURRENT_USER_ID), description:''});
-            afterChange('add');
-          });
-        });
+      const processFiles = async (fileList)=>{
+        const files = Array.from(fileList).filter(file=>file.type && file.type.startsWith('image/'));
+        if(!files.length) return;
+        dropZone.style.pointerEvents='none';
+        dropZone.style.opacity='.65';
+        try{
+          for(const file of files){
+            const prepared = await resizeImageForAwsUpload(file, 1600, 0.82);
+            const meta = await AWS_ATTACHMENTS.upload(prepared);
+            photos.push({
+              id:'photo'+Date.now()+Math.random().toString(36).slice(2,7),
+              ...meta,
+              originalFilename:file.name,
+              description:''
+            });
+          }
+          afterChange('add');
+          toast(files.length===1 ? "Photo uploaded to AWS." : `${files.length} photos uploaded to AWS.`);
+        }catch(error){
+          toast(error.message || "Photo upload failed.", true);        }finally{
+          dropZone.style.pointerEvents='';
+          dropZone.style.opacity='';
+          input.value='';
+        }
       };
       dropZone.addEventListener('click', ()=>input.click());
       input.addEventListener('change', (e)=>processFiles(e.target.files));
       dropZone.addEventListener('dragover', (e)=>{ e.preventDefault(); dropZone.style.borderColor='var(--blue)'; });
       dropZone.addEventListener('dragleave', ()=>{ dropZone.style.borderColor='var(--border)'; });
-      dropZone.addEventListener('drop', (e)=>{ e.preventDefault(); dropZone.style.borderColor='var(--border)'; if(e.dataTransfer.files.length) processFiles(e.dataTransfer.files); });
+      dropZone.addEventListener('drop', (e)=>{
+        e.preventDefault();
+        dropZone.style.borderColor='var(--border)';
+        if(e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
+      });
     }
   }
+
   container.querySelectorAll('.civil-photo-desc').forEach(ta=>ta.addEventListener('change', ()=>{
     const idx = Number(ta.dataset.photoIdx);
     photos[idx].description = ta.value.trim();
     afterChange('description');
   }));
-  container.querySelectorAll('[data-remove-photo]').forEach(b=>b.addEventListener('click', ()=>{
-    if(!confirm("Remove this photo?")) return;
+
+  container.querySelectorAll('[data-remove-photo]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!confirm("Remove this photo from the record?")) return;
     const idx = Number(b.dataset.removePhoto);
+    const ph = photos[idx];
+    if(!ph) return;
+
+    // Removing the metadata is the user-facing operation. Physical S3 deletion is
+    // attempted for admins, but a denied cleanup must not block the record change.
+    try{
+      if(ph.storageKey && ['role_admin','role_platform_admin'].some(id=>(HOME_ROLE_IDS||[]).includes(id))){
+        await AWS_ATTACHMENTS.remove(ph);
+      }
+    }catch(error){
+      console.warn('S3 photo cleanup deferred:', error);
+    }
+
     photos.splice(idx,1);
     afterChange('remove');
   }));
@@ -2896,8 +2995,7 @@ async function loadState(){
         setSyncStatus(supabaseClient ? 'offline' : 'saved');
         return;
       }
-    }
-  }catch(e){ /* key not found or storage unavailable -> fall through to seed */ }
+    }  }catch(e){ /* key not found or storage unavailable -> fall through to seed */ }
   // 3) Last resort: fresh seed data, session-only if nothing above is reachable
   STATE = await buildSeedState();
   persist();
@@ -3213,6 +3311,7 @@ function saveTextZoomLocally(pct){
 }
 async function saveTextZoom(pct){
   saveTextZoomLocally(pct);
+  if(window.SONOMARZI_AWS_DEV) return;
   if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared' || !supabaseClient) return;
   try{
     // Merge into whatever metadata the account already has (display name, the
@@ -3238,6 +3337,7 @@ async function loadTextZoom(){
 // the account itself has saved over the device-local fallback loadTextZoom() already applied on
 // page load -- this is what makes the setting follow a person to a different computer.
 async function syncTextZoomFromProfile(){
+  if(window.SONOMARZI_AWS_DEV) return;
   if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') return;
   try{
     const {data:{user}} = await supabaseClient.auth.getUser();
@@ -3894,8 +3994,7 @@ function seedEquipment(){
     ["AED - Trauma Kit Vehicle Mount","Medical / Trauma","Good","Vehicle Fleet Bay",1350,"2023-01-22","AED-70091"],
     ["IFAK Trauma Kit","Medical / Trauma","Good","Supply Room B",120,"2024-05-01",null],
     ["IFAK Trauma Kit","Medical / Trauma","Good","Supply Room B",120,"2024-05-01",null],
-    ["Duty Belt - Nylon","Duty Gear","Good","Supply Room B",145,"2023-03-11",null],
-    ["Duty Belt - Nylon","Duty Gear","New","Supply Room B",145,"2024-11-20",null],
+    ["Duty Belt - Nylon","Duty Gear","Good","Supply Room B",145,"2023-03-11",null],    ["Duty Belt - Nylon","Duty Gear","New","Supply Room B",145,"2024-11-20",null],
     ["Handcuffs - Chain Link","Duty Gear","Good","Supply Room B",42,"2022-09-05",null],
     ["Class A Dress Uniform - Set","Uniforms","Good","Supply Room B",310,"2021-10-01",null],
     ["Patrol Uniform Set (2)","Uniforms","Good","Supply Room B",180,"2023-06-01",null],
@@ -4894,8 +4993,7 @@ function renderInventory(){
       });
     });
     const checkAll = document.getElementById('invCheckAll');
-    if(checkAll) checkAll.addEventListener('change', (e)=>{
-      filtered.forEach(eq=> e.target.checked ? INV_SELECTED.add(eq.id) : INV_SELECTED.delete(eq.id));
+    if(checkAll) checkAll.addEventListener('change', (e)=>{      filtered.forEach(eq=> e.target.checked ? INV_SELECTED.add(eq.id) : INV_SELECTED.delete(eq.id));
       renderInventory();
     });
     const bulkField = document.getElementById('bulkField');
@@ -5894,8 +5992,7 @@ function renderRoles(){
       <h3>Agency Visibility</h3>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Leave everything unchecked to see all agencies. Check specific agencies to restrict this role to only their equipment (shared task-force assets remain visible regardless).</div>
       ${STATE.qm.refData.agencies.map(a=>`
-        <div class="ability-row">
-          <div class="lbl">${escapeHtml(a)}</div>
+        <div class="ability-row">          <div class="lbl">${escapeHtml(a)}</div>
           <label class="switch">
             <input type="checkbox" data-agency-scope="${escapeHtml(a)}" ${selRole.agencyScope.includes(a)?'checked':''} ${!canManage?'disabled':''}>
             <span class="slider"></span>
@@ -6894,8 +6991,7 @@ function renderReports(){
   STATE.qm.refData.categories.forEach(c=>valueByCategory[c]=0);
   eq.forEach(e=>valueByCategory[e.category]=(valueByCategory[e.category]||0)+e.value);
 
-  const byStatus = {};
-  eq.forEach(e=>byStatus[e.status]=(byStatus[e.status]||0)+1);
+  const byStatus = {};  eq.forEach(e=>byStatus[e.status]=(byStatus[e.status]||0)+1);
 
   const byAgency = {};
   STATE.qm.refData.agencies.forEach(a=>byAgency[a]=0);
@@ -7894,8 +7990,7 @@ function renderNav(){
     </button>
   `).join('');
   nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));  });
 }
 
 function switchView(id){
@@ -8894,8 +8989,7 @@ function renderInspections(){
   }
   const visibleIds=new Set(visibleVehicles().map(v=>v.id));
   const filtered = STATE.fleet.inspections.filter(i=>{
-    if(!visibleIds.has(i.vehicleId))return false;
-    if(!canViewAll && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID)return false;
+    if(!visibleIds.has(i.vehicleId))return false;    if(!canViewAll && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID)return false;
     const matchVeh = INSP_FILTER.vehicle==="All" || i.vehicleId===INSP_FILTER.vehicle;
     const matchPerson = INSP_FILTER.personnel==="All" || i.personnelIds.includes(INSP_FILTER.personnel);
     const d = i.dateTime.slice(0,10);
@@ -9894,8 +9988,7 @@ window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData
 
 /* =========================================================================
    MODULE LAUNCHER + SWITCHING
-   ========================================================================= */
-let ACTIVE_MODULE = null; // null (launcher) | 'qm' | 'fleet'
+   ========================================================================= */let ACTIVE_MODULE = null; // null (launcher) | 'qm' | 'fleet'
 let ACTIVE_SHARED_VIEW = null; // null | 'personnel' | 'roles' | 'audit' -- tracks which shared (cross-module) screen is open, if any
 
 const MODULE_META = {
@@ -10091,16 +10184,24 @@ function renderBrandingAdmin(){
     toast("Logo reset to default.");
     renderBrandingAdmin();
   });
-  document.getElementById('btnSaveBranding').addEventListener('click', ()=>{
+  document.getElementById('btnSaveBranding').addEventListener('click', async ()=>{
     STATE.agencyBranding.title = document.getElementById('fBrandTitle').value.trim() || "SonoMarzi PS Management Suite";
     STATE.agencyBranding.subtitle = document.getElementById('fBrandSub').value.trim() || "Choose a module to begin";
     logAuditEntry('Shared', 'Updated the agency title/tagline.', 'branding');
     persist();
     applyAgencyBranding();
-    toast("Branding saved.");
-    // keep suite_agencies.branding in sync too -- that's the copy the Platform Admin's Tenant
-    // Management overview reads, separate from this per-record copy used for day-to-day display.
-    if(typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
+
+    const saved = await SuiteStore.flush();
+    if(!saved){
+      toast("Branding change is still pending. AWS did not confirm the save.", true);
+      return;
+    }
+
+    toast("Branding saved to AWS.");
+
+    // The legacy tenant-admin mirror is intentionally skipped in AWS dev.
+    // The authoritative day-to-day branding record is now suite_records in RDS.
+    if(!window.SONOMARZI_AWS_DEV && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
       const ctx = SuiteStore.remoteContext();
       supabaseClient.functions.invoke('tenant-admin', {body:{action:'update_agency_branding', tenantId:ctx.tenantId, agencyId:ctx.agencyId,
         branding:{title:STATE.agencyBranding.title, subtitle:STATE.agencyBranding.subtitle}}}).then(async ({error})=>{
@@ -10116,7 +10217,7 @@ function renderBrandingAdmin(){
     applyAgencyBranding();
     toast("Branding reset to default.");
     renderBrandingAdmin();
-    if(typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
+    if(!window.SONOMARZI_AWS_DEV && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
       const ctx = SuiteStore.remoteContext();
       supabaseClient.functions.invoke('tenant-admin', {body:{action:'update_agency_branding', tenantId:ctx.tenantId, agencyId:ctx.agencyId,
         branding:{title:STATE.agencyBranding.title, subtitle:STATE.agencyBranding.subtitle}}}).catch(()=>{});
@@ -10320,6 +10421,7 @@ const StaffNotices=(()=>{
       'Choose at least one person, unit, or shift pattern.';
   }
   async function loadInbox(){
+    if(window.SONOMARZI_AWS_DEV)return [];
     if(SuiteStore.mode()!=='shared')return [];
     const {tenantId,agencyId}=context();
     const {data,error}=await withTimeout(supabaseClient.rpc('suite_notify_inbox',{p_tenant:tenantId,p_agency:agencyId}),12000,'Notice inbox timed out. Tap Refresh to try again.');
@@ -10885,8 +10987,7 @@ const AVATAR_PEOPLE = {
 
 function defaultExceptionCodes(){
   return [
-    {code:'RDO', name:'Regular Day Off', color:'#8A94A6', active:true, requestable:false},
-    {code:'VDO', name:'Vacation Day Off', color:'#14B8A6', active:true, requestable:true},
+    {code:'RDO', name:'Regular Day Off', color:'#8A94A6', active:true, requestable:false},    {code:'VDO', name:'Vacation Day Off', color:'#14B8A6', active:true, requestable:true},
     {code:'CDO', name:'Compensatory Day Off', color:'#D8AA50', active:true, requestable:true},
     {code:'SDO', name:'Sick Day Off', color:'#EC4899', active:true, requestable:true},
     {code:'TDO', name:'Training Day Off', color:'#F97316', active:true, requestable:false},
@@ -11885,8 +11986,7 @@ function renderRecordDetailModal(){
   renderRecordDetailTabContent(r);
 }
 
-function renderRecordDetailTabContent(r){
-  const body = document.getElementById('recDetailBody');
+function renderRecordDetailTabContent(r){  const body = document.getElementById('recDetailBody');
   const personId = r.personId;
   const canEdit = can('pm_records_edit');
   const canDocs = can('pm_documents_manage');
@@ -12885,8 +12985,7 @@ function openSessionFormModal(existingId){
       </div>
       <div class="form-2col">
         <div class="form-row"><label>Location</label><select id="fSessLocation">${STATE.pm.refData.trainingLocations.map(l=>`<option ${s.location===l.name?'selected':''}>${escapeHtml(l.name)}</option>`).join('')}</select></div>
-        <div class="form-row"><label>Status</label><select id="fSessStatus"><option ${s.status==='Scheduled'?'selected':''}>Scheduled</option><option ${s.status==='Completed'?'selected':''}>Completed</option><option ${s.status==='Cancelled'?'selected':''}>Cancelled</option></select></div>
-      </div>
+        <div class="form-row"><label>Status</label><select id="fSessStatus"><option ${s.status==='Scheduled'?'selected':''}>Scheduled</option><option ${s.status==='Completed'?'selected':''}>Completed</option><option ${s.status==='Cancelled'?'selected':''}>Cancelled</option></select></div>      </div>
       <div class="form-row"><label>Street Address <span style="font-weight:400;color:var(--text-dim);">(fills in from the location above; edit it for a one-off venue)</span></label><input type="text" id="fSessAddress" value="${escapeHtml(s.address||'')}" placeholder="e.g. 455 E 2nd St, Reno, NV 89502"></div>
       <div class="form-3col" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
         <div class="form-row"><label>Date</label><input type="date" id="fSessDate" value="${s.date}"></div>
@@ -13885,8 +13984,7 @@ function renderBidCycleList(canManage){
     return `<tr>
       <td>${escapeHtml(c.name)}</td>
       <td><span class="badge" style="background:${c.type==='vacation'?'#14B8A622':'#1855C622'};color:${c.type==='vacation'?'#14B8A6':'#1855C6'};">${c.type==='vacation'?'Vacation Pick':'Shift Bid'}</span></td>
-      <td style="font-size:12px;">${escapeHtml(c.opensDate)} to ${escapeHtml(c.closesDate)}</td>
-      <td style="color:${statusColor};font-weight:700;text-transform:capitalize;">${escapeHtml(c.status)}</td>
+      <td style="font-size:12px;">${escapeHtml(c.opensDate)} to ${escapeHtml(c.closesDate)}</td>      <td style="color:${statusColor};font-weight:700;text-transform:capitalize;">${escapeHtml(c.status)}</td>
       <td>${(c.submissions||[]).length}</td>
       <td><button class="btn btn-sm btn-outline" data-view-cycle="${c.id}">View</button></td>
     </tr>`;
@@ -14885,8 +14983,7 @@ function deleteSwapRequest(id){
 }
 
 /* =========================================================================
-   REPORTS & ANALYTICS (fixed required reports + a configurable report builder)
-   ========================================================================= */
+   REPORTS & ANALYTICS (fixed required reports + a configurable report builder)   ========================================================================= */
 let CUSTOM_REPORT = {entity:"records", groupBy:"unitId", unit:"All", rank:"All", dateFrom:"", dateTo:""};
 let PM_REPORT_FILTERS = { dateFrom:'', dateTo:'', unit:'All' };
 
@@ -15885,8 +15982,7 @@ function wireDashDragDrop(zone, orderedArray, isExtras){
         if(fromIdx<0 || toIdx<0) return;
         orderedArray.splice(fromIdx,1);
         orderedArray.splice(toIdx,0,draggedId);
-      }
-      persist();
+      }      persist();
       renderDashboard();
     });
   });
@@ -16885,8 +16981,7 @@ function renderIncidents(){
     return true;
   }).slice().sort((a,b)=>b.date.localeCompare(a.date));
 
-  const rows = list.map(i=>`
-    <tr><td>${k9Link(i.k9Id)}</td><td>${escapeHtml(personName(i.handlerId))}</td><td>${escapeHtml(i.type)}</td><td>${i.date}</td>
+  const rows = list.map(i=>`    <tr><td>${k9Link(i.k9Id)}</td><td>${escapeHtml(personName(i.handlerId))}</td><td>${escapeHtml(i.type)}</td><td>${i.date}</td>
     <td class="mono">${escapeHtml(i.caseNumber)}</td><td><span class="badge ${statusBadgeClassK9(i.reviewStatus)}">${i.reviewStatus}</span></td>
     <td><button class="btn btn-sm btn-outline" data-view-k9inc-list="${i.id}">View</button></td></tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:18px;">No incidents match this filter.</td></tr>`;
 
@@ -17885,8 +17980,7 @@ function renderFleet(){
     <div class="toolbar">
       <div class="filters">
         <input type="text" id="fleetSearch" title="Filters the drone fleet below as you type, matching aircraft name, model, or FAA N-number" placeholder="Search name, model, N-number..." style="width:220px;" value="${escapeHtml(f.q)}">
-        <select id="fleetStatus" title="Filter the drone fleet to a single status (e.g. Ready, Grounded)"><option ${f.status==='All'?'selected':''}>All</option>${STATE.drone.refData.statuses.map(st=>`<option ${f.status===st?'selected':''}>${escapeHtml(st)}</option>`).join('')}</select>
-        <select id="fleetCategory" title="Filter the drone fleet to a single aircraft category"><option ${f.category==='All'?'selected':''}>All</option>${STATE.drone.refData.categories.map(c=>`<option ${f.category===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
+        <select id="fleetStatus" title="Filter the drone fleet to a single status (e.g. Ready, Grounded)"><option ${f.status==='All'?'selected':''}>All</option>${STATE.drone.refData.statuses.map(st=>`<option ${f.status===st?'selected':''}>${escapeHtml(st)}</option>`).join('')}</select>        <select id="fleetCategory" title="Filter the drone fleet to a single aircraft category"><option ${f.category==='All'?'selected':''}>All</option>${STATE.drone.refData.categories.map(c=>`<option ${f.category===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
         <select id="fleetSortKey">
           <option value="name" ${FLEET_SORT_KEY==='name'?'selected':''}>Sort: Name</option>
           <option value="model" ${FLEET_SORT_KEY==='model'?'selected':''}>Sort: Model</option>
@@ -18885,7 +18979,6 @@ function exportCsvDrone(headers, rows, filename){
   URL.revokeObjectURL(url);
   toast("Report exported.");
 }
-
 /* =========================================================================
    ADMIN: reference data, agency authorizations, notification routing, audit log
    ========================================================================= */
@@ -19885,8 +19978,7 @@ function openMagazineFormModal(existingId){
   const m = editing ? magazineFor(existingId) : { name:"", type: STATE.eod.refData.magazineTypes[0], location:"", lastInspectionDate: fmt(new Date()), securityFeatures:"", notes:"" };
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>${editing?'Edit':'Add'} Magazine</h3><button class="modal-close" id="mClose">&times;</button></div>
-    <div class="modal-body">
+    <div class="modal-head"><h3>${editing?'Edit':'Add'} Magazine</h3><button class="modal-close" id="mClose">&times;</button></div>    <div class="modal-body">
       <div class="form-row"><label>Name</label><input type="text" id="fMagName" value="${escapeHtml(m.name)}" placeholder="e.g. Range Storage Building A"></div>
       <div class="form-row"><label>Type</label><select id="fMagType">${STATE.eod.refData.magazineTypes.map(t=>`<option ${m.type===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Location</label><input type="text" id="fMagLocation" value="${escapeHtml(m.location)}"></div>
@@ -20885,8 +20977,7 @@ function renderDashboard(){
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
   destroyChartsSubpoena();
   if(prefs.extras.some(e=>e.id==='chart_by_status')){
-    const byStatus = {};
-    SUBPOENA_STATUSES.forEach(s=>byStatus[s]=0);
+    const byStatus = {};    SUBPOENA_STATUSES.forEach(s=>byStatus[s]=0);
     STATE.subpoena.subpoenas.forEach(s=>byStatus[s.status]=(byStatus[s.status]||0)+1);
     CHART_REFS_SUBPOENA.status = safeChart('chartSubpoenaStatus', {
       type:'bar',
@@ -21154,30 +21245,40 @@ function renderSubpoenaDetailTabContent(s){
         <div style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;" id="subDocDropZone">
           <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.paperclip}</span>
           <div style="font-size:12.5px;font-weight:700;margin-top:6px;">Drag &amp; drop a file here, or click to browse</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">PDF, image, or document up to 3 MB</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">PDF, image, or document up to 25 MB</div>
           <input type="file" id="subDocFileInput" style="display:none;">
         </div>
       </div>` : ''}
       <table><thead><tr><th>File</th><th>Uploaded</th><th>Size</th><th></th></tr></thead><tbody>
-      ${s.attachments.map((a,i)=>`<tr><td>${escapeHtml(a.filename)}</td><td>${a.uploadedDate} by ${escapeHtml(a.uploadedBy)}</td><td>${a.sizeKb} KB</td>
-        <td>${canUpload?`<button class="btn-icon" data-remove-doc="${i}">${ICONS.trash}</button>`:''}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No documents attached yet.</td></tr>`}
+      ${s.attachments.map((a,i)=>`<tr><td><button class="btn-link" data-download-doc="${i}" style="padding:0;border:0;background:none;color:var(--blue);cursor:pointer;font:inherit;text-align:left;">${escapeHtml(a.filename)}</button></td><td>${a.uploadedDate} by ${escapeHtml(a.uploadedBy)}</td><td>${a.sizeKb} KB</td>
+        <td style="white-space:nowrap;"><button class="btn btn-sm btn-outline" data-download-doc="${i}">Download</button>${canUpload?` <button class="btn-icon" data-remove-doc="${i}" title="Delete attachment">${ICONS.trash}</button>`:''}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No documents attached yet.</td></tr>`}
       </tbody></table>
     `;
     const dropZone = document.getElementById('subDocDropZone');
     if(dropZone){
       const input = document.getElementById('subDocFileInput');
-      const processFile = (file)=>{
+      const processFile = async (file)=>{
         if(!file) return;
-        if(file.size > 3*1024*1024){ toast("That file is larger than 3 MB \u2014 please attach a smaller file.", true); return; }
-        const reader = new FileReader();
-        reader.onload = (ev)=>{
-          s.attachments.push({id:'att'+Date.now(), filename:file.name, dataUrl: ev.target.result, sizeKb: Math.round(file.size/1024), uploadedDate: fmt(new Date()), uploadedBy: personName(CURRENT_USER_ID)});
+        if(file.size > 25*1024*1024){ toast("That file is larger than 25 MB.", true); return; }
+        dropZone.style.pointerEvents='none';
+        dropZone.style.opacity='.65';
+        try{
+          const meta = await AWS_ATTACHMENTS.upload(file);
+          s.attachments.push({
+            id:'att'+Date.now(),
+            ...meta
+          });
           logActivity(`Attached document "${file.name}" to subpoena for case ${s.caseNumber}.`, "subpoena", s.id);
           persist();
-          toast("Document attached.");
+          await SuiteStore.flush();
+          toast("Document uploaded to AWS.");
           renderSubpoenaDetailModal();
-        };
-        reader.readAsDataURL(file);
+        }catch(error){
+          toast(error.message || "Attachment upload failed.", true);
+        }finally{
+          dropZone.style.pointerEvents='';
+          dropZone.style.opacity='';
+        }
       };
       dropZone.addEventListener('click', ()=>input.click());
       input.addEventListener('change', (e)=>processFile(e.target.files[0]));
@@ -21185,12 +21286,33 @@ function renderSubpoenaDetailTabContent(s){
       dropZone.addEventListener('dragleave', ()=>{ dropZone.style.borderColor='var(--border)'; });
       dropZone.addEventListener('drop', (e)=>{ e.preventDefault(); dropZone.style.borderColor='var(--border)'; if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
     }
-    document.querySelectorAll('[data-remove-doc]').forEach(b=>b.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-download-doc]').forEach(b=>b.addEventListener('click', async ()=>{
+      const idx = Number(b.dataset.downloadDoc);
+      const attachment = s.attachments[idx];
+      try{
+        await AWS_ATTACHMENTS.download(attachment);
+      }catch(error){
+        toast(error.message || "Attachment download failed.", true);
+      }
+    }));
+
+    document.querySelectorAll('[data-remove-doc]').forEach(b=>b.addEventListener('click', async ()=>{
       const idx = Number(b.dataset.removeDoc);
-      const removed = s.attachments.splice(idx,1)[0];
-      logActivity(`Removed document "${removed.filename}" from subpoena for case ${s.caseNumber}.`, "subpoena", s.id);
-      persist();
-      renderSubpoenaDetailModal();
+      const removed = s.attachments[idx];
+      if(!removed) return;
+      b.disabled = true;
+      try{
+        await AWS_ATTACHMENTS.remove(removed);
+        s.attachments.splice(idx,1);
+        logActivity(`Removed document "${removed.filename}" from subpoena for case ${s.caseNumber}.`, "subpoena", s.id);
+        persist();
+        await SuiteStore.flush();
+        toast("Attachment deleted.");
+        renderSubpoenaDetailModal();
+      }catch(error){
+        b.disabled = false;
+        toast(error.message || "Attachment delete failed.", true);
+      }
     }));
 
   } else if(SUBPOENA_DETAIL_TAB==='history'){
@@ -21200,6 +21322,121 @@ function renderSubpoenaDetailTabContent(s){
     body.innerHTML = `<table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 }
+
+
+/* =========================================================================
+   AWS ATTACHMENTS
+   Private S3 objects are accessed only through short-lived signed URLs.
+   Record data stores metadata + storageKey, never the file body itself.
+   ========================================================================= */
+const AWS_ATTACHMENTS = (() => {
+  const apiBase = 'https://7debzkoq7k.execute-api.us-east-2.amazonaws.com';
+  const tokenKey = 'sonomarzi.aws.id_token';
+
+  function token(){
+    return sessionStorage.getItem(tokenKey);
+  }
+
+  function context(){
+    const ctx = SuiteStore.remoteContext?.() || {};
+    if(!ctx.tenantId || !ctx.agencyId){
+      throw Error('Choose an agency workspace first.');
+    }
+    return ctx;
+  }
+
+  async function api(path, body){
+    const idToken = token();
+    if(!idToken) throw Error('AWS Cognito session is not available.');
+
+    const res = await fetch(`${apiBase}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const text = await res.text();
+    let data = null;
+    try{ data = text ? JSON.parse(text) : {}; }
+    catch{ data = {raw:text}; }
+
+    if(!res.ok){
+      throw Error(data?.error || data?.message || `Attachment request failed (${res.status}).`);
+    }
+    return data;
+  }
+
+  async function upload(file){
+    if(!file || !file.size) throw Error('Choose a file first.');
+    if(file.size > 25 * 1024 * 1024) throw Error('Attachments are limited to 25 MB.');
+
+    const ctx = context();
+    const reservation = await api('/attachments/upload-url', {
+      tenant_id: ctx.tenantId,
+      agency_id: ctx.agencyId,
+      file_name: file.name,
+      content_type: file.type || 'application/octet-stream',
+      size_bytes: file.size
+    });
+
+    const put = await fetch(reservation.upload_url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream'
+      },
+      body: file
+    });
+
+    if(!put.ok){
+      throw Error(`S3 upload failed (${put.status}).`);
+    }
+
+    return {
+      storageKey: reservation.key,
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      sizeKb: Math.max(1, Math.round(file.size / 1024)),
+      uploadedDate: fmt(new Date()),
+      uploadedBy: personName(CURRENT_USER_ID)
+    };
+  }
+
+  async function signedUrl(attachment){
+    if(attachment?.storageKey){
+      const ctx = context();
+      const signed = await api('/attachments/download-url', {
+        tenant_id: ctx.tenantId,
+        agency_id: ctx.agencyId,
+        key: attachment.storageKey
+      });
+      return signed.download_url;
+    }
+
+    if(attachment?.dataUrl) return attachment.dataUrl;
+    throw Error('This attachment does not have a downloadable file.');
+  }
+
+  async function download(attachment){
+    const url = await signedUrl(attachment);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  async function remove(attachment){
+    if(!attachment?.storageKey) return;
+    const ctx = context();
+    await api('/attachments/delete', {
+      tenant_id: ctx.tenantId,
+      agency_id: ctx.agencyId,
+      key: attachment.storageKey
+    });
+  }
+
+  return {upload, signedUrl, download, remove};
+})();
 
 /* =========================================================================
    MASTER CALENDAR (department-wide, admin-facing)
@@ -21739,8 +21976,7 @@ function permissionBlockedView(msg){
 function grantsStatusBadgeClass(status){
   return {"Pending":"badge-role","Forfeited":"badge-assigned","Equitable Share Received":"badge-available","Returned to Owner":"badge-role","Closed":"badge-role",
     "Applied":"badge-role","Awarded":"badge-assigned","Active":"badge-available","Reporting Overdue":"badge-missing"}[status] || "badge-role";
-}
-function seizureLink(id){
+}function seizureLink(id){
   const s = seizureFor(id);
   return `<a href="#" data-open-seizure="${id}" class="record-link">${escapeHtml(s?s.caseNumber:'Unknown')}</a>`;
 }
@@ -22739,8 +22975,7 @@ function renderSimpleListTab(body, key){
       <div class="panel-body">
         <div style="display:flex;gap:8px;margin-bottom:14px;">
           <input type="text" id="newItemInputGr" placeholder="Add a new ${cfg.label.toLowerCase().replace(/s$/,'')}..." style="flex:1;">
-          <button class="btn btn-primary btn-sm" id="btnAddItemGr">${ICONS.plus} Add</button>
-        </div>
+          <button class="btn btn-primary btn-sm" id="btnAddItemGr">${ICONS.plus} Add</button>        </div>
         <table><thead><tr><th>${cfg.label}</th><th>Usage</th><th></th></tr></thead><tbody>${rows}</tbody></table>
       </div>
     </div>
@@ -23739,8 +23974,7 @@ function renderPaperDetailTabContent(p){
             <div><div class="k">Total Deposited</div><div class="v">${moneyPrecise(depTotal)}</div></div>
             <div><div class="k">Applied to Fees</div><div class="v">${moneyPrecise(depApplied)}</div></div>
             <div><div class="k">Available Balance</div><div class="v" style="font-weight:800;color:${depAvailable>0?'var(--green)':'var(--text)'};">${moneyPrecise(depAvailable)}</div>${depAvailable>0 && canFee ? `<button class="btn btn-sm btn-outline" id="btnApplyDeposit" style="margin-top:6px;">Apply to Fees</button>` : ''}</div>
-          </div>
-          ${(p.deposits||[]).length ? `<table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference #</th><th>Notes</th><th></th></tr></thead><tbody>
+          </div>          ${(p.deposits||[]).length ? `<table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference #</th><th>Notes</th><th></th></tr></thead><tbody>
             ${p.deposits.map((d,di)=>`<tr style="${d.voided?'opacity:0.5;':''}"><td>${d.date}</td><td>${moneyPrecise(d.amount)}</td><td><span class="badge badge-role">${escapeHtml(d.method)}</span></td>
               <td class="mono" style="font-size:11.5px;">${d.referenceNumber?escapeHtml(d.referenceNumber):'—'}</td>
               <td style="font-size:12px;">${d.voided?`<strong>VOIDED:</strong> ${escapeHtml(d.voidReason||'')}`:escapeHtml(d.notes||'')}</td>
@@ -24739,8 +24973,7 @@ function openRealPropertyLevyModal(p, e, idx, draftOverride){
   }));
   document.getElementById('btnAddTpc').addEventListener('click', ()=>{ readFormIntoDraft(); openThirdPartyClaimModal(p, e, 'real', editing?idx:null, rp, null); });
   document.querySelectorAll('[data-edit-tpc]').forEach(b=>b.addEventListener('click', ()=>{ readFormIntoDraft(); openThirdPartyClaimModal(p, e, 'real', editing?idx:null, rp, Number(b.dataset.editTpc)); }));
-  document.getElementById('btnAddExc').addEventListener('click', ()=>{ readFormIntoDraft(); openExemptionClaimModal(p, e, 'real', editing?idx:null, rp, null); });
-  document.querySelectorAll('[data-edit-exc]').forEach(b=>b.addEventListener('click', ()=>{ readFormIntoDraft(); openExemptionClaimModal(p, e, 'real', editing?idx:null, rp, Number(b.dataset.editExc)); }));
+  document.getElementById('btnAddExc').addEventListener('click', ()=>{ readFormIntoDraft(); openExemptionClaimModal(p, e, 'real', editing?idx:null, rp, null); });  document.querySelectorAll('[data-edit-exc]').forEach(b=>b.addEventListener('click', ()=>{ readFormIntoDraft(); openExemptionClaimModal(p, e, 'real', editing?idx:null, rp, Number(b.dataset.editExc)); }));
   const delBtn = document.getElementById('mDelete');
   if(delBtn) delBtn.addEventListener('click', ()=>{
     if(!confirm('Remove this real property levy record?')) return;
@@ -25739,8 +25972,7 @@ function renderReports(){
       </div>
     </div>
   `;
-  if(CHART_REFS_CIVIL.stage) CHART_REFS_CIVIL.stage.destroy();
-  CHART_REFS_CIVIL.stage = safeChart('chartCivilStage', { type:'bar',
+  if(CHART_REFS_CIVIL.stage) CHART_REFS_CIVIL.stage.destroy();  CHART_REFS_CIVIL.stage = safeChart('chartCivilStage', { type:'bar',
     data:{ labels:Object.keys(byStage), datasets:[{label:'Papers', data:Object.values(byStage), backgroundColor:'#134DD1'}] },
     options:{maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:9}},grid:{display:false}},y:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:11}},grid:{color:chartGridColor()}}}} });
   const exportBtn = document.getElementById('btnExportFeeSummary');
@@ -26523,6 +26755,101 @@ const SuiteUX = (()=>{
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
    No writes are made to the legacy all-in-one app_state row. */
 const SuiteStore=(()=>{
+  const AWS_DEV_MODE=true;
+  window.SONOMARZI_AWS_DEV=true;
+  const AWS_DEV={
+    apiBase:'https://7debzkoq7k.execute-api.us-east-2.amazonaws.com',
+    tokenKey:'sonomarzi.aws.id_token',
+    tenantId:'f15865be-cf46-41e0-9d60-7cd753437501',
+    agencyId:'64624bcc-232d-4af5-bae6-a8e621cde447'
+  };
+
+  function awsToken(){
+    return sessionStorage.getItem(AWS_DEV.tokenKey);
+  }
+
+  async function awsJson(path, options={}){
+    const token=awsToken();
+    if(!token) throw Error('AWS Cognito session is not available.');
+
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),15000);
+
+    try{
+      const res=await fetch(`${AWS_DEV.apiBase}${path}`,{
+        ...options,
+        signal:controller.signal,
+        headers:{
+          Authorization:`Bearer ${token}`,
+          ...(options.body?{'Content-Type':'application/json'}:{}),
+          ...(options.headers||{})
+        }
+      });
+
+      const text=await res.text();
+      let body=null;
+      try{ body=text?JSON.parse(text):null; }catch{ body={raw:text}; }
+
+      if(!res.ok){
+        const error=Error(body?.error||body?.message||`AWS request failed (${res.status}).`);
+        error.status=res.status;
+        error.code=body?.code||String(res.status);
+        throw error;
+      }
+      return body;
+    }catch(error){
+      if(error?.name==='AbortError') throw Error('AWS request timed out after 15 seconds.');
+      throw error;
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
+  async function remoteRpc(name,args={}){
+    if(!AWS_DEV_MODE) return supabaseClient.rpc(name,args);
+
+    if(name==='suite_load_workspace'){
+      try{
+        const tenantId=args?.p_tenant_id||AWS_DEV.tenantId;
+        const agencyId=args?.p_agency_id||AWS_DEV.agencyId;
+        const data=await awsJson(
+          `/workspace?tenantId=${encodeURIComponent(tenantId)}&agencyId=${encodeURIComponent(agencyId)}`
+        );
+        return {data,error:null};
+      }catch(error){
+        return {data:null,error};
+      }
+    }
+
+    if(name==='suite_apply_changes'){
+      let badge=document.getElementById('awsSaveBackendBadge');
+      if(!badge){
+        badge=document.createElement('div');
+        badge.id='awsSaveBackendBadge';
+        badge.style.cssText='position:fixed;right:12px;bottom:12px;z-index:2147483645;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;padding:8px 10px;font:700 11px/1.25 system-ui;max-width:320px';
+        document.body.appendChild(badge);
+      }
+      badge.textContent='AWS save: sending to RDS…';
+      try{
+        const data=await awsJson('/apply-changes',{
+          method:'POST',
+          body:JSON.stringify({
+            tenant_id:args?.p_tenant_id||AWS_DEV.tenantId,
+            agency_id:args?.p_agency_id||AWS_DEV.agencyId,
+            changes:args?.p_changes||[]
+          })
+        });
+        badge.textContent='AWS save: confirmed by RDS';
+        return {data,error:null};
+      }catch(error){
+        badge.textContent='AWS save FAILED: '+(error?.message||String(error));
+        return {data:null,error};
+      }
+    }
+
+    // Do not silently fall back to Supabase from the core AWS transport.
+    return {data:null,error:Error(`This feature is not yet migrated to AWS: ${name}`)};
+  }
   let db=null,baseline=new Map(),saving=false,pendingWrites=false,serverReady=false,serverVersions={},serverOrders=new Map(),notificationReads=new Set(),debounce=null,saveAgain=false,waiters=[],consecutiveFailures=0,lastErrorWasVersionConflict=false,sessionEpoch=0;
   async function resolveSpuriousConflict(batch){
     // A 40001 here means the server's current version for these rows doesn't match what this tab
@@ -26537,7 +26864,7 @@ const SuiteStore=(()=>{
     // genuinely differs from what this tab intended, this returns false and the caller falls
     // through to the normal conflict handling below, so no one's actual, different work is ever
     // silently discarded.
-    const {data,error}=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
+    const {data,error}=await remoteRpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
     if(error) throw error;
     const byKey=new Map((data.records||[]).map(r=>[r.key,r]));
     for(const p of batch){
@@ -26644,8 +26971,7 @@ const SuiteStore=(()=>{
           if(!selfService && !(HOME_ROLE_IDS||[]).some(id=>STATE.roles.find(role=>role.id===id)?.abilities?.personnel_manage)){rejected.push(p);return false;}
         }
         return true;
-      });
-      if(mode==='local'&&!db)throw Error('Session only · Durable local storage is unavailable. Download a backup before leaving.');
+      });      if(mode==='local'&&!db)throw Error('Session only · Durable local storage is unavailable. Download a backup before leaving.');
       if(!patches.length){
         if(!staleSession()){
           pendingWrites=!!rejected.length;
@@ -26679,7 +27005,7 @@ const SuiteStore=(()=>{
           }));
           let data, error;
           try{
-            ({data,error}=await supabaseClient.rpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:wireChanges}));
+            ({data,error}=await remoteRpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:wireChanges}));
           }catch(thrown){
             // Some client-library failure modes throw directly instead of resolving with a clean
             // {error} object -- a version conflict must be caught and classified the SAME way
@@ -26691,7 +27017,7 @@ const SuiteStore=(()=>{
           if(error && /changed in another session/i.test(error.message||'') && batch.some(selfServiceOrder)){
             // Rebase only the shared order row. A conflict on a real record still
             // stops the save so another person's changes cannot be overwritten.
-            const latest=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
+            const latest=await remoteRpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
             if(!latest.error&&!staleSession()){
               const rows=new Map((latest.data.records||[]).map(r=>[r.key,r]));
               const safe=batch.every(p=>selfServiceOrder(p)||((rows.get(p.key)?.version||0)===(serverVersions[p.key]||0)));
@@ -26702,7 +27028,7 @@ const SuiteStore=(()=>{
                   if(row&&!row.deleted)serverOrders.set(p.key,clone(row.value));else serverOrders.delete(p.key);
                 }
                 wireChanges=batch.map(p=>({key:p.key,value:selfServiceOrder(p)?mergeSharedOrder(p):p.value,deleted:p.deleted,expected_version:serverVersions[p.key]||0}));
-                try{({data,error}=await supabaseClient.rpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:wireChanges}));}catch(thrown){error=thrown;}
+                try{({data,error}=await remoteRpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:wireChanges}));}catch(thrown){error=thrown;}
               }
             }
           }
@@ -26827,6 +27153,7 @@ const SuiteStore=(()=>{
   const notificationKey=(module,id)=>(notificationModule[module]||module)+'|'+id;
   function isNotificationRead(module,id){return notificationReads.has(notificationKey(module,id));}
   async function loadNotificationReads(){
+    if(AWS_DEV_MODE){notificationReads=new Set();return;}
     if(mode!=='shared'||!remoteContext.tenantId)return;
     const {data,error}=await supabaseClient.from('suite_notification_reads').select('module,notification_id').eq('tenant_id',remoteContext.tenantId).eq('agency_id',remoteContext.agencyId).limit(10000);
     if(error){console.error('Could not load notification read status:',error);return;}
@@ -26835,6 +27162,10 @@ const SuiteStore=(()=>{
   }
   async function markNotificationsRead(items){
     if(!items.length)return true;
+    if(AWS_DEV_MODE){
+      items.forEach(item=>notificationReads.add(notificationKey(item.module,item.id)));
+      return true;
+    }
     if(mode!=='shared'){
       for(const item of items){const key=notificationModule[item.module]||item.module;const found=STATE[key]?.notifications?.find(n=>n.id===item.id);if(found){found.readBy=found.readBy||[];if(!found.readBy.includes(CURRENT_USER_ID))found.readBy.push(CURRENT_USER_ID);}}
       persist();return true;
@@ -26847,9 +27178,58 @@ const SuiteStore=(()=>{
     unseen.forEach(item=>notificationReads.add(notificationKey(item.module,item.id)));
     return true;
   }
-  async function signIn(email,password){if(!supabaseClient)throw Error('The agency connection could not load. Check your connection and try again.');const {error}=await supabaseClient.auth.signInWithPassword({email,password});if(error)throw Error('Unable to sign in with those credentials.');const {data,error:readError}=await supabaseClient.rpc('suite_load_workspace');if(readError)throw Error('The agency workspace is not configured for this application version.');acceptRemote(data);await loadNotificationReads();logAuditEntry('Shared',`${personName(CURRENT_USER_ID)} signed in.`,'auth');return true;}
-  async function resumeSession(){if(!supabaseClient)return false;const {data:{session}}=await supabaseClient.auth.getSession();if(!session)return false;const {data,error}=await supabaseClient.rpc('suite_load_workspace');if(error){await supabaseClient.auth.signOut();return false;}acceptRemote(data);await loadNotificationReads();return true;}
-  async function loadRemoteContext(tenantId,agencyId){if(mode!=='shared'||!supabaseClient)throw Error('Agency context changes require an authenticated connection.');if(pendingWrites||saving){const saved=await flush();if(!saved||pendingWrites)throw Error('Save your pending changes before switching agencies. Download a backup if the save is blocked.');}const {data,error}=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:tenantId,p_agency_id:agencyId});if(error)throw Error(error.message||'That agency workspace could not be loaded.');acceptRemote(data);await loadNotificationReads();return true;}
+  async function signIn(email,password){
+    if(AWS_DEV_MODE){
+      if(!awsToken()) throw Error('Use Test AWS Login first to establish the Cognito session.');
+      const {data,error}=await remoteRpc('suite_load_workspace',{
+        p_tenant_id:AWS_DEV.tenantId,
+        p_agency_id:AWS_DEV.agencyId
+      });
+      if(error) throw error;
+      acceptRemote(data);
+      await loadNotificationReads();
+      logAuditEntry('Shared',`${personName(CURRENT_USER_ID)} signed in.`,'auth');
+      return true;
+    }
+    if(!supabaseClient)throw Error('The agency connection could not load. Check your connection and try again.');
+    const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+    if(error)throw Error('Unable to sign in with those credentials.');
+    const {data,error:readError}=await supabaseClient.rpc('suite_load_workspace');
+    if(readError)throw Error('The agency workspace is not configured for this application version.');
+    acceptRemote(data);
+    await loadNotificationReads();
+    logAuditEntry('Shared',`${personName(CURRENT_USER_ID)} signed in.`,'auth');
+    return true;
+  }
+
+  async function resumeSession(){
+    if(AWS_DEV_MODE){
+      if(!awsToken()) return false;
+      const {data,error}=await remoteRpc('suite_load_workspace',{
+        p_tenant_id:AWS_DEV.tenantId,
+        p_agency_id:AWS_DEV.agencyId
+      });
+      if(error){
+        console.error('AWS workspace resume failed:',error);
+        if(error.status===401||error.status===403){
+          sessionStorage.removeItem(AWS_DEV.tokenKey);
+        }
+        return false;
+      }
+      acceptRemote(data);
+      await loadNotificationReads();
+      return true;
+    }
+    if(!supabaseClient)return false;
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(!session)return false;
+    const {data,error}=await supabaseClient.rpc('suite_load_workspace');
+    if(error){await supabaseClient.auth.signOut();return false;}
+    acceptRemote(data);
+    await loadNotificationReads();
+    return true;
+  }
+  async function loadRemoteContext(tenantId,agencyId){if(mode!=='shared'||!supabaseClient)throw Error('Agency context changes require an authenticated connection.');if(pendingWrites||saving){const saved=await flush();if(!saved||pendingWrites)throw Error('Save your pending changes before switching agencies. Download a backup if the save is blocked.');}const {data,error}=await remoteRpc('suite_load_workspace',{p_tenant_id:tenantId,p_agency_id:agencyId});if(error)throw Error(error.message||'That agency workspace could not be loaded.');acceptRemote(data);await loadNotificationReads();return true;}
   async function signOut(){
     // Bump the epoch BEFORE anything else. Any flush() still in flight for the account that's
     // leaving captured the old epoch when it started; once this changes, that save will notice
@@ -26895,7 +27275,7 @@ const SuiteStore=(()=>{
     clearTimeout(debounce);
     try{
       if(mode==='shared'){
-        const {data,error}=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
+        const {data,error}=await remoteRpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
         if(error)throw error;
         acceptRemote(data);
         await loadNotificationReads();
@@ -26954,7 +27334,7 @@ const SuiteStore=(()=>{
       patches.push({key:orderKey,value:[...currentOrder,newRecord.id],deleted:false,expected_version:serverVersions[orderKey]||0});
       patches.push({key:recordKey,value:newRecord,deleted:false,expected_version:0});
       let data,error;
-      try{ ({data,error}=await supabaseClient.rpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:patches})); }
+      try{ ({data,error}=await remoteRpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:patches})); }
       catch(thrown){ error=thrown; }
       return {data,error,order:[...currentOrder,newRecord.id]};
     };
@@ -26962,7 +27342,7 @@ const SuiteStore=(()=>{
     if(error && /changed in another session/i.test(error.message||'')){
       // Refresh only this collection's version bookkeeping. A full reload here
       // would discard a separate unsaved form on the phone or another tab.
-      const latest=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
+      const latest=await remoteRpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
       if(latest.error)return {ok:false,error:latest.error};
       const relevant=new Map((latest.data.records||[]).filter(r=>[collectionKey,orderKey,recordKey].includes(r.key)).map(r=>[r.key,r]));
       for(const key of [collectionKey,orderKey,recordKey]){
@@ -26999,7 +27379,7 @@ const SuiteStore=(()=>{
     const context={...remoteContext},epoch=sessionEpoch;
     refreshing=true;lastRefresh=Date.now();
     try{
-      const {data,error}=await supabaseClient.rpc('suite_load_workspace',{p_tenant_id:context.tenantId,p_agency_id:context.agencyId});
+      const {data,error}=await remoteRpc('suite_load_workspace',{p_tenant_id:context.tenantId,p_agency_id:context.agencyId});
       if(error)throw error;
       if(epoch!==sessionEpoch||pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
       const changed=data.records.some(row=>serverVersions[row.key]!==row.version) ||
@@ -27590,8 +27970,7 @@ const TenantUserAdmin=(()=>{
     box.querySelector('#sendInvite').onclick=async()=>{const firstName=box.querySelector('#newUserFirstName').value.trim(),lastName=box.querySelector('#newUserLastName').value.trim(),name=`${firstName} ${lastName}`.trim(),email=box.querySelector('#newUserEmail').value.trim().toLowerCase(),agencyId=box.querySelector('#newUserAgency').value,badge=box.querySelector('#newUserBadge').value.trim(),unit=box.querySelector('#newUserUnit').value.trim(),roleIds=[...box.querySelectorAll('[data-new-user-role]:checked')].map(input=>input.dataset.newUserRole),error=box.querySelector('#newUserError'),button=box.querySelector('#sendInvite');if(!firstName||!lastName||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||!agencyId||!roleIds.length){error.textContent='Enter a first and last name, valid email, agency, and at least one role.';return}button.disabled=true;button.textContent='Creating…';try{const inviteResult=await invoke('invite_user',{tenantId:selectedTenantId,agencyId,name,email,badge,unit,roleIds});
       // invite_user already creates this person's roster record server-side (its writePersonnel
       // step) and, in doing so, bumps the shared [["personnel"],"$order"] row's version. Creating
-      // it again from here would target that exact same just-incremented row using the version
-      // this tab has been holding since login -- stale by definition, and a guaranteed 40001
+      // it again from here would target that exact same just-incremented row using the version      // this tab has been holding since login -- stale by definition, and a guaranteed 40001
       // conflict on every single invite. So: don't write, just re-read. Only refresh when the
       // invite targeted the same tenant/agency this session is actually signed into, since a
       // Platform Admin can invite into a different tenant and refreshing then would swap this
@@ -27953,5 +28332,1094 @@ setInterval(()=>{
   }
 })();
 </script>
+
+<!-- SonoMarzi AWS Cognito bridge: additive dev-only authentication proof. -->
+<script>
+(()=>{
+  const AWS_AUTH = {
+    clientId: 'no3ovb8d8qda221qnh1qomf1e',
+    cognitoDomain: 'https://us-east-2zulbalcue.auth.us-east-2.amazoncognito.com',
+    redirectUri: 'https://d1b97r2bbw5qld.cloudfront.net',
+    apiBase: 'https://7debzkoq7k.execute-api.us-east-2.amazonaws.com',
+    verifierKey: 'sonomarzi.aws.pkce.verifier',
+    stateKey: 'sonomarzi.aws.pkce.state',
+    idTokenKey: 'sonomarzi.aws.id_token',
+    migrateIntentKey: 'sonomarzi.aws.migrate_demo_pd'
+  };
+
+  const DEMO_PD = {
+    tenantId: 'f15865be-cf46-41e0-9d60-7cd753437501',
+    agencyId: '64624bcc-232d-4af5-bae6-a8e621cde447',
+    importPath: '/migration/demo-pd/records',
+    batchSize: 40
+  };
+
+  // Keep this bridge limited to the AWS development distribution.
+  if(location.hostname !== 'd1b97r2bbw5qld.cloudfront.net') return;
+
+  const base64url = bytes => btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+
+  const randomToken = (length=32) => {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return base64url(bytes);
+  };
+
+  async function sha256Base64url(value){
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+    return base64url(new Uint8Array(digest));
+  }
+
+  function setStatus(message, good=false){
+    let box=document.getElementById('awsAuthBridgeStatus');
+    if(!box){
+      box=document.createElement('div');
+      box.id='awsAuthBridgeStatus';
+      Object.assign(box.style,{
+        position:'fixed',right:'18px',bottom:'206px',zIndex:'99999',maxWidth:'430px',
+        padding:'12px 14px',borderRadius:'10px',background:'#111827',color:'#fff',
+        font:'13px/1.4 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        boxShadow:'0 8px 28px rgba(0,0,0,.28)'
+      });
+      document.body.appendChild(box);
+    }
+    box.textContent=message;
+    box.style.border=good?'1px solid #22c55e':'1px solid #64748b';
+  }
+
+  function buttonStyle(bottom){
+    return {
+      position:'fixed',right:'18px',bottom,zIndex:'99999',padding:'10px 14px',
+      borderRadius:'9px',border:'1px solid #64748b',background:'#fff',color:'#111827',
+      font:'600 13px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      cursor:'pointer',boxShadow:'0 5px 18px rgba(0,0,0,.18)'
+    };
+  }
+
+
+  function configureAwsDevLogin(){
+    const fields=document.getElementById('loginFormFields');
+    if(!fields) return;
+
+    // Hide the legacy username/password controls while AWS/Cognito is the active dev auth path.
+    const username=document.getElementById('loginUsername');
+    const password=document.getElementById('loginPassword');
+    const legacySignIn=document.getElementById('btnLogin');
+    const forgot=document.getElementById('btnForgotPassword');
+
+    username?.closest('.form-row')?.setAttribute('style','display:none;');
+    password?.closest('.form-row')?.setAttribute('style','display:none;');
+    if(legacySignIn) legacySignIn.style.display='none';
+    if(forgot?.parentElement) forgot.parentElement.style.display='none';
+
+    const error=document.getElementById('loginError');
+    if(error){
+      error.style.display='none';
+      error.textContent='';
+    }
+
+    let button=document.getElementById('awsCognitoLoginButton');
+    if(!button){
+      button=document.createElement('button');
+      button.id='awsCognitoLoginButton';
+      button.type='button';
+      button.className='btn btn-primary';
+      button.style.cssText='width:100%;justify-content:center;font-size:14px;padding:12px 16px;';
+      button.textContent='Sign in with AWS Cognito';
+      button.onclick=startLogin;
+      fields.insertBefore(button, fields.firstChild);
+    }
+
+    let note=document.getElementById('awsCognitoLoginNote');
+    if(!note){
+      note=document.createElement('div');
+      note.id='awsCognitoLoginNote';
+      note.style.cssText='margin-top:10px;color:var(--text-dim);font-size:12px;line-height:1.45;text-align:center;';
+      note.textContent='AWS development environment · Demo PD';
+      button.insertAdjacentElement('afterend',note);
+    }
+
+    const subtitle=document.querySelector('#loginScreen .brand-text .t2');
+    if(subtitle) subtitle.textContent='Secure sign in with AWS';
+
+    // Remove the old prototype/security disclaimer from the dev login card.
+    const card=document.querySelector('#loginScreen .login-card');
+    if(card){
+      [...card.children].forEach(child=>{
+        if(
+          child !== fields &&
+          child.id !== 'loginLoading' &&
+          child.classList?.contains('brand') === false &&
+          child.textContent?.includes('This login demonstrates the concept')
+        ){
+          child.style.display='none';
+        }
+      });
+    }
+  }
+
+  function addTestButton(){
+    if(document.getElementById('awsAuthBridgeButton')) return;
+    const btn=document.createElement('button');
+    btn.id='awsAuthBridgeButton';
+    btn.type='button';
+    btn.textContent='Test AWS Login';
+    Object.assign(btn.style,buttonStyle('18px'));
+    btn.onclick=startLogin;
+    document.body.appendChild(btn);
+  }
+
+  function addMigrationButton(){
+    if(document.getElementById('awsDemoMigrationButton')) return;
+    const btn=document.createElement('button');
+    btn.id='awsDemoMigrationButton';
+    btn.type='button';
+    btn.textContent='Copy Demo PD to AWS';
+    Object.assign(btn.style,buttonStyle('62px'));
+    btn.onclick=migrateDemoPd;
+    document.body.appendChild(btn);
+  }
+
+
+
+  
+async function migrateDemoPdAccessRules() {
+  const status = document.getElementById('aws-auth-status');
+  const token = sessionStorage.getItem(AWS_AUTH.idTokenKey);
+
+  if (!token) {
+    const msg = 'AWS login required. Click Test AWS Login first.';
+    if (status) status.textContent = msg;
+    alert(msg);
+    return;
+  }
+
+  if (typeof supabaseClient === 'undefined' || !supabaseClient?.auth) {
+    alert('Supabase client is not available on this page.');
+    return;
+  }
+
+  const { data: sessionData, error: sessionError } =
+    await supabaseClient.auth.getSession();
+
+  if (sessionError || !sessionData?.session) {
+    alert('Your normal SonoMarzi/Supabase session is required. Sign in to SonoMarzi first.');
+    return;
+  }
+
+  if (status) status.textContent = 'Reading Demo PD access rules from Supabase...';
+
+  try {
+    const { data: rules, error: sourceError } = await supabaseClient
+      .rpc('suite_export_demo_pd_access_rules');
+
+    if (sourceError) throw sourceError;
+
+    if (!Array.isArray(rules) || rules.length === 0) {
+      throw new Error('Supabase returned no Demo PD access rules.');
+    }
+
+    if (rules.length !== 99) {
+      throw new Error(
+        `Safety check stopped the migration: expected 99 Demo PD access rules from Supabase, but received ${rules.length}. Nothing was sent to AWS.`
+      );
+    }
+
+    const seen = new Set();
+    for (const rule of rules) {
+      const key = `${rule.role_id}\u0000${rule.collection}`;
+      if (seen.has(key)) {
+        throw new Error(
+          `Safety check stopped the migration: duplicate rule ${rule.role_id}/${rule.collection}. Nothing was sent to AWS.`
+        );
+      }
+      seen.add(key);
+    }
+
+    if (status) status.textContent = `Sending ${rules.length} Demo PD access rules to AWS...`;
+
+    const res = await fetch(
+      `${AWS_AUTH.apiBase}/migration/demo-pd/access-rules`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ rules })
+      }
+    );
+
+    const raw = await res.text();
+    let result;
+    try {
+      result = raw ? JSON.parse(raw) : {};
+    } catch {
+      result = { error: raw || `HTTP ${res.status}` };
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      throw new Error(
+        result?.error ||
+        'AWS authentication expired. Click Test AWS Login and try again.'
+      );
+    }
+
+    if (!res.ok || !result?.success) {
+      throw new Error(
+        result?.error ||
+        `AWS access-rule migration failed with HTTP ${res.status}.`
+      );
+    }
+
+    if (
+      result.verified !== true ||
+      Number(result.awsAccessRuleCount) !== rules.length
+    ) {
+      throw new Error(
+        `AWS verification was unexpected. Source: ${rules.length}; AWS: ${result.awsAccessRuleCount ?? 'unknown'}; verified: ${String(result.verified)}.`
+      );
+    }
+
+    const message =
+      `DEMO PD ACCESS RULE COPY COMPLETE: ${rules.length}/${rules.length} rules sent. ` +
+      `AWS reports ${result.awsAccessRuleCount} rules and verified every stored rule. ` +
+      `Supabase was not changed.`;
+
+    if (status) status.textContent = message;
+    console.log('Demo PD AWS access-rule migration result:', result);
+    console.table(rules);
+    alert(message);
+  } catch (error) {
+    console.error('Demo PD AWS access-rule migration failed:', error);
+    const message = `ACCESS RULE COPY STOPPED: ${error.message}`;
+    if (status) status.textContent = message;
+    alert(message);
+  }
+}
+
+
+
+async function inspectSupabaseMemberships(){
+  const button=document.getElementById('supabaseMembershipInspectButton');
+  if(button) button.disabled=true;
+  try{
+    if(typeof supabaseClient==='undefined' || !supabaseClient?.auth){
+      throw new Error('Supabase client is not available on this page.');
+    }
+
+    const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+    if(sessionError) throw sessionError;
+    if(!session){
+      throw new Error('Sign in to the normal SonoMarzi/Supabase session first, then retry.');
+    }
+
+    setStatus('Inspecting Demo PD memberships in Supabase...');
+
+    const {data:memberships,error}=await supabaseClient
+      .rpc('suite_export_demo_pd_memberships');
+
+    if(error) throw error;
+    if(!Array.isArray(memberships)){
+      throw new Error('Supabase did not return a membership array.');
+    }
+
+    console.log('Supabase Demo PD membership inspection:',memberships);
+    console.table(memberships);
+
+    const rows=memberships.map((r,i)=>{
+      const roles=Array.isArray(r.role_ids)?r.role_ids.join(', '):(r.role_ids??'');
+      return `${i+1}. person_id=${r.person_id??'(null)'} | email=${r.user_email??'(null)'} | name=${r.user_display_name??'(null)'} | membership_status=${r.membership_status??'(null)'} | user_status=${r.user_status??'(null)'} | roles=${roles} | cognito_sub=${r.user_cognito_sub??'(null)'}`;
+    }).join('\n');
+
+    const message=
+      `SUPABASE MEMBERSHIP INSPECTION COMPLETE\n\n`+
+      `Demo PD memberships returned: ${memberships.length}\n\n`+
+      `${rows||'(none)'}\n\n`+
+      `READ ONLY. Nothing was changed in Supabase or AWS.\n\n`+
+      `The full rows were also written to the browser console.`;
+
+    setStatus(`Supabase membership inspection complete. Demo PD returned ${memberships.length} membership row(s).`);
+    alert(message);
+  }catch(error){
+    console.error('Supabase membership inspection failed:',error);
+    setStatus(`Supabase membership inspection failed: ${error.message}`);
+    alert(`SUPABASE MEMBERSHIP INSPECTION FAILED: ${error.message}`);
+  }finally{
+    if(button) button.disabled=false;
+  }
+}
+
+
+async function migrateDemoPdMemberships(){
+  const button=document.getElementById('awsMembershipImportButton');
+  if(button) button.disabled=true;
+
+  try{
+    if(typeof supabaseClient==='undefined' || !supabaseClient?.auth){
+      throw new Error('Supabase client is not available on this page.');
+    }
+
+    const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+    if(sessionError) throw sessionError;
+    if(!session){
+      throw new Error('Sign in to the normal SonoMarzi/Supabase session first, then retry.');
+    }
+
+    const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+    if(!idToken){
+      throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the membership copy.');
+    }
+
+    setStatus('Reading Demo PD memberships from Supabase...');
+
+    const {data:memberships,error}=await supabaseClient
+      .rpc('suite_export_demo_pd_memberships');
+
+    if(error) throw error;
+    if(!Array.isArray(memberships)){
+      throw new Error('Supabase did not return a membership array.');
+    }
+    if(memberships.length!==9){
+      throw new Error(`Expected exactly 9 Demo PD memberships from Supabase, but received ${memberships.length}. Nothing was sent to AWS.`);
+    }
+
+    const confirmed=confirm(
+      `Ready to copy ${memberships.length} Demo PD memberships from Supabase to AWS.\n\n`+
+      `This will preserve person IDs, roles, and membership status; reconcile the existing Cognito-linked platform administrator; and create no new Cognito users.\n\n`+
+      `Supabase will not be changed.\n\nContinue?`
+    );
+    if(!confirmed){
+      setStatus('Demo PD membership copy cancelled. Nothing was changed.');
+      return;
+    }
+
+    setStatus(`Sending ${memberships.length} Demo PD memberships to AWS for transactional import and verification...`);
+
+    const response=await fetch(`${AWS_AUTH.apiBase}/migration/demo-pd/memberships`,{
+      method:'POST',
+      headers:{
+        Authorization:`Bearer ${idToken}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({memberships})
+    });
+
+    const responseText=await response.text();
+    let result;
+    try{result=JSON.parse(responseText);}catch{result={raw:responseText};}
+
+    if(response.status===401 || response.status===403){
+      sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      throw new Error(
+        result?.error ||
+        'AWS authentication expired. Click Test AWS Login and try again.'
+      );
+    }
+
+    if(!response.ok || !result?.success){
+      throw new Error(
+        result?.error ||
+        `AWS membership migration failed with HTTP ${response.status}.`
+      );
+    }
+
+    if(
+      result.verified!==true ||
+      Number(result.awsMembershipCount)!==memberships.length ||
+      Number(result.cognitoUsersCreated)!==0
+    ){
+      throw new Error(
+        `AWS verification was unexpected. Source: ${memberships.length}; AWS: ${result.awsMembershipCount ?? 'unknown'}; verified: ${String(result.verified)}; Cognito users created: ${result.cognitoUsersCreated ?? 'unknown'}.`
+      );
+    }
+
+    const message=
+      `DEMO PD MEMBERSHIP COPY COMPLETE: ${memberships.length}/${memberships.length} memberships sent. `+
+      `AWS reports ${result.awsMembershipCount} memberships and verified the stored membership identities, roles, and statuses. `+
+      `${result.createdUsers} non-Cognito suite user(s) created; ${result.cognitoUsersCreated} Cognito users created. `+
+      `Supabase was not changed.`;
+
+    setStatus(message);
+    console.log('Demo PD AWS membership migration result:',result);
+    console.table(memberships);
+    alert(message);
+  }catch(error){
+    console.error('Demo PD AWS membership migration failed:',error);
+    const message=`MEMBERSHIP COPY STOPPED: ${error.message}`;
+    setStatus(message);
+    alert(message);
+  }finally{
+    if(button) button.disabled=false;
+  }
+}
+
+async function inspectAwsMemberships(){
+  const button=document.getElementById('awsMembershipInspectButton');
+  if(button) button.disabled=true;
+  try{
+    const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+    if(!idToken){
+      throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the inspection.');
+    }
+
+    setStatus('Inspecting the AWS suite_memberships table...');
+
+    const response=await fetch(`${AWS_AUTH.apiBase}/migration/demo-pd/memberships/inspect`,{
+      method:'GET',
+      headers:{Authorization:`Bearer ${idToken}`}
+    });
+
+    const responseText=await response.text();
+    let result;
+    try{result=JSON.parse(responseText);}catch{result={raw:responseText};}
+
+    if(!response.ok){
+      if(response.status===401 || response.status===403){
+        sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      }
+      throw new Error(`AWS membership inspection returned ${response.status}: ${result.error||result.message||responseText}`);
+    }
+
+    console.log('AWS Demo PD membership inspection:',result);
+    console.table(result.demoPdMemberships||[]);
+    console.table(result.schema||[]);
+    console.table(result.constraints||[]);
+    console.table(result.indexes||[]);
+
+    const rows=(result.demoPdMemberships||[]).map(r=>{
+      const roles=Array.isArray(r.role_ids)?r.role_ids.join(', '):(r.role_ids??'');
+      return `person_id=${r.person_id??'(null)'} | user_id=${r.user_id??'(null)'} | status=${r.status??'(null)'} | roles=${roles}`;
+    }).join('\n');
+
+    const message=
+      `AWS MEMBERSHIP INSPECTION COMPLETE\n\n`+
+      `Demo PD memberships already in AWS: ${result.demoPdMembershipCount}\n`+
+      `Columns: ${(result.schema||[]).length}\n`+
+      `Constraints: ${(result.constraints||[]).length}\n`+
+      `Indexes: ${(result.indexes||[]).length}\n\n`+
+      `Existing Demo PD memberships:\n${rows||'(none)'}\n\n`+
+      `Full details are also in the browser console.`;
+
+    setStatus(`AWS membership inspection complete. Demo PD has ${result.demoPdMembershipCount} membership row(s) in AWS.`);
+    alert(message);
+  }catch(error){
+    console.error('AWS membership inspection failed:',error);
+    setStatus(`AWS membership inspection failed: ${error.message}`);
+    alert(`MEMBERSHIP INSPECTION FAILED: ${error.message}`);
+  }finally{
+    if(button) button.disabled=false;
+  }
+}
+
+async function inspectAwsAccessRules(){
+    const button=document.getElementById('awsAccessRulesInspectButton');
+    if(button) button.disabled=true;
+    try{
+      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      if(!idToken){
+        throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the inspection.');
+      }
+
+      setStatus('Inspecting the AWS suite_access_rules table...');
+
+      const response=await fetch(`${AWS_AUTH.apiBase}/migration/demo-pd/access-rules/inspect`,{
+        method:'GET',
+        headers:{Authorization:`Bearer ${idToken}`}
+      });
+
+      const responseText=await response.text();
+      let result;
+      try{result=JSON.parse(responseText);}catch{result={raw:responseText};}
+
+      if(!response.ok){
+        if(response.status===401 || response.status===403){
+          sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+        }
+        throw new Error(`AWS access-rule inspection returned ${response.status}: ${result.error||result.message||responseText}`);
+      }
+
+      const columns=Array.isArray(result.schema)?result.schema:[];
+      const summary=columns.map(c =>
+        `${c.column_name} (${c.data_type}${c.udt_name && c.udt_name!==c.data_type ? `/${c.udt_name}` : ''}, ${c.is_nullable==='YES'?'nullable':'required'}${c.column_default?`, default ${c.column_default}`:''})`
+      ).join('\n');
+
+      const count=result.demoPdExistingRuleCount ?? 'unknown';
+      setStatus(`AWS ACCESS RULE INSPECTION COMPLETE: ${columns.length} columns found; ${count} existing Demo PD rules. Full schema written to the browser console.`,true);
+      console.log('[AWS access rules inspector] full result',result);
+      console.table(columns);
+      alert(
+        `AWS suite_access_rules inspection complete.\n\n` +
+        `Demo PD rules already in AWS: ${count}\n` +
+        `Columns: ${columns.length}\n\n` +
+        summary
+      );
+    }catch(error){
+      console.error('[AWS access rules inspector] failed:',error);
+      setStatus(`AWS ACCESS RULE INSPECTION FAILED: ${error.message}`);
+    }finally{
+      if(button) button.disabled=false;
+    }
+  }
+
+  async function migrateDemoPdTemplate(){
+    const button=document.getElementById('awsDemoTemplateButton');
+    if(button) button.disabled=true;
+    try{
+      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      if(!idToken){
+        throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the template copy.');
+      }
+
+      if(typeof supabaseClient==='undefined' || !supabaseClient){
+        throw new Error('The Supabase connection is not available in this page.');
+      }
+
+      const {data:{session}}=await supabaseClient.auth.getSession();
+      if(!session){
+        throw new Error('Sign in to the existing SonoMarzi workspace first, then retry the template copy.');
+      }
+
+      setStatus('Reading the Demo PD template from Supabase...');
+      const {data,error}=await supabaseClient.rpc('suite_load_workspace',{
+        p_tenant_id:DEMO_PD.tenantId,
+        p_agency_id:DEMO_PD.agencyId
+      });
+      if(error) throw new Error(error.message||'Supabase workspace load failed.');
+
+      const template=data?.template;
+      if(!template || typeof template!=='object' || Array.isArray(template)){
+        throw new Error('Supabase did not return a Demo PD template object.');
+      }
+
+      setStatus('Copying the Demo PD template to AWS...');
+      const response=await fetch(`${AWS_AUTH.apiBase}/migration/demo-pd/template`,{
+        method:'POST',
+        headers:{
+          Authorization:`Bearer ${idToken}`,
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify({template})
+      });
+
+      const responseText=await response.text();
+      let result;
+      try{result=JSON.parse(responseText);}catch{result={raw:responseText};}
+
+      if(!response.ok){
+        if(response.status===401 || response.status===403){
+          sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+        }
+        const detail=result.error||result.message||responseText;
+        const schema=result.schema?` Schema: ${JSON.stringify(result.schema)}`:'';
+        throw new Error(`AWS template import returned ${response.status}: ${detail}${schema}`);
+      }
+
+      const keys=Array.isArray(result.topLevelKeys)?result.topLevelKeys.length:0;
+      setStatus(`DEMO PD TEMPLATE COPY COMPLETE: AWS stored the template successfully (${keys} top-level keys reported). Supabase was not changed.`,true);
+      console.log('[AWS template migration bridge] completed',result);
+    }catch(error){
+      console.error('[AWS template migration bridge] failed:',error);
+      setStatus(`DEMO PD TEMPLATE COPY FAILED: ${error.message}`);
+    }finally{
+      if(button) button.disabled=false;
+    }
+  }
+
+  async function migrateDemoPd(){
+    const button=document.getElementById('awsDemoMigrationButton');
+    if(button) button.disabled=true;
+    try{
+      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      if(!idToken){
+        sessionStorage.setItem(AWS_AUTH.migrateIntentKey,'1');
+        setStatus('AWS sign-in is required before the Demo PD copy. Opening Cognito...');
+        await startLogin();
+        return;
+      }
+
+      if(typeof supabaseClient==='undefined' || !supabaseClient){
+        throw new Error('The Supabase connection is not available in this page.');
+      }
+
+      const {data:{session}}=await supabaseClient.auth.getSession();
+      if(!session){
+        throw new Error('Sign in to the existing SonoMarzi/Supabase workspace first, then run Copy Demo PD to AWS.');
+      }
+
+      setStatus('Reading Demo PD records from the existing Supabase workspace...');
+      const {data,error}=await supabaseClient.rpc('suite_load_workspace',{
+        p_tenant_id:DEMO_PD.tenantId,
+        p_agency_id:DEMO_PD.agencyId
+      });
+      if(error) throw new Error(error.message||'Supabase workspace load failed.');
+
+      const records=Array.isArray(data?.records)?data.records:[];
+      if(!records.length) throw new Error('Supabase returned no Demo PD records. Nothing was copied.');
+
+      let sent=0;
+      let lastAwsCount=null;
+      for(let i=0;i<records.length;i+=DEMO_PD.batchSize){
+        const batch=records.slice(i,i+DEMO_PD.batchSize).map(row=>({
+          key:row.key,
+          value:row.value,
+          version:row.version,
+          deleted:row.deleted===true,
+          ...(row.updated_at?{updated_at:row.updated_at}:{})
+        }));
+        const response=await fetch(`${AWS_AUTH.apiBase}${DEMO_PD.importPath}`,{
+          method:'POST',
+          headers:{
+            Authorization:`Bearer ${idToken}`,
+            'Content-Type':'application/json'
+          },
+          body:JSON.stringify({records:batch})
+        });
+
+        const responseText=await response.text();
+        let result;
+        try{result=JSON.parse(responseText);}catch{result={raw:responseText};}
+        if(!response.ok){
+          if(response.status===401 || response.status===403){
+            sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+          }
+          throw new Error(`AWS import returned ${response.status}: ${result.error||result.message||responseText}`);
+        }
+
+        sent+=batch.length;
+        lastAwsCount=result.awsRecordCount??lastAwsCount;
+        setStatus(`Copying Demo PD to AWS: ${sent}/${records.length} records...`);
+      }
+
+      setStatus(`DEMO PD COPY COMPLETE: ${sent}/${records.length} records sent. AWS reports ${lastAwsCount ?? 'an unknown number of'} Demo PD records. Supabase was not changed.`,true);
+      console.log('[AWS migration bridge] completed',{sourceRecordCount:records.length,awsRecordCount:lastAwsCount});
+    }catch(error){
+      console.error('[AWS migration bridge] failed:',error);
+      setStatus(`DEMO PD COPY FAILED: ${error.message}`);
+    }finally{
+      if(button) button.disabled=false;
+    }
+  }
+
+  async function startLogin(){
+    const verifier=randomToken(64);
+    const challenge=await sha256Base64url(verifier);
+    const state=randomToken(24);
+    sessionStorage.setItem(AWS_AUTH.verifierKey,verifier);
+    sessionStorage.setItem(AWS_AUTH.stateKey,state);
+
+    const params=new URLSearchParams({
+      client_id:AWS_AUTH.clientId,
+      response_type:'code',
+      scope:'openid email phone',
+      redirect_uri:AWS_AUTH.redirectUri,
+      code_challenge_method:'S256',
+      code_challenge:challenge,
+      state
+    });
+    location.assign(`${AWS_AUTH.cognitoDomain}/oauth2/authorize?${params}`);
+  }
+
+  async function exchangeCode(code){
+    const verifier=sessionStorage.getItem(AWS_AUTH.verifierKey);
+    if(!verifier) throw new Error('PKCE verifier is missing. Click Test AWS Login and try again.');
+
+    const body=new URLSearchParams({
+      grant_type:'authorization_code',
+      client_id:AWS_AUTH.clientId,
+      code,
+      redirect_uri:AWS_AUTH.redirectUri,
+      code_verifier:verifier
+    });
+
+    const tokenResponse=await fetch(`${AWS_AUTH.cognitoDomain}/oauth2/token`,{
+      method:'POST',
+      headers:{'content-type':'application/x-www-form-urlencoded'},
+      body
+    });
+    if(!tokenResponse.ok) throw new Error(`Cognito token exchange failed (${tokenResponse.status}).`);
+    return tokenResponse.json();
+  }
+
+  async function callMe(idToken){
+    const result=await fetch(`${AWS_AUTH.apiBase}/me`,{
+      headers:{Authorization:`Bearer ${idToken}`}
+    });
+    const text=await result.text();
+    let body;
+    try{body=JSON.parse(text);}catch{body={raw:text};}
+    if(!result.ok) throw new Error(`AWS /me returned ${result.status}: ${body.error||body.message||text}`);
+    return body;
+  }
+
+  async function testAwsMe(){
+    try{
+      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      if(!token){
+        setStatus('AWS login required. Opening Cognito...');
+        await startLogin();
+        return;
+      }
+
+      setStatus('Calling protected AWS /me...');
+      const me=await callMe(token);
+
+      const email=me.email ?? me.user?.email ?? 'not returned';
+      const userId=me.user_id ?? me.userId ?? me.user?.id ?? 'not returned';
+      const platformAdmin=
+        me.platform_admin ??
+        me.platformAdmin ??
+        me.user?.platform_admin ??
+        me.user?.platformAdmin ??
+        'not returned';
+      const memberships=Array.isArray(me.memberships)
+        ? me.memberships.length
+        : (me.membership_count ?? 'not returned');
+
+      setStatus('AWS /me SUCCESS: protected identity endpoint responded.',true);
+      console.log('AWS /me result:',me);
+
+      alert(
+        `AWS /me SUCCESS\n\n`+
+        `Email: ${email}\n`+
+        `User ID: ${userId}\n`+
+        `Platform admin: ${String(platformAdmin)}\n`+
+        `Memberships: ${memberships}`
+      );
+    }catch(error){
+      console.error('[AWS /me test] failed:',error);
+
+      if(
+        /401|403|token|expired/i.test(
+          String(error?.message||'')
+        )
+      ){
+        sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      }
+
+      const message=`AWS /me FAILED: ${error.message}`;
+      setStatus(message);
+      alert(message);
+    }
+  }
+
+  function addMeTestButton(){
+    if(document.getElementById('awsMeTestButton')) return;
+
+    const btn=document.createElement('button');
+    btn.id='awsMeTestButton';
+    btn.type='button';
+    btn.textContent='Test AWS /me';
+    Object.assign(btn.style,buttonStyle('418px'));
+    btn.onclick=testAwsMe;
+    document.body.appendChild(btn);
+  }
+
+
+  async function callWorkspace(idToken){
+    const params=new URLSearchParams({
+      tenantId:DEMO_PD.tenantId,
+      agencyId:DEMO_PD.agencyId
+    });
+
+    const result=await fetch(
+      `${AWS_AUTH.apiBase}/workspace?${params.toString()}`,
+      {
+        headers:{
+          Authorization:`Bearer ${idToken}`
+        }
+      }
+    );
+
+    const text=await result.text();
+    let body;
+    try{
+      body=JSON.parse(text);
+    }catch{
+      body={raw:text};
+    }
+
+    if(!result.ok){
+      throw new Error(
+        `AWS /workspace returned ${result.status}: ${body.error||body.message||text}`
+      );
+    }
+
+    return body;
+  }
+
+  async function testAwsWorkspace(){
+    try{
+      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+
+      if(!token){
+        setStatus('AWS login required. Opening Cognito...');
+        await startLogin();
+        return;
+      }
+
+      setStatus('Loading Demo PD workspace from AWS...');
+      const workspace=await callWorkspace(token);
+
+      const records=workspace?.records;
+      const recordCount=Array.isArray(records)
+        ? records.length
+        : (
+            records && typeof records==='object'
+              ? Object.keys(records).length
+              : 0
+          );
+
+      const template=workspace?.template;
+      const templateTopLevelKeys=
+        template && typeof template==='object'
+          ? Object.keys(template).length
+          : 0;
+
+      const roles=Array.isArray(workspace?.role_ids)
+        ? workspace.role_ids
+        : [];
+
+      const summary=
+        `AWS /workspace SUCCESS\n\n`+
+        `Tenant: ${workspace?.tenant_id ?? 'not returned'}\n`+
+        `Agency: ${workspace?.agency_id ?? 'not returned'}\n`+
+        `Person: ${workspace?.person_id ?? 'not returned'}\n`+
+        `Roles: ${roles.length ? roles.join(', ') : 'none returned'}\n`+
+        `Records returned: ${recordCount}\n`+
+        `Template top-level keys: ${templateTopLevelKeys}`;
+
+      setStatus(
+        `AWS WORKSPACE SUCCESS: Demo PD loaded from AWS (${recordCount} records returned).`,
+        true
+      );
+
+      console.log('AWS /workspace result:',workspace);
+      alert(summary);
+    }catch(error){
+      console.error('[AWS workspace test] failed:',error);
+
+      if(
+        /401|403|token|expired/i.test(
+          String(error?.message||'')
+        )
+      ){
+        sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      }
+
+      const message=`AWS WORKSPACE FAILED: ${error.message}`;
+      setStatus(message);
+      alert(message);
+    }
+  }
+
+  function addWorkspaceTestButton(){
+    if(document.getElementById('awsWorkspaceTestButton')) return;
+
+    const btn=document.createElement('button');
+    btn.id='awsWorkspaceTestButton';
+    btn.type='button';
+    btn.textContent='Test AWS Workspace';
+    Object.assign(btn.style,buttonStyle('462px'));
+    btn.onclick=testAwsWorkspace;
+    document.body.appendChild(btn);
+  }
+
+
+  async function callWriteTest(idToken){
+    const result=await fetch(
+      `${AWS_AUTH.apiBase}/write-test`,
+      {
+        method:'POST',
+        headers:{
+          Authorization:`Bearer ${idToken}`,
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+          tenantId:DEMO_PD.tenantId,
+          agencyId:DEMO_PD.agencyId
+        })
+      }
+    );
+
+    const text=await result.text();
+    let body;
+    try{
+      body=JSON.parse(text);
+    }catch{
+      body={raw:text};
+    }
+
+    if(!result.ok){
+      throw new Error(
+        `AWS /write-test returned ${result.status}: ${body.error||body.message||text}`
+      );
+    }
+
+    return body;
+  }
+
+  async function testAwsWritePath(){
+    try{
+      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+
+      if(!token){
+        setStatus('AWS login required. Opening Cognito...');
+        await startLogin();
+        return;
+      }
+
+      setStatus('Running controlled AWS write-path proof...');
+      const result=await callWriteTest(token);
+
+      const passed =
+        result?.success === true ||
+        result?.verification === 'PASSED' ||
+        result?.verification?.passed === true;
+
+      console.log('AWS /write-test result:',result);
+
+      const summary =
+        `AWS WRITE TEST ${passed ? 'SUCCESS' : 'COMPLETED'}\n\n`+
+        `Success: ${String(result?.success ?? 'not returned')}\n`+
+        `Verification: ${
+          typeof result?.verification === 'object'
+            ? JSON.stringify(result.verification)
+            : (result?.verification ?? 'not returned')
+        }\n`+
+        `Test record count after cleanup: ${
+          result?.testRecordCountAfterCleanup ??
+          result?.test_record_count_after_cleanup ??
+          result?.cleanupCount ??
+          result?.cleanup_count ??
+          'see console/result'
+        }`;
+
+      setStatus(
+        passed
+          ? 'AWS WRITE TEST SUCCESS: create, version conflict, update, delete and cleanup completed.'
+          : 'AWS write test completed. Review returned verification details.',
+        passed
+      );
+
+      alert(summary);
+    }catch(error){
+      console.error('[AWS write test] failed:',error);
+
+      if(/401|403|token|expired/i.test(String(error?.message||''))){
+        sessionStorage.removeItem(AWS_AUTH.idTokenKey);
+      }
+
+      const message=`AWS WRITE TEST FAILED: ${error.message}`;
+      setStatus(message);
+      alert(message);
+    }
+  }
+
+  function addWriteTestButton(){
+    if(document.getElementById('awsWriteTestButton')) return;
+
+    const btn=document.createElement('button');
+    btn.id='awsWriteTestButton';
+    btn.type='button';
+    btn.textContent='Test AWS Write Path';
+    Object.assign(btn.style,buttonStyle('506px'));
+    btn.onclick=testAwsWritePath;
+    document.body.appendChild(btn);
+  }
+
+  async function handleCallback(){
+    const params=new URLSearchParams(location.search);
+    const code=params.get('code');
+    if(!code) return;
+
+    const returnedState=params.get('state');
+    const expectedState=sessionStorage.getItem(AWS_AUTH.stateKey);
+    if(!expectedState || returnedState!==expectedState){
+      setStatus('AWS login callback was not started by this app. Click Test AWS Login to run a clean PKCE test.');
+      return;
+    }
+
+    try{
+      setStatus('AWS login accepted. Verifying SonoMarzi identity...');
+      const tokens=await exchangeCode(code);
+      if(!tokens?.id_token) throw new Error('Cognito did not return an ID token.');
+      sessionStorage.setItem(AWS_AUTH.idTokenKey,tokens.id_token);
+      sessionStorage.removeItem(AWS_AUTH.verifierKey);
+      sessionStorage.removeItem(AWS_AUTH.stateKey);
+      history.replaceState({},document.title,location.pathname+location.hash);
+      setStatus('AWS AUTH SUCCESS: Cognito token received.',true);
+      location.replace(AWS_AUTH.redirectUri);
+      return;
+      if(sessionStorage.getItem(AWS_AUTH.migrateIntentKey)==='1'){
+        sessionStorage.removeItem(AWS_AUTH.migrateIntentKey);
+        setTimeout(()=>migrateDemoPd(),250);
+      }
+    }catch(error){
+      console.error('[AWS auth bridge] failed:',error);
+      setStatus(`AWS AUTH FAILED: ${error.message}`);
+    }
+  }
+
+  configureAwsDevLogin();
+
+  // Temporary migration buttons retired after successful AWS migration tests.
+  handleCallback();
+})();
+</script>
+
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  if(document.getElementById('awsDevBadge')) return;
+  const b=document.createElement('div');
+  b.id='awsDevBadge';
+  b.textContent='AWS DEV · RDS LIVE';
+  b.style.cssText='position:fixed;top:10px;right:10px;z-index:2147483646;background:#111827;color:#fff;border:1px solid #64748b;border-radius:999px;padding:6px 10px;font:700 11px/1.2 system-ui;letter-spacing:.04em';
+  document.body.appendChild(b);
+});
+</script>
+
+<script>
+(function(){
+  function cleanAwsDevChrome(){
+    [
+      'awsAuthBridgeButton',
+      'awsDemoMigrationButton',
+      'awsMeTestButton',
+      'awsWorkspaceTestButton',
+      'awsWriteTestButton',
+      'awsDemoTemplateButton',
+      'awsAccessRulesInspectButton',
+      'awsAccessRulesImportButton',
+      'awsMembershipInspectButton',
+      'supabaseMembershipInspectButton',
+      'awsMembershipImportButtonFixed',
+      'awsMembershipImportPanel'
+    ].forEach(id=>document.getElementById(id)?.remove());
+
+    [...document.querySelectorAll('button')].forEach(btn=>{
+      const text=(btn.textContent||'').trim();
+      if(
+        text.startsWith('Copy Demo PD') ||
+        text.startsWith('Inspect AWS') ||
+        text.startsWith('Inspect Supabase') ||
+        text.startsWith('Test AWS ')
+      ){
+        if(btn.id!=='awsCognitoLoginButton') btn.remove();
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded',cleanAwsDevChrome);
+  window.addEventListener('load',cleanAwsDevChrome);
+  setTimeout(cleanAwsDevChrome,500);
+})();
+</script>
+
 </body>
 </html>
