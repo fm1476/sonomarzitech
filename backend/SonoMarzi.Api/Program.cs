@@ -20,6 +20,7 @@ builder.Services.AddSingleton<AttachmentService>();
 builder.Services.AddSingleton<FieldTrainingService>();
 builder.Services.AddSingleton<WorkflowService>();
 builder.Services.AddSingleton<NoticeService>();
+builder.Services.AddSingleton<NotificationReadService>();
 if (local)
 {
     builder.Services.AddSingleton<LocalSessions>(); builder.Services.AddSingleton<IWorkspaceStore, LocalWorkspaceStore>();

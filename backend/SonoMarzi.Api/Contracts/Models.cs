@@ -24,7 +24,7 @@ public sealed record Change(string Key, JsonNode? Value, long ExpectedVersion, b
         if (obj["expected_version"] is not JsonValue v || !v.TryGetValue<long>(out var version) || version < 0 || version > 9007199254740991L)
             throw new ApiException(400, "Invalid expected_version.");
         if (obj["deleted"] is not JsonValue d || !d.TryGetValue<bool>(out var deleted)) throw new ApiException(400, "Invalid deleted flag.");
-        if (new[] { "accounts", "currentRoleIds", "currentRoleId", "auditLog", "serverAudit", "ft", "workflows", "notices" }.Contains(collection.Split('.')[0])) throw new ApiException(403, "This collection is server managed.");
+        if (new[] { "accounts", "currentRoleIds", "currentRoleId", "auditLog", "serverAudit", "ft", "workflows", "notices", "notificationReads" }.Contains(collection.Split('.')[0])) throw new ApiException(403, "This collection is server managed.");
         if (item.StartsWith('$') && item is not ("$order" or "$value")) throw new ApiException(400, "Reserved record item id.");
         return new(key, obj["value"]?.DeepClone(), version, deleted, collection, item);
     }

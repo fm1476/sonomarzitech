@@ -154,7 +154,7 @@ const SuiteStore: any = ((): any => {
         }
         else
             result.set(JSON.stringify([path, '$value']), value); }
-        (Object.entries(state) as any).forEach(([key, value]: any): any => { if (['currentRoleIds', 'currentRoleId', 'accounts', 'auditLog', 'serverAudit', 'ft', 'workflows', 'notices'].includes(key))
+        (Object.entries(state) as any).forEach(([key, value]: any): any => { if (['currentRoleIds', 'currentRoleId', 'accounts', 'auditLog', 'serverAudit', 'ft', 'workflows', 'notices', 'notificationReads'].includes(key))
             return; if (['qm', 'fleet', 'pm', 'k9', 'drone', 'eod', 'subpoena', 'grants', 'civil'].includes(key) && value && typeof value === 'object')
             (Object.entries(value) as any).forEach(([k, v]: any): any => add([key, k], v));
         else
@@ -603,12 +603,26 @@ const SuiteStore: any = ((): any => {
     const notificationKey: any = (module?: any, id?: any): any => (notificationModule[module] || module) + '|' + id;
     function isNotificationRead(module?: any, id?: any): any { return notificationReads.has(notificationKey(module, id)); }
     async function loadNotificationReads(): Promise<any> {
-        notificationReads = new Set();
+        const { data, error }: any = await backendClient.rpc('suite_notification_reads', { p_action: 'list' } as any);
+        if (error) {
+            console.error('Could not load notification read status:', error);
+            notificationReads = new Set();
+            return;
+        }
+        notificationReads = new Set(data || []);
     }
     async function markNotificationsRead(items?: any): Promise<any> {
         if (!items.length)
             return true;
-        items.forEach((item?: any): any => notificationReads.add(notificationKey(item.module, item.id)));
+        const keys: any = items.map((item?: any): any => notificationKey(item.module, item.id)).filter((key?: any): any => !notificationReads.has(key));
+        if (!keys.length)
+            return true;
+        const { data, error }: any = await backendClient.rpc('suite_notification_reads', { p_action: 'mark', p_keys: keys } as any);
+        if (error) {
+            console.error('Could not save notification read status:', error);
+            return false;
+        }
+        notificationReads = new Set(data || []);
         return true;
     }
     async function signIn(email?: any, password?: any): Promise<any> {

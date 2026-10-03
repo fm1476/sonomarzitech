@@ -9,13 +9,14 @@ public static class ServiceEndpoints
     public static void Map(WebApplication app)
     {
         var api=app.MapGroup("/api").RequireAuthorization();
-        api.MapPost("/rpc/{name}",async (string name,HttpContext http,IWorkspaceStore store,WorkspacePolicy policy,FieldTrainingService training,WorkflowService workflows,NoticeService notices,CancellationToken ct)=>{
+        api.MapPost("/rpc/{name}",async (string name,HttpContext http,IWorkspaceStore store,WorkspacePolicy policy,FieldTrainingService training,WorkflowService workflows,NoticeService notices,NotificationReadService notificationReads,CancellationToken ct)=>{
             var p=await WorkspaceEndpoints.Body(http,ct);var actor=await WorkspaceEndpoints.Actor(http,store,ct);
             var tenant=Json.String(p,"p_tenant_id",Json.String(p,"p_tenant"));var agency=Json.String(p,"p_agency_id",Json.String(p,"p_agency"));
             if(tenant.Length==0&&agency.Length==0){var members=(await store.Memberships(actor,ct)).Items.Where(n=>Json.String(n,"status")=="active").ToArray();if(members.Length!=1)throw new ApiException(409,"Choose a workspace first.");tenant=Json.String(members[0],"tenant_id");agency=Json.String(members[0],"agency_id");}
             var context=await store.Resolve(actor,tenant,agency,ct);var snapshot=await store.Load(context,ct);var session=new RecordSession(store,policy,actor,context,snapshot);
             if(name=="suite_ft_api")return Results.Ok(await training.Execute(session,RecordSession.Required(p,"p_action"),p["p_payload"]?.AsObject()??new(),$"{http.Request.Scheme}://{http.Request.Host}",ct));
             if(name=="suite_workflow_api")return Results.Ok(await workflows.Execute(session,RecordSession.Required(p,"p_action"),p["p_payload"]?.AsObject()??new(),ct));
+            if(name=="suite_notification_reads")return Results.Ok(await notificationReads.Execute(session,p,ct));
             if(name.StartsWith("suite_notify_",StringComparison.Ordinal))return Results.Ok(await notices.Execute(session,name,p,ct));
             if(name=="suite_load_workspace")return Results.Ok(new {success=true,tenant_id=tenant,agency_id=agency,person_id=context.PersonId,role_ids=context.RoleIds,records=policy.For(context,snapshot.Records).Filter().Select(r=>r.ToJson()),template=snapshot.Template,tenant=snapshot.Tenant,agency=snapshot.Agency});
             if(name=="suite_log_activity") {var entry=new JsonObject { ["id"]=Guid.NewGuid().ToString(),["actor_id"]=actor.Id,["actor_person_id"]=context.PersonId,["module"]=RecordSession.Required(p,"p_module",100),["description"]=RecordSession.Required(p,"p_description",4000),["entity_type"]=Json.String(p,"p_entity_type"),["created_at"]=DateTimeOffset.UtcNow };await session.Save([("serverAudit",entry)],_=>true,ct);return Results.Ok(entry);}

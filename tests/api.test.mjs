@@ -38,3 +38,16 @@ test('Field Training program and in-app notices',async()=>{
  const notice=await call('/rpc/suite_notify_create',{p_tenant:tenant,p_agency:agency,p_body:'Local test notice',p_people:['p2'],p_units:[],p_shifts:[],p_on_date:'2026-10-03',p_client_id:'notice-'+Date.now()},admin);assert.equal(notice.status,200,JSON.stringify(notice.data));
  const officer=await identity('officer@local.test');const inbox=await call('/rpc/suite_notify_inbox',{p_tenant:tenant,p_agency:agency},officer);assert.equal(inbox.status,200);assert.ok(inbox.data.some(n=>n.body==='Local test notice'));
 });
+test('notification read status persists for its owner only',async()=>{
+ const officer=await identity('officer@local.test'),admin=await identity('admin@local.test');const scope={p_tenant_id:tenant,p_agency_id:agency};
+ const before=await call('/rpc/suite_notification_reads',{...scope,p_action:'list'},officer);assert.equal(before.status,200);assert.deepEqual(before.data,[]);
+ const marked=await call('/rpc/suite_notification_reads',{...scope,p_action:'mark',p_keys:['qm|test-alert']},officer);assert.equal(marked.status,200,JSON.stringify(marked.data));assert.deepEqual(marked.data,['qm|test-alert']);
+ const after=await call('/rpc/suite_notification_reads',{...scope,p_action:'list'},officer);assert.deepEqual(after.data,['qm|test-alert']);
+ const adminReads=await call('/rpc/suite_notification_reads',{...scope,p_action:'list'},admin);assert.deepEqual(adminReads.data,[]);
+ const officerMe=await call('/me',undefined,officer);const person=officerMe.data.memberships[0].person_id;const key=JSON.stringify([['notificationReads'],person]);
+ const ownWorkspace=await call('/workspace',undefined,officer);assert.ok(ownWorkspace.data.records.some(r=>r.key===key));
+ const adminWorkspace=await call('/workspace',undefined,admin);assert.ok(!adminWorkspace.data.records.some(r=>r.key===key));
+ const forged={tenant_id:tenant,agency_id:agency,changes:[{key,value:{id:person,personId:person,keys:['qm|forged']},expected_version:1,deleted:false}]};
+ assert.equal((await call('/apply-changes',forged,admin)).status,403);
+ assert.equal((await call('/rpc/suite_notification_reads',{...scope,p_action:'mark',p_keys:['invalid|test']},officer)).status,400);
+});
