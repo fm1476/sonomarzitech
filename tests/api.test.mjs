@@ -36,6 +36,7 @@ test('Field Training program and in-app notices',async()=>{
  const enrollment=await call('/rpc/suite_ft_api',{...args,p_action:'enroll',p_payload:{traineeUser:'local-officer',trainerUser:'local-trainer',supervisorUser:'local-supervisor',startedOn:'2026-10-03'}},admin);assert.equal(enrollment.status,200,JSON.stringify(enrollment.data));
  const check=await call('/rpc/suite_ft_api',{...args,p_action:'list',p_payload:{}},admin);assert.equal(check.data.enrollments.length,1);
  const notice=await call('/rpc/suite_notify_create',{p_tenant:tenant,p_agency:agency,p_body:'Local test notice',p_people:['p2'],p_units:[],p_shifts:[],p_on_date:'2026-10-03',p_client_id:'notice-'+Date.now()},admin);assert.equal(notice.status,200,JSON.stringify(notice.data));
+ const push=await call('/services/staff-notify',{noticeId:notice.data.id},admin);assert.equal(push.status,503);
  const officer=await identity('officer@local.test');const inbox=await call('/rpc/suite_notify_inbox',{p_tenant:tenant,p_agency:agency},officer);assert.equal(inbox.status,200);assert.ok(inbox.data.some(n=>n.body==='Local test notice'));
 });
 test('notification read status persists for its owner only',async()=>{
@@ -50,4 +51,14 @@ test('notification read status persists for its owner only',async()=>{
  const forged={tenant_id:tenant,agency_id:agency,changes:[{key,value:{id:person,personId:person,keys:['qm|forged']},expected_version:1,deleted:false}]};
  assert.equal((await call('/apply-changes',forged,admin)).status,403);
  assert.equal((await call('/rpc/suite_notification_reads',{...scope,p_action:'mark',p_keys:['invalid|test']},officer)).status,400);
+});
+test('administrator workspace excludes legacy account records',async()=>{
+ const isolated=await fs.mkdtemp(path.join(os.tmpdir(),'sonomarzi-account-filter-'));const dataPath=path.join(isolated,'records.json');const key=JSON.stringify([['accounts'],'legacy-account']);
+ await fs.writeFile(dataPath,JSON.stringify({[key]:{Key:key,Value:{id:'legacy-account',passwordHash:'must-stay-private'},Version:1,Deleted:false,UpdatedAt:new Date().toISOString(),UpdatedBy:'test'}}));
+ const isolatedPort=5096;const process=spawn(globalThis.process.env.DOTNET_EXECUTABLE??'/tmp/ps-dotnet/dotnet',['run','--project','backend/SonoMarzi.Api','--no-build','--no-launch-profile','--','--urls',`http://127.0.0.1:${isolatedPort}`],{stdio:'ignore',env:{...globalThis.process.env,ASPNETCORE_ENVIRONMENT:'Development',Local__Enabled:'true',Local__Password:'LocalTest!2026',Local__DataPath:dataPath,DOTNET_CLI_HOME:globalThis.process.env.DOTNET_CLI_HOME??'/tmp/ps-dotnet-home'}});
+ try {
+  let available=false;for(let i=0;i<100;i++){try{available=(await fetch(`http://127.0.0.1:${isolatedPort}/api/health`)).ok;if(available)break;}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(available,'Isolated API did not start');
+  const login=await fetch(`http://127.0.0.1:${isolatedPort}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'admin@local.test',password:'LocalTest!2026'})});assert.equal(login.status,200);const {token}=await login.json();
+  const response=await fetch(`http://127.0.0.1:${isolatedPort}/api/workspace`,{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);const workspace=await response.json();assert.ok(!workspace.records.some(r=>r.key===key));assert.ok(!JSON.stringify(workspace).includes('must-stay-private'));
+ }finally{process.kill('SIGTERM');await fs.rm(isolated,{recursive:true,force:true});}
 });

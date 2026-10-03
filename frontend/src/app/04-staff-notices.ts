@@ -449,7 +449,9 @@ const StaffNotices: any = ((): any => {
                         `Saved for ${data.recipients} staff. Push response had no delivery counts. Staff can open the app to review the notice.`;
                 }
                 catch (error: any) {
-                    out.textContent = `Saved for ${data.recipients} staff. Push could not be confirmed. Staff can open the app to review the notice.`;
+                    out.textContent = error?.status === 503 ?
+                        `Saved for ${data.recipients} staff in the app. Push delivery is not configured.` :
+                        `Saved for ${data.recipients} staff. Push could not be confirmed. Staff can open the app to review the notice.`;
                 }
             }
         }

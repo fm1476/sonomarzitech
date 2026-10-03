@@ -7,6 +7,12 @@ using SonoMarzi.Api.Persistence;
 namespace SonoMarzi.Api.Endpoints;
 public static class WorkspaceEndpoints
 {
+    public static JsonObject SafeTemplate(JsonObject template)
+    {
+        var copy = template.DeepClone().AsObject();
+        foreach (var key in new[] { "accounts", "auditLog", "currentRoleId", "currentRoleIds", "ssoConfig" }) copy.Remove(key);
+        return copy;
+    }
     public static async Task<Actor> Actor(HttpContext http, IWorkspaceStore store, CancellationToken ct) => await store.FindActor(http.User.FindFirst("sub")?.Value ?? throw new ApiException(401, "Authenticated identity required."), ct);
     public static async Task<WorkspaceContext> Context(HttpContext http, IWorkspaceStore store, string tenant, string agency, CancellationToken ct) => await store.Resolve(await Actor(http, store, ct), tenant, agency, ct);
     public static async Task<JsonObject> Body(HttpContext http, CancellationToken ct) => (await http.Request.ReadFromJsonAsync<JsonObject>(ct)) ?? throw new ApiException(400, "JSON body required.");
@@ -41,7 +47,7 @@ public static class WorkspaceEndpoints
             }
             if (tenant.Length == 0 || agency.Length == 0) throw new ApiException(400, "Both tenantId and agencyId are required.");
             var context = await store.Resolve(actor, tenant, agency, ct); var snapshot = await store.Load(context, ct); var records = policy.For(context, snapshot.Records).Filter();
-            return Results.Ok(new { success = true, tenant_id = tenant, agency_id = agency, person_id = context.PersonId, role_ids = context.RoleIds.Concat(actor.PlatformAdmin ? ["role_platform_admin"] : Array.Empty<string>()).Distinct(), records = records.Select(r => r.ToJson()), template = snapshot.Template, tenant = snapshot.Tenant, agency = snapshot.Agency });
+            return Results.Ok(new { success = true, tenant_id = tenant, agency_id = agency, person_id = context.PersonId, role_ids = context.RoleIds.Concat(actor.PlatformAdmin ? ["role_platform_admin"] : Array.Empty<string>()).Distinct(), records = records.Select(r => r.ToJson()), template = SafeTemplate(snapshot.Template), tenant = snapshot.Tenant, agency = snapshot.Agency });
         });
         api.MapPost("/apply-changes", async (HttpContext http, IWorkspaceStore store, CancellationToken ct) =>
         {

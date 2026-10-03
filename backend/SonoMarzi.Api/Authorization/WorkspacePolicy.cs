@@ -91,7 +91,7 @@ public sealed class PolicyScope
     }
     public IReadOnlyList<StoredRecord> Filter()
     {
-        if (context.Admin) return records.Where(r => Collection(r) != "notificationReads" || Own(r.Value, "personId")).ToArray();
+        if (context.Admin) return records.Where(r => Collection(r) != "accounts" && (Collection(r) != "notificationReads" || Own(r.Value, "personId"))).ToArray();
         var result = new List<StoredRecord>();
         foreach (var record in records)
         {

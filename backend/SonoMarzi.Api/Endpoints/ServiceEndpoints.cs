@@ -18,7 +18,7 @@ public static class ServiceEndpoints
             if(name=="suite_workflow_api")return Results.Ok(await workflows.Execute(session,RecordSession.Required(p,"p_action"),p["p_payload"]?.AsObject()??new(),ct));
             if(name=="suite_notification_reads")return Results.Ok(await notificationReads.Execute(session,p,ct));
             if(name.StartsWith("suite_notify_",StringComparison.Ordinal))return Results.Ok(await notices.Execute(session,name,p,ct));
-            if(name=="suite_load_workspace")return Results.Ok(new {success=true,tenant_id=tenant,agency_id=agency,person_id=context.PersonId,role_ids=context.RoleIds,records=policy.For(context,snapshot.Records).Filter().Select(r=>r.ToJson()),template=snapshot.Template,tenant=snapshot.Tenant,agency=snapshot.Agency});
+            if(name=="suite_load_workspace")return Results.Ok(new {success=true,tenant_id=tenant,agency_id=agency,person_id=context.PersonId,role_ids=context.RoleIds,records=policy.For(context,snapshot.Records).Filter().Select(r=>r.ToJson()),template=WorkspaceEndpoints.SafeTemplate(snapshot.Template),tenant=snapshot.Tenant,agency=snapshot.Agency});
             if(name=="suite_log_activity") {var entry=new JsonObject { ["id"]=Guid.NewGuid().ToString(),["actor_id"]=actor.Id,["actor_person_id"]=context.PersonId,["module"]=RecordSession.Required(p,"p_module",100),["description"]=RecordSession.Required(p,"p_description",4000),["entity_type"]=Json.String(p,"p_entity_type"),["created_at"]=DateTimeOffset.UtcNow };await session.Save([("serverAudit",entry)],_=>true,ct);return Results.Ok(entry);}
             if(name=="suite_get_activity_log") {if(!session.Permissions.Any("view_audit_log","audit_view","audit_log_view"))throw new ApiException(403,"Audit access required.");return Results.Ok(session.List("serverAudit"));}
             if(name=="suite_resolve_actor_names"){var ids=Json.Strings(p["p_actor_ids"]);return Results.Ok(Json.Array((await store.WorkspaceMembers(context,ct)).Where(m=>ids.Contains(Json.String(m,"user_id"))).Select(m=>new JsonObject {["actor_id"]=Json.String(m,"user_id"),["display_name"]=Json.String(m,"display_name"),["email"]=Json.String(m,"email")})));}
@@ -33,7 +33,7 @@ public static class ServiceEndpoints
         });
         api.MapPost("/services/{name}",async(string name,HttpContext http,IWorkspaceStore store,CancellationToken ct)=>{
             var body=await WorkspaceEndpoints.Body(http,ct);await WorkspaceEndpoints.Actor(http,store,ct);
-            if(name=="staff-notify")return Results.Ok(new{success=true,pushed=0,delivery="in_app",message="Push delivery is not configured."});
+            if(name=="staff-notify")throw new ApiException(503,"Push delivery is not configured. The in-app notice was saved.");
             // External provisioning/integration contracts require the actual database schema and provider setup.
             throw new ApiException(503,"This administrative integration requires the AWS schema and provider configuration. No changes were made.");
         });
