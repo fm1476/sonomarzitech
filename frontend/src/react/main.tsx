@@ -1,5 +1,12 @@
-import {createRoot} from 'react-dom/client';
+import {createRoot} from 'react-dom/client';import type {Root} from 'react-dom/client';
 import {configuration,createCompatibilityClient} from '../api/client';import {completeCognito} from '../api/cognito';import {Login} from './Login';import {WorkspaceSwitcher} from './WorkspaceSwitcher';import {request,TOKEN_KEY} from '../api/client';import type {MeResponse} from '../api/contracts';import {selectWorkspace} from '../hooks/useAuth';
+import {WorkspaceLauncher} from './WorkspaceLauncher';
+import {SHARED_SORT,sharedSortHeader,wireSharedSortHeaders,applySharedSort} from '../shared/components/sortable-table';
+import {escapeHtml,money} from '../shared/utils/html';
+import {toast} from '../shared/components/toast';
+const workspaceRoots=new WeakMap<HTMLElement,Root>();
+window.SonoMarziReact={renderWorkspaces(host,modules){let root=workspaceRoots.get(host);if(!root){root=createRoot(host);workspaceRoots.set(host,root);}root.render(<WorkspaceLauncher modules={modules}/>);}};
+window.SonoMarziShared={SHARED_SORT,sharedSortHeader,wireSharedSortHeaders,applySharedSort,escapeHtml,money,toast};
 async function script(path:string){await new Promise<void>((resolve,reject)=>{const element=document.createElement('script');element.src=path;element.onload=()=>resolve();element.onerror=()=>reject(new Error('The application could not be loaded.'));document.body.append(element);});}
 async function boot(){
  window.SonoMarziConfig=await configuration();window.SonoMarziClient=createCompatibilityClient();

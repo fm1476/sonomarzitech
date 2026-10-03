@@ -414,14 +414,7 @@ const SuiteUX: any = ((): any => {
         return; FieldTraining.render(el); FieldTraining.load(); }
     function greeting(): any { const h: any = (new Date() as any).getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
     function workspaces(): any { const el: any = showCustom('workspaces', 'Workspaces', 'Your authorized public safety tools'); if (!el)
-        return; el.innerHTML = '<div class="work-hero"><div><div class="work-eyebrow">Public safety suite</div><h2>Everything your team needs.</h2><p>Open a workspace. Pick up where you left off.</p></div></div><div class="workspace-grid"></div>'; const grid: any = el.querySelector('.workspace-grid'); for (const key of accessibleModules()) {
-        const m: any = MODULE_META[key];
-        const b: any = (document as any).createElement('button');
-        b.className = 'workspace-tile';
-        b.innerHTML = ICONS[m.icon] + `<strong>${esc(m.name)}</strong><span>${esc(m.tagline)}</span>`;
-        b.onclick = (): any => enterModule(key);
-        grid.append(b);
-    } }
+        return; (window as any).SonoMarziReact.renderWorkspaces(el, accessibleModules().map((key?: any): any => { const m: any = MODULE_META[key]; return { id:key, name:m.name, tagline:m.tagline, icon:ICONS[m.icon], enter:(): any => enterModule(key) } as any; })); }
     function reports(): any { const el: any = showCustom('reports', 'Reports', 'Reporting across your authorized workspaces'); if (!el)
         return; el.innerHTML = '<div class="workspace-grid"></div>'; for (const [key, m] of Object.entries(modules()) as any)
         for (const n of m.NAV_ITEMS.filter((n?: any): any => n.id.endsWith('-reports') && allowedView(n.id)))

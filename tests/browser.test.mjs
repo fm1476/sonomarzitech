@@ -12,6 +12,11 @@ test('React login and original feature screens use only local C# API',async()=>{
   await page.route('**/*',route=>{const url=route.request().url();if(url.startsWith(base)||url.startsWith('data:')||url.startsWith('blob:'))return route.continue();return route.abort();});
   await page.goto(base);await page.waitForFunction(()=>typeof window.QRCode==='function');await page.getByLabel('Email',{exact:true}).fill('admin@local.test');await page.getByLabel('Password',{exact:true}).fill('LocalTest!2026');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForFunction(()=>document.getElementById('app')?.classList.contains('authenticated'));
   assert.equal(await page.locator('#page-title').textContent(),'My Work');
+  await page.evaluate(()=>window.SonoMarziLegacy.navigate('workspaces'));await page.locator('.workspace-tile').first().waitFor();
+  assert.ok(await page.locator('.workspace-tile').count()>1,'React launcher should show authorized workspaces');
+  await page.locator('.workspace-tile').first().click();assert.notEqual(await page.locator('#page-title').textContent(),'Workspaces');
+  const escaped=await page.evaluate(()=>window.SonoMarziShared.sharedSortHeader('test', '<img src=x onerror=alert(1)>', 'name'));
+  assert.ok(escaped.includes('&lt;img'),'Sortable headers must escape data-derived labels');
   await page.evaluate(()=>window.SonoMarziLegacy.navigate('fieldtraining'));await page.getByText('No trainees enrolled.').waitFor();
   await page.evaluate(()=>window.SonoMarziLegacy.navigate('view/qm-inventory'));assert.ok((await page.locator('#page-title').textContent()).length>0);
   for(const route of ['pm-records','pm-training','pm-scheduling','fleet-vehicles','k9-roster','drone-fleet','eod-technicians','subpoena','civil','grants-awards','grants-seizures']){

@@ -65,52 +65,15 @@ const ICONS: any = {
    This shared version is what every table built from here forward uses,
    avoiding yet another one-off duplicate per screen.
    ========================================================================= */
-const SHARED_SORT: any = {} as any;
+const SHARED_SORT: any = (window as any).SonoMarziShared.SHARED_SORT;
 function sharedSortHeader(tableName?: any, label?: any, key?: any): any {
-    if (!SHARED_SORT[tableName])
-        SHARED_SORT[tableName] = { key: null, dir: 'asc' } as any;
-    const s: any = SHARED_SORT[tableName];
-    const active: any = s.key === key;
-    const arrow: any = active ? (s.dir === 'asc' ? '&#9650;' : '&#9660;') : '&#8597;';
-    return `<th class="sortable ${active ? 'sort-active' : ''}" data-shared-sort-table="${tableName}" data-shared-sort-key="${key}">${label}<span class="arrow">${arrow}</span></th>`;
+    return (window as any).SonoMarziShared.sharedSortHeader(tableName, label, key);
 }
 function wireSharedSortHeaders(tableName?: any, rerenderFn?: any): any {
-    (document as any).querySelectorAll(`[data-shared-sort-table="${tableName}"]`).forEach((th?: any): any => {
-        th.addEventListener('click', (): any => {
-            const key: any = th.dataset.sharedSortKey;
-            const s: any = SHARED_SORT[tableName];
-            if (s.key === key) {
-                s.dir = s.dir === 'asc' ? 'desc' : 'asc';
-            }
-            else {
-                s.key = key;
-                s.dir = 'asc';
-            }
-            rerenderFn();
-        });
-    });
+    return (window as any).SonoMarziShared.wireSharedSortHeaders(tableName, rerenderFn);
 }
 function applySharedSort(tableName?: any, list?: any, accessorFn?: any): any {
-    const s: any = SHARED_SORT[tableName];
-    if (!s || !s.key)
-        return list;
-    const getVal: any = accessorFn || ((row?: any, key?: any): any => row[key]);
-    return list.slice().sort((a?: any, b?: any): any => {
-        let av: any = getVal(a, s.key), bv: any = getVal(b, s.key);
-        if (av == null)
-            av = '';
-        if (bv == null)
-            bv = '';
-        if (typeof av === 'number' && typeof bv === 'number')
-            return s.dir === 'asc' ? av - bv : bv - av;
-        av = String(av).toLowerCase();
-        bv = String(bv).toLowerCase();
-        if (av < bv)
-            return s.dir === 'asc' ? -1 : 1;
-        if (av > bv)
-            return s.dir === 'asc' ? 1 : -1;
-        return 0;
-    });
+    return (window as any).SonoMarziShared.applySharedSort(tableName, list, accessorFn);
 }
 /* =========================================================================
    SHARED FILTER INPUT (real-time, with persistent helper text)
@@ -159,7 +122,7 @@ const DEFAULT_FIELD_LABELS: any = {
 function fieldLabel(key?: any): any {
     return (STATE.fieldLabels && STATE.fieldLabels[key]) || DEFAULT_FIELD_LABELS[key] || key;
 }
-function escapeHtml(s?: any): any { return String(s).replace(/[&<>"']/g, (c?: any): any => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])); }
+function escapeHtml(s?: any): any { return (window as any).SonoMarziShared.escapeHtml(s); }
 // Neutralizes CSV/Excel formula injection (CWE-1236): a cell whose text begins with
 // =, +, -, @, or a tab/CR is treated as a formula by Excel/Sheets/LibreOffice on open,
 // which lets a value typed into any free-text field (name, notes, description, etc.)
@@ -649,7 +612,7 @@ function renderBulkImportTab(body?: any, schemaKey?: any): any {
     }
     draw();
 }
-function money(n?: any): any { return "$" + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 } as any); }
+function money(n?: any): any { return (window as any).SonoMarziShared.money(n); }
 // A single address should open whichever maps app actually makes sense for the device it's
 // clicked on -- Apple Maps on Apple hardware (where it's the one already installed and signed
 // in), Google Maps everywhere else, since a plain web link can't know the user's preference,
@@ -679,12 +642,7 @@ function addDays(d?: any, n?: any): any { const r: any = new Date(d) as any; r.s
 function fmt(d?: any): any { return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); }
 function daysBetween(a?: any, b?: any): any { return Math.round(((new Date(b) as any) - (new Date(a) as any)) / 86400000); }
 function toast(msg?: any, isErr?: any): any {
-    const wrap: any = (document as any).getElementById('toastWrap');
-    const el: any = (document as any).createElement('div');
-    el.className = 'toast' + (isErr ? ' err' : '');
-    el.textContent = msg;
-    wrap.appendChild(el);
-    setTimeout((): any => { el.remove(); }, 3200);
+    return (window as any).SonoMarziShared.toast(msg, isErr);
 }
 function openModal(): any { SuiteUX.openModal(); }
 function closeModal(event?: any): any { return SuiteUX.closeModal(event); }
