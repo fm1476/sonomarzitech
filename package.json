@@ -1,0 +1,32 @@
+{
+  "name": "sonomarzi-v14",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "npm run check && node scripts/build.mjs",
+    "check": "tsc -p frontend/tsconfig.json && node scripts/check.mjs",
+    "test": "npm run check && npm run backend:test && node --test tests/api.test.mjs",
+    "backend:local": "node --env-file-if-exists=.env scripts/backend.mjs local",
+    "backend:test": "node --env-file-if-exists=.env scripts/backend.mjs test",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "test:e2e": "npm run build && npm run backend:test && node --test tests/browser.test.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.1",
+    "papaparse": "^5.7.0",
+    "qrcodejs": "^1.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

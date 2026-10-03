@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Amazon.Lambda.AspNetCoreServer.Hosting": {
+        "type": "Direct",
+        "requested": "[1.*, )",
+        "resolved": "1.10.0",
+        "contentHash": "IECXhGylZbFelTamqtZgIRfkHhkTF5jP9Kr9toRovIkyaR5SdZ9rc0D4SDTd7JMArL8G3ofEjurS0X+Cj8PoRQ==",
+        "dependencies": {
+          "Amazon.Lambda.APIGatewayEvents": "2.7.3",
+          "Amazon.Lambda.AspNetCoreServer": "9.2.1",
+          "Amazon.Lambda.Core": "2.8.1",
+          "Amazon.Lambda.RuntimeSupport": "1.14.2"
+        }
+      },
+      "AWSSDK.S3": {
+        "type": "Direct",
+        "requested": "[4.*, )",
+        "resolved": "4.0.104.1",
+        "contentHash": "syEbfUR1Qjy9WS0fmg5MWOq0aGghq+pBIyrvDP3BFLc5K2OITxMiwbPkZhEJeAq8SWRn2bfVaWWmNLp8hS9VwQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SecretsManager": {
+        "type": "Direct",
+        "requested": "[4.*, )",
+        "resolved": "4.0.100.15",
+        "contentHash": "rT7ynrNzVwjrKVOPncko6lCkd2oZCZV7Fq9BW1bnEP9IZurexHz+Gqg+TNN1CCCh4J9HNnd8vIuSg29IX9FxMA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "Microsoft.AspNetCore.Authentication.JwtBearer": {
+        "type": "Direct",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "Hs5NDsGm8YicDDNx5RoBIT+H2AB9R27MvZ2gHoupTiHr+nnH3VxzY7DcmlbJ3b5DvvOhK35lWt/9Odtrq9sjtA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.0.1"
+        }
+      },
+      "Npgsql": {
+        "type": "Direct",
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "q5RfBI+wywJSFUNDE1L4ZbHEHCFTblo8Uf6A6oe4feOUFYiUQXyAf9GBh5qEZpvJaHiEbpBPkQumjEhXCJxdrg=="
+      },
+      "Amazon.Lambda.APIGatewayEvents": {
+        "type": "Transitive",
+        "resolved": "2.7.3",
+        "contentHash": "CXmiXdwuSXSJA0YH+7OJqG2uGDnhDcKkN2ei2u2/kdRFK+RH8JC5GbdechdJoldpogxHdHy12TuAfqqKSC67Nw=="
+      },
+      "Amazon.Lambda.ApplicationLoadBalancerEvents": {
+        "type": "Transitive",
+        "resolved": "2.2.0",
+        "contentHash": "UtCd9tFuVyED8+DmDKEkdXJbAb/TdHIz51R/CsJCexKerO6HGOG87FGId4Ce9IXE+qjlBGyNQsKCw9oLLNe0hw=="
+      },
+      "Amazon.Lambda.AspNetCoreServer": {
+        "type": "Transitive",
+        "resolved": "9.2.1",
+        "contentHash": "2K1x1AIMA7iK2G+oDi+rwHW9gYkaRe9+m1oZGHGduNCug/8Nq4ibiV8CMMO/jJ3NOaZa/l4tkA6xiWKV3aSjlw==",
+        "dependencies": {
+          "Amazon.Lambda.APIGatewayEvents": "2.7.3",
+          "Amazon.Lambda.ApplicationLoadBalancerEvents": "2.2.0",
+          "Amazon.Lambda.Core": "2.8.0",
+          "Amazon.Lambda.Logging.AspNetCore": "4.1.1",
+          "Amazon.Lambda.Serialization.SystemTextJson": "2.4.4"
+        }
+      },
+      "Amazon.Lambda.Core": {
+        "type": "Transitive",
+        "resolved": "2.8.1",
+        "contentHash": "wLrBdUXY1jn12o3+sar5c5ApMJPGEMye+1rnyDjwCKA2rcPNMZbNsKLQ76bV+DGnx5CN8bArB26SKB/rEuxIxQ=="
+      },
+      "Amazon.Lambda.Logging.AspNetCore": {
+        "type": "Transitive",
+        "resolved": "4.1.1",
+        "contentHash": "4wtlguk2jI0FFR0dHvJfmfW99mDZWXJ56MELPfk2nxtgRlpUyo0RW5GcO3Teyc0nefFmxCiKdE7Iz2xSwiOnfg==",
+        "dependencies": {
+          "Amazon.Lambda.Core": "2.7.0"
+        }
+      },
+      "Amazon.Lambda.RuntimeSupport": {
+        "type": "Transitive",
+        "resolved": "1.14.2",
+        "contentHash": "KR3iCwJbrHctB+po6F5cTNefS9bOKqqWl9G2Ai+PsqdHByDSv6aeVn8noEhKrnOCTqAlWQjBeStay/yM5JE7TA==",
+        "dependencies": {
+          "Amazon.Lambda.Core": "2.8.1",
+          "SnapshotRestore.Registry": "1.0.1"
+        }
+      },
+      "Amazon.Lambda.Serialization.SystemTextJson": {
+        "type": "Transitive",
+        "resolved": "2.4.4",
+        "contentHash": "iv/cvqFuZ3v3+NFDyof0IJZvU+4kdpzOe3pWSBwp9HB885I+D32WQxuid9V4GnvRynER9XnWMPaDmImX8qH5cA==",
+        "dependencies": {
+          "Amazon.Lambda.Core": "2.3.0"
+        }
+      },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
+      },
+      "Microsoft.IdentityModel.Abstractions": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "OtlIWcyX01olfdevPKZdIPfBEvbcioDyBiE/Z2lHsopsMD7twcKtlN9kMevHmI5IIPhFpfwCIiR6qHQz1WHUIw=="
+      },
+      "Microsoft.IdentityModel.JsonWebTokens": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "s6++gF9x0rQApQzOBbSyp4jUaAlwm+DroKfL8gdOHxs83k8SJfUXhuc46rDB3rNXBQ1MVRxqKUrqFhO/M0E97g==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        }
+      },
+      "Microsoft.IdentityModel.Logging": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "UCPF2exZqBXe7v/6sGNiM6zCQOUXXQ9+v5VTb9gPB8ZSUPnX53BxlN78v2jsbIvK9Dq4GovQxo23x8JgWvm/Qg==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Abstractions": "8.0.1"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "uA2vpKqU3I2mBBEaeJAWPTjT9v1TZrGWKdgK6G5qJd03CLx83kdiqO9cmiK8/n1erkHzFBwU/RphP83aAe3i3g==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols.OpenIdConnect": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "AQDbfpL+yzuuGhO/mQhKNsp44pm5Jv8/BI4KiFXR7beVGZoSH35zMV3PrmcfvSTsyI6qrcR898NzUauD6SRigg==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols": "8.0.1",
+          "System.IdentityModel.Tokens.Jwt": "8.0.1"
+        }
+      },
+      "Microsoft.IdentityModel.Tokens": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "kDimB6Dkd3nkW2oZPDkMkVHfQt3IDqO5gL0oa8WVy3OP4uE8Ij+8TXnqg9TOd9ufjsY3IDiGz7pCUbnfL18tjg==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Logging": "8.0.1"
+        }
+      },
+      "SnapshotRestore.Registry": {
+        "type": "Transitive",
+        "resolved": "1.0.1",
+        "contentHash": "UdA5y8wpa6dHiV4+J9MveLr6GRDB1llTmb4c+MeRYRoWKVNC5Y+nTDcC16/QAyw1dRry+aPS1yAy6f57mS+Xfw=="
+      },
+      "System.IdentityModel.Tokens.Jwt": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "GJw3bYkWpOgvN3tJo5X4lYUeIFA2HD293FPUhKmp7qxS+g5ywAb34Dnd3cDAFLkcMohy5XTpoaZ4uAHuw0uSPQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.JsonWebTokens": "8.0.1",
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        }
+      }
+    }
+  }
+}

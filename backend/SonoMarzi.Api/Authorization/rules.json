@@ -1,0 +1,364 @@
+{
+  "personnel": {
+    "pm.bidCycles": {
+      "read": [
+        "pm_bidding_view",
+        "pm_bidding_manage"
+      ],
+      "create": [
+        "pm_bidding_manage"
+      ],
+      "update": [
+        "pm_bidding_manage"
+      ],
+      "delete": [
+        "pm_bidding_manage"
+      ]
+    },
+    "pm.disciplinaryActions": {
+      "read": [
+        "pm_discipline_view"
+      ],
+      "create": [
+        "pm_discipline_manage"
+      ],
+      "update": [
+        "pm_discipline_manage"
+      ],
+      "delete": [
+        "pm_discipline_manage"
+      ]
+    },
+    "pm.extraDutyJobs": {
+      "read": [
+        "pm_extraduty_view",
+        "pm_extraduty_manage"
+      ],
+      "create": [
+        "pm_extraduty_manage"
+      ],
+      "update": [
+        "pm_extraduty_manage"
+      ],
+      "delete": [
+        "pm_extraduty_manage"
+      ]
+    },
+    "pm.extraDutySignups": {
+      "read": [
+        "pm_extraduty_manage",
+        "pm_extraduty_view"
+      ],
+      "create": [
+        "pm_extraduty_manage"
+      ],
+      "update": [
+        "pm_extraduty_manage"
+      ],
+      "delete": [
+        "pm_extraduty_manage"
+      ],
+      "ownerField": "personId",
+      "ownCreate": "pm_extraduty_signup"
+    },
+    "pm.inquiries": {
+      "read": [
+        "pm_inquiries_view"
+      ],
+      "create": [
+        "pm_inquiries_manage"
+      ],
+      "update": [
+        "pm_inquiries_manage"
+      ],
+      "delete": [
+        "pm_inquiries_manage"
+      ]
+    },
+    "pm.instructors": {
+      "read": [
+        "pm_instructor_manage"
+      ],
+      "create": [
+        "pm_instructor_manage"
+      ],
+      "update": [
+        "pm_instructor_manage"
+      ],
+      "delete": [
+        "pm_instructor_manage"
+      ]
+    },
+    "pm.otCallbackOptIns": {
+      "read": [
+        "pm_overtime_view",
+        "pm_overtime_manage"
+      ],
+      "create": [
+        "pm_overtime_manage"
+      ],
+      "update": [
+        "pm_overtime_manage"
+      ],
+      "delete": [
+        "pm_overtime_manage"
+      ],
+      "ownerField": "personId",
+      "ownCreate": "pm_overtime_optin",
+      "ownUpdate": "pm_overtime_optin"
+    },
+    "pm.records": {
+      "read": [
+        "pm_records_view"
+      ],
+      "create": [
+        "pm_records_edit"
+      ],
+      "update": [
+        "pm_records_edit"
+      ],
+      "delete": [
+        "pm_records_delete"
+      ]
+    },
+    "pm.rollCalls": {
+      "read": [
+        "pm_rollcall_view",
+        "pm_rollcall_manage"
+      ],
+      "create": [
+        "pm_rollcall_manage"
+      ],
+      "update": [
+        "pm_rollcall_manage"
+      ],
+      "delete": [
+        "pm_rollcall_manage"
+      ]
+    },
+    "pm.scheduleAssignments": {
+      "read": [
+        "pm_schedule_view"
+      ],
+      "create": [
+        "pm_schedule_manage"
+      ],
+      "update": [
+        "pm_schedule_manage"
+      ],
+      "delete": [
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.scheduleCoverages": {
+      "read": [
+        "pm_schedule_view",
+        "pm_overtime_view"
+      ],
+      "create": [
+        "pm_overtime_manage",
+        "pm_schedule_manage"
+      ],
+      "update": [
+        "pm_overtime_manage",
+        "pm_schedule_manage"
+      ],
+      "delete": [
+        "pm_overtime_manage",
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.scheduleExceptions": {
+      "read": [
+        "pm_schedule_view"
+      ],
+      "create": [
+        "pm_schedule_manage",
+        "pm_leave_request_approve"
+      ],
+      "update": [
+        "pm_schedule_manage",
+        "pm_leave_request_approve"
+      ],
+      "delete": [
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.scheduleShifts": {
+      "read": [
+        "pm_schedule_view"
+      ],
+      "create": [
+        "pm_schedule_manage"
+      ],
+      "update": [
+        "pm_schedule_manage"
+      ],
+      "delete": [
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.schedulingSettings": {
+      "read": [
+        "pm_schedule_view"
+      ],
+      "create": [
+        "pm_schedule_manage"
+      ],
+      "update": [
+        "pm_schedule_manage"
+      ],
+      "delete": [
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.shiftSwapRequests": {
+      "read": [
+        "pm_schedule_view"
+      ],
+      "create": [
+        "pm_schedule_manage"
+      ],
+      "update": [
+        "pm_schedule_manage"
+      ],
+      "delete": [
+        "pm_schedule_manage"
+      ]
+    },
+    "pm.trainingCourses": {
+      "read": [
+        "pm_training_view_own",
+        "pm_training_manage",
+        "pm_instructor_manage"
+      ],
+      "create": [
+        "pm_instructor_manage"
+      ],
+      "update": [
+        "pm_instructor_manage"
+      ],
+      "delete": [
+        "pm_instructor_manage"
+      ]
+    },
+    "pm.trainingRecords": {
+      "read": [
+        "pm_training_manage"
+      ],
+      "create": [
+        "pm_training_manage"
+      ],
+      "update": [
+        "pm_training_manage"
+      ],
+      "delete": [
+        "pm_training_manage"
+      ],
+      "ownerField": "personId",
+      "ownRead": "pm_training_view_own"
+    },
+    "pm.trainingRequests": {
+      "read": [
+        "pm_training_manage"
+      ],
+      "create": [
+        "pm_training_manage"
+      ],
+      "update": [
+        "pm_training_manage"
+      ],
+      "delete": [
+        "pm_training_manage"
+      ],
+      "ownerField": "personId",
+      "ownRead": "pm_training_request",
+      "ownCreate": "pm_training_request"
+    },
+    "pm.trainingSessions": {
+      "read": [
+        "pm_training_view_own",
+        "pm_training_manage",
+        "pm_instructor_manage"
+      ],
+      "create": [
+        "pm_training_manage",
+        "pm_instructor_manage"
+      ],
+      "update": [
+        "pm_training_manage",
+        "pm_instructor_manage"
+      ],
+      "delete": [
+        "pm_training_manage"
+      ]
+    }
+  },
+  "sideEffects": {
+    "drone": {
+      "read": [
+        "drone_fleet_view",
+        "drone_flight_view",
+        "drone_incident_view",
+        "drone_maint_view",
+        "drone_operator_view",
+        "module_drone"
+      ],
+      "write": [
+        "drone_fleet_edit",
+        "drone_fleet_delete",
+        "drone_operator_manage",
+        "drone_flight_log",
+        "drone_incident_manage",
+        "drone_maint_manage",
+        "drone_admin_categories"
+      ]
+    },
+    "eod": {
+      "read": [
+        "eod_incident_view",
+        "eod_inventory_view",
+        "eod_magazine_view",
+        "eod_technician_view",
+        "eod_theft_report_view",
+        "module_eod"
+      ],
+      "write": [
+        "eod_technician_manage",
+        "eod_inventory_manage",
+        "eod_magazine_manage",
+        "eod_inspection_log",
+        "eod_theft_report_manage",
+        "eod_incident_log",
+        "eod_admin_categories"
+      ]
+    },
+    "grants": {
+      "read": [
+        "grants_award_view",
+        "grants_seizure_view",
+        "module_grants"
+      ],
+      "write": [
+        "grants_award_manage",
+        "grants_seizure_manage",
+        "grants_admin_categories"
+      ]
+    }
+  },
+  "universal": [
+    "roles",
+    "personnel",
+    "pm.scheduleExceptions",
+    "pm.shiftSwapRequests",
+    "pm.scheduleCoverages",
+    "pm.schedulingSettings",
+    "pm.otCallbackOptIns",
+    "pm.bidCycles",
+    "pm.extraDutyJobs",
+    "pm.extraDutySignups",
+    "pm.rollCalls",
+    "pm.trainingSessions",
+    "pm.trainingCourses"
+  ]
+}

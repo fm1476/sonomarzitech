@@ -5,3 +5,11 @@
 node_modules/
 dist/
 *.log
+
+**/bin/
+**/obj/
+**/.local/
+test-results/
+playwright-report/
+
+frontend/.generated/

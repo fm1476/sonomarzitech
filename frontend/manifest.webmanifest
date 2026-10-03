@@ -1,0 +1,16 @@
+{
+  "name": "SonoMarzi Public Safety Management Suite",
+  "short_name": "SonoMarzi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#24364E",
+  "theme_color": "#24364E",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
