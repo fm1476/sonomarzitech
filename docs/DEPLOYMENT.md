@@ -25,7 +25,7 @@ Run this from AWS CloudShell while signed into account `458826002208`:
 bash scripts/bootstrap-github-oidc.sh
 ```
 
-The script creates or updates the `sonomarzi-github-deploy` role and trusts only the `main` branch of `fm1476/sonomarzitech`.
+The script creates or updates the `sonomarzi-github-deploy` role and trusts only the `main` branch of `fm1476/sonomarzitech`. Because this repository was created after GitHub's 2026 immutable-subject rollout, the trust policy uses the immutable owner and repository IDs.
 
 After bootstrap:
 
