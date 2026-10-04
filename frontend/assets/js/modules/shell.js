@@ -579,12 +579,6 @@ const StaffNotices=(()=>{
     const shifts=STATE.pm.scheduleShifts.filter(s=>!s.endDate||s.endDate>=today);
     root.innerHTML=`<section class="panel"><div class="panel-head"><h2>My notices</h2><div style="display:flex;gap:8px;flex-wrap:wrap">${canSend?'<button type="button" id="noticeComposeJump" class="btn btn-primary btn-sm">Send staff notice</button>':''}<button type="button" id="noticeRefresh" class="btn btn-outline btn-sm">Refresh</button></div></div>
       <div id="noticeInbox" aria-live="polite" class="panel-body">Loading…</div></section>
-      <section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Phone notifications</h2></div><div class="panel-body">
-        <p>In-app notices are stored in AWS and arrive whenever you sign in. Device push delivery will be enabled separately during notification hardening.</p>
-        <p id="pushState" role="status">Checking device…</p>
-        <button type="button" id="pushEnable" class="btn btn-primary">Enable push on this device</button>
-        <button type="button" id="pushDisable" class="btn btn-outline">Disable push on this device</button>
-      </div></section>
       ${canSend?`<section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Send staff notice</h2></div><div class="panel-body">
        <p>Choose individuals, units, or shift patterns. Each signed-in member receives one notice.</p>
        <div class="form-row"><label for="noticeBody">Message</label><textarea id="noticeBody" rows="4" maxlength="1000" placeholder="Coverage is needed for…"></textarea><small id="noticeCount">0 / 1000 characters</small></div>
@@ -598,8 +592,6 @@ const StaffNotices=(()=>{
        <p id="noticeResult" role="status"></p>
       </div></section><section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Recent notices</h2><button type="button" id="noticeHistoryRefresh" class="btn btn-outline btn-sm">Refresh</button></div><div id="noticeHistory" class="panel-body">Loading…</div></section>`:''}`;
     root.querySelector('#noticeRefresh').onclick=()=>loadInbox().catch(e=>toast(e.message,true));
-    root.querySelector('#pushEnable').onclick=enablePush;root.querySelector('#pushDisable').onclick=disablePush;
-    pushState().catch(e=>{document.getElementById('pushState').textContent=e.message;});
     loadInbox().catch(e=>{document.getElementById('noticeInbox').textContent=e.message;});
     if(canSend){
       root.querySelector('#noticeComposeJump').onclick=()=>{root.querySelector('#noticeBody').scrollIntoView({behavior:'smooth',block:'center'});root.querySelector('#noticeBody').focus({preventScroll:true});};
