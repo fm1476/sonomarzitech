@@ -5454,8 +5454,8 @@ async function fieldTrainingApi(client, auth, body) {
       const r=ftReportFor(state,payload.reportId); if(!r) throw new Error("Evaluation not found."); ftVersion(r.version,payload.version,"evaluation");
       const note=String(payload.note||"").slice(0,3000);
       if(action==="submit"){ftAssert((ctx.ftManage||r.trainer_user===ctx.userId)&&["draft","returned"].includes(r.status),"Only the trainer may submit this evaluation.");r.status="supervisor_review";}
-      if(action==="approve"){ftAssert(r.supervisor_user===ctx.userId&&r.status==="supervisor_review","Only the assigned supervisor may approve this evaluation.");r.status="trainee_ack";}
-      if(action==="return"){ftAssert(r.supervisor_user===ctx.userId&&r.status==="supervisor_review","Only the assigned supervisor may return this evaluation.");r.status="returned";}
+      if(action==="approve"){ftAssert((ctx.ftManage||r.supervisor_user===ctx.userId)&&r.status==="supervisor_review","Only the assigned supervisor or a Field Training manager may approve this evaluation.");r.status="trainee_ack";}
+      if(action==="return"){ftAssert((ctx.ftManage||r.supervisor_user===ctx.userId)&&r.status==="supervisor_review","Only the assigned supervisor or a Field Training manager may return this evaluation.");r.status="returned";}
       if(action==="acknowledge"){ftAssert(r.trainee_user===ctx.userId&&r.status==="trainee_ack","Only the trainee may acknowledge this evaluation.");r.status="acknowledged";}
       if(action==="dispute"){ftAssert(r.trainee_user===ctx.userId&&r.status==="trainee_ack","Only the trainee may respond to this evaluation.");r.status="disputed";}
       r.history=Array.isArray(r.history)?r.history:[]; r.history.push({action,at:ftIsoNow(),user_id:ctx.userId,note}); r.version++; r.updated_at=ftIsoNow(); result={id:r.id,version:r.version,status:r.status};
