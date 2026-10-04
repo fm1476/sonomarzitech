@@ -3444,7 +3444,7 @@ const FieldTraining=(()=>{
 const SuiteUX = (()=>{
   let route='home', restoring=false, record=null, modalDirty=false, focusReturn=null, lastViews={}, viewScroll={}, activeTab='mine', dashboardCalendar='mine';
   let uiObserver, observerQueued=false, tableSequence=0;
-  const modules=()=>({qm:QM,fleet:FLEET,personnel:PM,k9:K9,drone:DRONE,eod:EOD,subpoena:SUBPOENA,grants:GRANTS,civil:CIVIL});
+  const modules=()=>({qm:QM,fleet:FLEET,personnel:PM,k9:K9,drone:DRONE,eod:EOD,subpoena:SUBPOENA,grants:GRANTS,civil:CIVIL,permits:PERMITS});
   const esc=escapeHtml;
   const userTimeZone=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch{return 'UTC';}})();
   const pad=n=>String(n).padStart(2,'0');
@@ -3588,7 +3588,7 @@ const SuiteUX = (()=>{
     if(permits('personnel','pm_leave_request_approve'))for(const r of (STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'))add('Review time-off request',personName(r.personId),r.startDate,'approvals',()=>go('pm-scheduling'),'Requested time off · '+r.code);
     if(permits('personnel','pm_schedule_manage'))for(const r of (STATE.pm.shiftSwapRequests||[]).filter(r=>r.status==='pending'))add('Review shift swap',personName(r.requesterId),r.date,'approvals',()=>go('pm-scheduling'),'Proposed cover · '+personName(r.coveringId));
     if(permits('personnel','pm_training_request'))for(const r of (STATE.pm.trainingRequests||[]).filter(r=>r.personId===p.id&&r.status==='Pending'))add('Training request pending',p.name,null,'mine',()=>go('pm-training'),'Awaiting training approval');
-    const names={Quartermaster:'qm',Fleet:'fleet',Personnel:'personnel',K9:'k9',Drone:'drone',EOD:'eod',Subpoena:'subpoena',Grants:'grants',Civil:'civil'};
+    const names={Quartermaster:'qm',Fleet:'fleet',Personnel:'personnel',K9:'k9',Drone:'drone',EOD:'eod',Subpoena:'subpoena',Grants:'grants',Civil:'civil','Licensing & Permits':'permits'};
     for(const n of window.__SUITE_NOTIFS||[]){const mod=names[n.module];if(!mod||!accessibleModules().includes(mod)||(n.readBy||[]).includes(CURRENT_USER_ID))continue;add(n.message,n.module,n.dueDate||n.date||null,'attention',()=>enterModule(mod),'Role-routed notification');}
     for(const t of WorkOperations.readinessTasks().concat(WorkOperations.tasks(),FieldTraining.tasks()))out.push({...t,urgent:!!t.due&&t.due<today});
     return out.sort((a,b)=>Number(b.urgent)-Number(a.urgent)||(a.due||'9999').localeCompare(b.due||'9999'));
