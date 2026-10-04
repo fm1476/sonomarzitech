@@ -6,6 +6,8 @@ import {
 } from "./core.mjs";
 import { ensureStaffNoticeTables } from "./staff-notices.mjs";
 
+/*
+ * ---------------------------------------------------------
  * FIELD TRAINING (AWS/RDS)
  * ---------------------------------------------------------
  * Field Training is kept as one versioned JSON document in suite_records.
@@ -333,9 +335,5 @@ async function fieldTrainingApi(client, auth, body) {
     return response(error.statusCode||400,{success:false,error:error.message});
   }
 }
-
-
-/*
- * ---------------------------------------------------------
 
 export { fieldTrainingApi };
