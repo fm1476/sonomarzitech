@@ -746,7 +746,7 @@ function logAuditEntry(moduleName, action, entityType){
    keeps working completely unchanged \u2014 nothing elsewhere had to be edited.
    ========================================================================= */
 function enhanceSelectToSearchable(select){
-  if(select.dataset.searchEnhanced || select.multiple) return;
+  if(select.dataset.searchEnhanced || select.multiple || select.dataset.nativeSelect === '1') return;
   select.dataset.searchEnhanced = '1';
 
   const wrap = document.createElement('span');
@@ -849,7 +849,7 @@ function enhanceSelectToSearchable(select){
   input.addEventListener('blur', ()=>{ setTimeout(()=>{ closeList(); syncInputFromSelect(); }, 150); });
 }
 function enhanceAllSelects(root){
-  (root||document).querySelectorAll('select:not([multiple])').forEach(enhanceSelectToSearchable);
+  (root||document).querySelectorAll('select:not([multiple]):not([data-native-select="1"])').forEach(enhanceSelectToSearchable);
 }
 (function watchForNewSelects(){
   const observer = new MutationObserver((mutations)=>{
