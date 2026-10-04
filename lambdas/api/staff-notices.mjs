@@ -9,6 +9,8 @@ function staffNoticeId() {
   return `notice_${crypto.randomUUID()}`;
 }
 
+/*
+ * ---------------------------------------------------------
  * AWS STAFF NOTICES
  * ---------------------------------------------------------
  * In-app staff notices are stored in PostgreSQL and isolated by
@@ -483,10 +485,5 @@ async function staffNoticesApi(client, auth, body) {
     error: "Unsupported Staff Notices action."
   });
 }
-
-
-
-/*
- * ---------------------------------------------------------
 
 export { ensureStaffNoticeTables, staffNoticesApi };
