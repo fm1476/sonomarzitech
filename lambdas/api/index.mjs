@@ -1666,6 +1666,55 @@ async function filterOfficerWorkspaceRecords(
       }
       continue;
     }
+    if (collection.startsWith("permits.")) {
+      const hasModule = roleHasAbility(
+        abilityMap,
+        workspaceAuth.roleIds,
+        "module_permits"
+      );
+
+      if (!hasModule) {
+        continue;
+      }
+
+      let ability = "permits_view";
+
+      if (collection === "permits.investigations") {
+        ability = "permits_background_view";
+      } else if (collection === "permits.inspections") {
+        ability = "permits_inspection_view";
+      } else if (
+        collection === "permits.payments" ||
+        collection === "permits.feeAdjustments"
+      ) {
+        ability = "permits_fee_view";
+      } else if (
+        collection === "permits.savedReports"
+      ) {
+        ability = "permits_reports_view";
+      } else if (
+        collection === "permits.permitTypes" ||
+        collection === "permits.templates" ||
+        collection === "permits.numbering" ||
+        collection === "permits.settings" ||
+        collection === "permits.correspondenceTemplates"
+      ) {
+        ability = "permits_admin";
+      }
+
+      if (
+        roleHasAbility(
+          abilityMap,
+          workspaceAuth.roleIds,
+          ability
+        )
+      ) {
+        visible.push(record);
+      }
+
+      continue;
+    }
+
 
     if (collection === "pm.trainingCheckins" && canTrainingCheckin) {
       const own =
@@ -3458,6 +3507,219 @@ async function authorizeK9SubpoenaCivilChange(
 }
 
 
+async function authorizePermitsChange(
+  workspaceAuth,
+  abilityMap,
+  change,
+  existingRow
+) {
+  const collection = change.path.map(String).join(".");
+  if (!collection.startsWith("permits.")) return null;
+
+  const roleIds = workspaceAuth.roleIds;
+  const hasModule = roleHasAbility(
+    abilityMap,
+    roleIds,
+    "module_permits"
+  );
+
+  if (!hasModule) {
+    return {
+      allowed:false,
+      error:"Licensing & Permits is not available to this role."
+    };
+  }
+
+  const creating = !existingRow || existingRow.deleted === true;
+  const deleting = change.deleted === true;
+  const beforeValue = existingRow?.value ?? null;
+  const afterValue = change.value;
+
+  const has = ability =>
+    roleHasAbility(abilityMap, roleIds, ability);
+
+  const manageOnly = new Set([
+    "permits.permitTypes",
+    "permits.templates",
+    "permits.numbering",
+    "permits.settings",
+    "permits.correspondenceTemplates"
+  ]);
+
+  if (manageOnly.has(collection)) {
+    return {
+      allowed: has("permits_admin"),
+      error:"You cannot change Licensing & Permits administration settings."
+    };
+  }
+
+  if (
+    collection === "permits.applicants" ||
+    collection === "permits.locations"
+  ) {
+    return {
+      allowed:
+        deleting
+          ? has("permits_admin")
+          : creating
+            ? has("permits_create") || has("permits_edit")
+            : has("permits_edit"),
+      error:"You cannot change applicant or location records."
+    };
+  }
+
+  if (collection === "permits.applications") {
+    if (deleting) {
+      return {
+        allowed: has("permits_admin"),
+        error:"Only Licensing & Permits administrators can delete applications."
+      };
+    }
+
+    if (creating) {
+      return {
+        allowed: has("permits_create"),
+        error:"You cannot create permit applications."
+      };
+    }
+
+    if (has("permits_edit")) {
+      return { allowed:true };
+    }
+
+    if (
+      has("permits_approve") &&
+      onlyFieldsChanged(
+        beforeValue,
+        afterValue,
+        [
+          "status",
+          "workflowStageIndex",
+          "stageStartedAt",
+          "stageDueDate",
+          "approvals",
+          "history",
+          "decisionReason",
+          "pendingApplicantRequest",
+          "assignedTo",
+          "slaDays"
+        ]
+      )
+    ) {
+      return { allowed:true };
+    }
+
+    if (
+      has("permits_issue") &&
+      onlyFieldsChanged(
+        beforeValue,
+        afterValue,
+        [
+          "status",
+          "history",
+          "decisionReason",
+          "correspondence"
+        ]
+      )
+    ) {
+      return { allowed:true };
+    }
+
+    return {
+      allowed:false,
+      error:"You cannot edit this permit application."
+    };
+  }
+
+  if (collection === "permits.licenses") {
+    return {
+      allowed:
+        !deleting &&
+        (
+          has("permits_issue") ||
+          has("permits_admin")
+        ),
+      error:"You cannot issue or change permit credentials."
+    };
+  }
+
+  if (collection === "permits.investigations") {
+    return {
+      allowed:
+        !deleting
+          ? has("permits_background_edit")
+          : has("permits_admin"),
+      error:"You cannot change permit investigations."
+    };
+  }
+
+  if (collection === "permits.inspections") {
+    return {
+      allowed:
+        !deleting
+          ? has("permits_inspection_manage")
+          : has("permits_admin"),
+      error:"You cannot change permit inspections."
+    };
+  }
+
+  if (collection === "permits.payments") {
+    return {
+      allowed:
+        deleting
+          ? has("permits_fee_manage")
+          : has("permits_payment_record") || has("permits_fee_manage"),
+      error:"You cannot change permit payments."
+    };
+  }
+
+  if (collection === "permits.feeAdjustments") {
+    return {
+      allowed: has("permits_fee_manage"),
+      error:"You cannot change permit fee adjustments."
+    };
+  }
+
+  if (collection === "permits.savedReports") {
+    return {
+      allowed:
+        has("permits_reports_view") ||
+        has("permits_reports_export"),
+      error:"You cannot save Licensing & Permits reports."
+    };
+  }
+
+  if (
+    collection === "permits.savedQueries" ||
+    collection === "permits.renewalNotices"
+  ) {
+    return {
+      allowed:
+        has("permits_view") &&
+        (
+          has("permits_edit") ||
+          has("permits_create")
+        ),
+      error:"You cannot change this Licensing & Permits record."
+    };
+  }
+
+  if (collection === "permits.notifications") {
+    return {
+      allowed: has("permits_view"),
+      error:"You cannot change Licensing & Permits notifications."
+    };
+  }
+
+  // Unknown permit collections are denied by default. This keeps future
+  // additions from silently bypassing server-side authorization.
+  return {
+    allowed:false,
+    error:"This Licensing & Permits collection is not authorized for this role."
+  };
+}
+
+
 const MODULE_SIDE_EFFECT_ABILITIES = {
   drone: {
     read: [
@@ -4981,6 +5243,20 @@ async function applyChanges(client, auth, body) {
 
           if (personnelSharedDecision) {
             decision = personnelSharedDecision;
+          }
+        }
+
+        if (!decision.allowed) {
+          const permitsDecision =
+            await authorizePermitsChange(
+              workspaceAuth,
+              abilityMap,
+              change,
+              existing.rows[0] || null
+            );
+
+          if (permitsDecision) {
+            decision = permitsDecision;
           }
         }
 
