@@ -1511,7 +1511,14 @@ async function loadRoleAbilityMap(client, tenantId, agencyId, roleIds) {
   for (const row of result.rows) {
     const roleId = row.value?.id;
     if (typeof roleId === "string") {
-      map.set(roleId, row.value?.abilities || {});
+      const abilities = { ...(row.value?.abilities || {}) };
+      if (["role_qm_admin","role_fleet_admin"].includes(roleId)) {
+        abilities.personnel_manage = false;
+      }
+      if (!["role_admin","role_platform_admin"].includes(roleId)) {
+        abilities.admin_roles = false;
+      }
+      map.set(roleId, abilities);
     }
   }
 
@@ -4272,6 +4279,13 @@ function sharedCollectionReadable(
   abilityMap,
   collection
 ) {
+  if (collection === "roles") {
+    return {
+      allowed: false,
+      error: "System Admin or Platform Admin access is required to modify roles."
+    };
+  }
+
   if (collection === "agencyBranding") {
     return roleHasAbility(
       abilityMap,
@@ -4550,6 +4564,107 @@ function attachmentKeyAllowed(
   );
 }
 
+async function attachmentReadAllowed(
+  client,
+  auth,
+  workspaceAuth,
+  key
+) {
+  if (workspaceAuth.admin) return true;
+
+  const matches = await client.query(
+    `SELECT key, value, version, deleted, updated_at, updated_by
+       FROM suite_records
+      WHERE tenant_id = $1
+        AND agency_id = $2
+        AND deleted = false
+        AND value::text LIKE '%' || $3 || '%'`,
+    [workspaceAuth.tenantId, workspaceAuth.agencyId, key]
+  );
+
+  if (!matches.rows.length) return false;
+
+  const genericRows = [];
+  const fieldTrainingRows = [];
+
+  for (const row of matches.rows) {
+    let parsed;
+    try {
+      parsed = collectionFromRecordKey(row.key);
+    } catch {
+      continue;
+    }
+
+    if (parsed.collection === "fieldTraining") {
+      fieldTrainingRows.push(row);
+    } else {
+      genericRows.push(row);
+    }
+  }
+
+  if (genericRows.length) {
+    const visible = await filterOfficerWorkspaceRecords(
+      client,
+      workspaceAuth,
+      genericRows
+    );
+
+    if (
+      visible.some(row =>
+        JSON.stringify(row.value ?? null).includes(key)
+      )
+    ) {
+      return true;
+    }
+  }
+
+  for (const row of fieldTrainingRows) {
+    const state = row.value && typeof row.value === "object"
+      ? row.value
+      : {};
+
+    const attachment = Array.isArray(state.attachments)
+      ? state.attachments.find(item =>
+          item?.storage_key === key || item?.storageKey === key
+        )
+      : null;
+
+    if (!attachment) continue;
+
+    const report = Array.isArray(state.reports)
+      ? state.reports.find(item => item?.id === attachment.report_id)
+      : null;
+    if (!report) continue;
+
+    const enrollment = Array.isArray(state.enrollments)
+      ? state.enrollments.find(item => item?.id === report.enrollment_id)
+      : null;
+    if (!enrollment) continue;
+
+    if (
+      [
+        enrollment.trainee_user,
+        enrollment.trainer_user,
+        enrollment.supervisor_user
+      ].includes(auth.userId)
+    ) {
+      return true;
+    }
+
+    const covered = Array.isArray(state.coverage) &&
+      state.coverage.some(item =>
+        item?.enrollment_id === enrollment.id &&
+        item?.cover_user === auth.userId &&
+        !item?.cancelled_at
+      );
+
+    if (covered) return true;
+  }
+
+  return false;
+}
+
+
 async function createAttachmentUploadUrl(
   client,
   auth,
@@ -4682,6 +4797,20 @@ async function createAttachmentDownloadUrl(
     return response(403, {
       success: false,
       error: "Attachment does not belong to this workspace."
+    });
+  }
+
+  if (
+    !(await attachmentReadAllowed(
+      client,
+      auth,
+      workspaceAuth,
+      key
+    ))
+  ) {
+    return response(403, {
+      success: false,
+      error: "You are not authorized to access this attachment."
     });
   }
 
