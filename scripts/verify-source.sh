@@ -5,6 +5,14 @@ echo "SonoMarzi source verification"
 
 test -f frontend/index.html
 test -f lambdas/api/index.mjs
+test -f lambdas/api/core.mjs
+test -f lambdas/api/apply-changes.mjs
+test -f lambdas/api/field-training.mjs
+test -f lambdas/api/staff-notices.mjs
+test -f lambdas/api/audit.mjs
+test -f lambdas/api/tenant-admin.mjs
+test -f lambdas/api/workflows.mjs
+test -f lambdas/api/lib/agency-subdomains.mjs
 test -f lambdas/identity-admin/index.mjs
 test -f frontend/assets/js/custom-auth.js
 test -f frontend/assets/js/aws-auth-bridge.js
@@ -23,5 +31,9 @@ if ! grep -q 'assets/js/custom-auth.js' frontend/index.html; then
   echo "ERROR: Custom Cognito auth script is not linked."
   exit 1
 fi
+
+for file in lambdas/api/*.mjs lambdas/api/lib/*.mjs lambdas/identity-admin/*.mjs; do
+  node --check "$file"
+done
 
 echo "Source checks passed."
