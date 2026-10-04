@@ -41,6 +41,10 @@ const MODULE_META = {
     name:"Civil Process", ability:"module_civil", icon:"scale",
     tagline:"Intake, assign, and track civil paper service through a visual workflow board, with generated Returns of Service.",
   },
+  permits: {
+    name:"Licensing & Permits", ability:"module_permits", icon:"checklist",
+    tagline:"Applications, fees, investigations, inspections, approvals, issued credentials, and renewals.",
+  },
 };
 
 function accessibleModules(){
@@ -55,7 +59,7 @@ function renderSuiteNav(){
   items.push({label:"All Modules", icon:"grid", action:showLauncher});
   items.push({label:'Staff Notices',icon:'chat',action:()=>SuiteUX.navigate('shared/notices')});
   if(can('admin_roles')) items.push({label:"Roles & Abilities", icon:"shield", action:()=>enterSharedView('roles', 'Roles & Abilities', "Define unlimited roles and control exactly what each one can do, across every module")});
-  const canSeeAudit = can('qm_admin_audit') || can('fleet_admin_audit') || can('pm_admin_audit') || can('k9_admin_audit') || can('drone_admin_audit') || can('eod_admin_audit') || can('subpoena_admin_audit') || can('grants_admin_audit') || can('civil_admin_audit');
+  const canSeeAudit = can('qm_admin_audit') || can('fleet_admin_audit') || can('pm_admin_audit') || can('k9_admin_audit') || can('drone_admin_audit') || can('eod_admin_audit') || can('subpoena_admin_audit') || can('grants_admin_audit') || can('civil_admin_audit') || can('permits_admin_audit');
   if(canSeeAudit) items.push({label:"Audit Log", icon:"history", action:()=>enterSharedView('audit', 'Platform Audit Log', "Every logged action across every module, in one place, filterable by module, user, date, and entity type")});
   if(can('manage_field_labels')) items.push({label:"Field Labels", icon:"edit", action:()=>enterSharedView('fieldlabels', 'Field Display Names', "Rename how a field appears across the suite, without touching the underlying data")});
   if(can('manage_branding')) items.push({label:"Branding", icon:"image", action:()=>enterSharedView('branding', 'Agency Branding', "Customize the logo, title, and tagline shown in the sidebar for this deployment")});
