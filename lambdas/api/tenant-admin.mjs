@@ -1,6 +1,7 @@
 import { response } from "./core.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
+/*
  * AWS TENANT / USER ADMINISTRATION - DATABASE SIDE
  * Cognito calls are intentionally handled by a separate Lambda outside the VPC.
  */
@@ -1153,10 +1154,5 @@ async function tenantAdminDbApi(client, auth, body) {
     error: "Unsupported user administration action."
   });
 }
-
-
-
-/*
- * ---------------------------------------------------------
 
 export { internalIdentityApi, tenantAdminDbApi };
