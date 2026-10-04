@@ -5625,6 +5625,18 @@ async function ensureStaffNoticeTables(client) {
     CREATE INDEX IF NOT EXISTS suite_staff_notice_workspace_idx
       ON suite_staff_notices(tenant_id, agency_id, created_at DESC)
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS suite_notification_reads (
+      tenant_id uuid NOT NULL,
+      agency_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      module text NOT NULL,
+      notification_id text NOT NULL,
+      read_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, agency_id, user_id, module, notification_id)
+    )
+  `);
 }
 
 async function staffNoticeContext(client, auth, tenantId, agencyId) {
@@ -5681,6 +5693,39 @@ async function staffNoticesApi(client, auth, body) {
   if (ctx.error) return ctx.error;
 
   await ensureStaffNoticeTables(client);
+
+  if (action === "notification_reads_list") {
+    const q = await client.query(
+      `SELECT module, notification_id
+         FROM suite_notification_reads
+        WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3`,
+      [tenantId, agencyId, auth.userId]
+    );
+    return response(200, {success:true, data:q.rows});
+  }
+
+  if (action === "notification_reads_mark") {
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const cleaned = items
+      .map(item => ({
+        module: String(item?.module || "").trim().slice(0,80),
+        notification_id: String(item?.id || item?.notification_id || "").trim().slice(0,255)
+      }))
+      .filter(item => item.module && item.notification_id)
+      .slice(0,500);
+    if (!cleaned.length) return response(200,{success:true,data:{saved:0}});
+    for (const item of cleaned) {
+      await client.query(
+        `INSERT INTO suite_notification_reads
+          (tenant_id, agency_id, user_id, module, notification_id, read_at)
+         VALUES ($1,$2,$3,$4,$5,now())
+         ON CONFLICT (tenant_id, agency_id, user_id, module, notification_id)
+         DO UPDATE SET read_at=EXCLUDED.read_at`,
+        [tenantId, agencyId, auth.userId, item.module, item.notification_id]
+      );
+    }
+    return response(200,{success:true,data:{saved:cleaned.length}});
+  }
 
   if (action === "inbox") {
     const q = await client.query(
