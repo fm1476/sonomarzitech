@@ -916,6 +916,9 @@ function renderNotifPanel(){
    SHELL STARTUP
    ========================================================================= */
 function startShell(){
+  if((!Array.isArray(STATE.currentRoleIds) || STATE.currentRoleIds.length===0) && Array.isArray(HOME_ROLE_IDS) && HOME_ROLE_IDS.length){
+    STATE.currentRoleIds = [...HOME_ROLE_IDS];
+  }
   applyAgencyBranding();
   renderRoleSwitcher();
   renderSuiteNav();
