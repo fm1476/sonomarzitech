@@ -1206,6 +1206,7 @@ const ABILITY_CATALOG = {
     ["module_subpoena","Access the Subpoena Management module"],
     ["module_grants","Access the Grants & Asset Forfeiture module"],
     ["module_civil","Access the Civil Process module"],
+    ["module_permits","Access the Licensing & Permits module"],
   ],
   "SonoMarzi Internal": [
     ["manage_application_access","Control which modules exist for this deployment (SonoMarzi internal use only)"],
@@ -1233,6 +1234,24 @@ const ABILITY_CATALOG = {
   ],
   "Shared: AI Assistant": [
     ["chatbot_access","Use the AI assistant"],
+  ],
+  "Licensing & Permits": [
+    ["permits_view","View Licensing & Permits records"],
+    ["permits_create","Create permit and license applications"],
+    ["permits_edit","Edit applications, requirements, and internal notes"],
+    ["permits_background_view","View background and regulatory investigations"],
+    ["permits_background_edit","Create and update background investigations"],
+    ["permits_inspection_view","View permit inspections"],
+    ["permits_inspection_manage","Schedule and complete inspections"],
+    ["permits_fee_view","View assessed fees, payments, balances, and waivers"],
+    ["permits_payment_record","Record payments and receipts"],
+    ["permits_fee_manage","Assess, adjust, waive, refund, and configure fees"],
+    ["permits_approve","Approve, deny, return, or advance applications"],
+    ["permits_issue","Issue, reissue, suspend, revoke, and reinstate licenses"],
+    ["permits_reports_view","View Licensing & Permits reports and analytics"],
+    ["permits_reports_export","Export Licensing & Permits report data"],
+    ["permits_admin","Configure permit types, requirements, workflows, numbering, and license templates"],
+    ["permits_admin_audit","View Licensing & Permits audit activity"]
   ],
   "Bulk Import": [
     ["personnel_bulk_import","Bulk import personnel records"],
@@ -2055,6 +2074,7 @@ async function buildSeedState(){
     subpoena: SUBPOENA.buildData(),
     grants: GRANTS.buildData(),
     civil: CIVIL.buildData(),
+    permits: PERMITS.buildData(),
     fieldLabels: {},
     agencyBranding: { logoDataUrl: null, title: "SonoMarzi PS Management Suite", subtitle: "Choose a module to begin" },
     ssoConfig: { enabled: false },
@@ -2128,6 +2148,7 @@ function runCoreMigrations(){
     if(!STATE.subpoena) STATE.subpoena = SUBPOENA.buildData();
     if(!STATE.grants) STATE.grants = GRANTS.buildData();
     if(!STATE.civil) STATE.civil = CIVIL.buildData();
+    if(!STATE.permits) STATE.permits = PERMITS.buildData();
     if(!STATE.auditLog) STATE.auditLog = [];
     if(!STATE.fieldLabels) STATE.fieldLabels = {};
     if(!STATE.agencyBranding) STATE.agencyBranding = { logoDataUrl: null, title: "SonoMarzi PS Management Suite", subtitle: "Choose a module to begin" };
@@ -2270,6 +2291,7 @@ function runCoreMigrations(){
   step('Subpoena module migration', ()=>SUBPOENA.migrateData());
   step('Grants module migration', ()=>GRANTS.migrateData());
   step('Civil Process module migration', ()=>CIVIL.migrateData());
+  step('Licensing & Permits module migration', ()=>PERMITS.migrateData());
 }
 
 async function migrateState(){
