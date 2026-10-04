@@ -1481,7 +1481,7 @@ function moduleLicensed(enabledModules, collection) {
   const prefix = collection.split(".")[0];
   const licensedPrefixes = new Set([
     "qm", "fleet", "pm", "k9", "drone",
-    "eod", "subpoena", "grants", "civil"
+    "eod", "subpoena", "grants", "civil", "permits"
   ]);
 
   if (!licensedPrefixes.has(prefix)) return true;
