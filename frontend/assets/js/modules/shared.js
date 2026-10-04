@@ -1631,14 +1631,14 @@ const DEFAULT_ROLES = [
   {id:"role_admin", name:"System Admin", locked:true, description:"Full access to every module and every ability. The top-level administrator for the whole suite.",
     agencyScope: [], abilities: abilitiesFor(ALL_CUSTOMER_ABILITY_IDS)},
   {id:"role_qm_admin", name:"Quartermaster Admin", locked:false, description:"Full control over the Quartermaster module only \u2014 cannot see or access Fleet Management or Personnel Management.",
-    agencyScope: [], abilities: abilitiesFor(["module_quartermaster","personnel_view","personnel_manage","qm_bypass_unit_scope",
+    agencyScope: [], abilities: abilitiesFor(["module_quartermaster","personnel_view","qm_bypass_unit_scope",
       "qm_equip_view","qm_equip_add","qm_equip_edit","qm_equip_delete","qm_equip_retire",
       "qm_assign_checkout","qm_assign_checkin","qm_assign_approve","qm_assign_history",
       "qm_maint_log","qm_maint_schedule","qm_maint_outofservice","qm_reports_view","qm_reports_export",
       "qm_request_submit","qm_request_approve","qm_request_view_all","qm_audit_conduct","qm_audit_view",
       "qm_admin_categories","qm_admin_audit"])},
   {id:"role_fleet_admin", name:"Fleet Admin", locked:false, description:"Full control over the Fleet Management module only \u2014 cannot see or access Quartermaster or Personnel Management.",
-    agencyScope: [], abilities: abilitiesFor(["module_fleet","personnel_view","personnel_manage","fleet_bypass_unit_scope",
+    agencyScope: [], abilities: abilitiesFor(["module_fleet","personnel_view","fleet_bypass_unit_scope",
       "fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_vehicle_delete","fleet_vehicle_retire",
       "fleet_inspection_conduct","fleet_inspection_view_all","fleet_inspection_delete",
       "fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export",
@@ -1680,6 +1680,7 @@ const DEFAULT_ROLES = [
       "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil"])},
 ];
 DEFAULT_ROLES.forEach(r=>{
+  if(!['role_admin','role_platform_admin'].includes(r.id)) r.abilities.admin_roles=false;
   r.abilities.workflow_use=r.id!=='role_auditor';
   r.abilities.workflow_approve=['role_supervisor','role_admin','role_platform_admin'].includes(r.id);
   r.abilities.workflow_manage=['role_admin','role_platform_admin'].includes(r.id);
@@ -2244,6 +2245,10 @@ function runCoreMigrations(){
     // most powerful role a customer's own admin can hold."
     const VENDOR_ONLY_ABILITIES = ['manage_application_access','chatbot_access'];
     STATE.roles.forEach(r=>{
+      if(!['role_admin','role_platform_admin'].includes(r.id)){
+        r.abilities = r.abilities || {};
+        r.abilities.admin_roles = false;
+      }
       ALL_ABILITY_IDS.forEach(id=>{
         if(VENDOR_ONLY_ABILITIES.includes(id)){
           if(r.abilities[id]===undefined) r.abilities[id] = false;
