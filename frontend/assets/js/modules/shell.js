@@ -58,7 +58,7 @@ function renderSuiteNav(){
   const items = [];
   items.push({label:"All Modules", icon:"grid", action:showLauncher});
   items.push({label:'Staff Notices',icon:'chat',action:()=>SuiteUX.navigate('shared/notices')});
-  if(can('admin_roles')) items.push({label:"Roles & Abilities", icon:"shield", action:()=>enterSharedView('roles', 'Roles & Abilities', "Define unlimited roles and control exactly what each one can do, across every module")});
+  if(authoritativeRoleAdmin()) items.push({label:"Roles & Abilities", icon:"shield", action:()=>enterSharedView('roles', 'Roles & Abilities', "Define unlimited roles and control exactly what each one can do, across every module")});
   const canSeeAudit = can('qm_admin_audit') || can('fleet_admin_audit') || can('pm_admin_audit') || can('k9_admin_audit') || can('drone_admin_audit') || can('eod_admin_audit') || can('subpoena_admin_audit') || can('grants_admin_audit') || can('civil_admin_audit') || can('permits_admin_audit');
   if(canSeeAudit) items.push({label:"Audit Log", icon:"history", action:()=>enterSharedView('audit', 'Platform Audit Log', "Every logged action across every module, in one place, filterable by module, user, date, and entity type")});
   if(can('manage_field_labels')) items.push({label:"Field Labels", icon:"edit", action:()=>enterSharedView('fieldlabels', 'Field Display Names', "Rename how a field appears across the suite, without touching the underlying data")});
@@ -375,6 +375,11 @@ function renderFieldLabelsAdmin(){
 }
 
 function enterSharedView(viewId, title, sub){
+  if(viewId==='roles' && !authoritativeRoleAdmin()){
+    toast("System Admin or Platform Admin access is required.", true);
+    showLauncher();
+    return;
+  }
   ACTIVE_MODULE = null;
   ACTIVE_SHARED_VIEW = viewId;
   document.getElementById('moduleSwitchBar').style.display = '';
@@ -401,8 +406,7 @@ const StaffNotices=(()=>{
   const expandedNotices=new Set();
   // The signed-in membership identifies these built-in sender roles. The create RPC
   // remains the authority for every send, including configurable future roles.
-  const canCompose=()=>can('staff_notify_send')||(HOME_ROLE_IDS||[]).some(id=>
-    ['role_admin','role_platform_admin','role_supervisor'].includes(id));
+  const canCompose=()=>authoritativeRoleAdmin()||can('staff_notify_send');
   function withTimeout(promise,ms,message){
     let timer;
     return Promise.race([promise,new Promise((_,reject)=>{
@@ -730,11 +734,24 @@ function roleSwitcherSummary(){
   return `${ids.length} roles`;
 }
 
+function authoritativeRoleAdmin(){
+  return (HOME_ROLE_IDS||[]).some(id=>['role_admin','role_platform_admin'].includes(id));
+}
+
 function renderRoleSwitcher(){
   const btn = document.getElementById('btnRoleSwitcher');
   const loggedInEl = document.getElementById('loggedInAs');
+  const label = document.getElementById('roleSwitcherLabel');
   const person = STATE.personnel.find(p=>p.id===CURRENT_USER_ID);
+  const allowed = authoritativeRoleAdmin();
   loggedInEl.textContent = person ? `Logged in as ${person.name}` : '';
+  if(label) label.style.display = allowed ? '' : 'none';
+  btn.style.display = allowed ? '' : 'none';
+  if(!allowed){
+    const panel = document.getElementById('roleSwitcherPanel');
+    if(panel) panel.style.display='none';
+    return;
+  }
   btn.textContent = roleSwitcherSummary();
   document.getElementById('abilityCountPill').textContent = countAbilities(currentRole())+" abilities";
 
@@ -748,6 +765,11 @@ function renderRoleSwitcher(){
 
 function renderRoleSwitcherPanel(){
   const panel = document.getElementById('roleSwitcherPanel');
+  if(!authoritativeRoleAdmin()){
+    panel.innerHTML='';
+    panel.style.display='none';
+    return;
+  }
   const active = STATE.currentRoleIds || [];
   panel.innerHTML = `
     <div style="padding:10px 14px;border-bottom:1px solid var(--border);font-weight:800;color:var(--heading);font-size:12.5px;">Viewing as (select one or more)</div>
