@@ -5,6 +5,8 @@ import {
   roleHasAbility
 } from "./core.mjs";
 
+/*
+ * ---------------------------------------------------------
  * WORKFLOWS / APPROVALS (AWS/RDS)
  * ---------------------------------------------------------
  * Stores the workflow subsystem as one versioned JSON document per agency.
@@ -129,9 +131,5 @@ async function workflowApi(client,auth,body){
     throw error;
   }
 }
-
-
-/*
- * ---------------------------------------------------------
 
 export { workflowApi };
