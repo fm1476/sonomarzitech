@@ -1057,8 +1057,8 @@ async function inspectAwsAccessRules(){
     }
   }
 
-  configureAwsDevLogin();
-
-  // Temporary migration buttons retired after successful AWS migration tests.
+  // The production SonoMarzi login form is owned by custom-auth.js.
+  // Keep this bridge available for legacy hosted-UI callbacks and migration helpers,
+  // but do not rewrite the sign-in controls on normal tenant hosts.
   handleCallback();
 })();
