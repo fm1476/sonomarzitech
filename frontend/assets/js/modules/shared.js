@@ -1157,7 +1157,8 @@ function personRoleNames(p){ return (p.roleIds||[]).map(roleName).join(', ') || 
 function currentRole(){
   const actual = (typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared') ? (HOME_ROLE_IDS||[]) : (STATE.personnel.find(p=>p.id===CURRENT_USER_ID)?.roleIds || []);
   const admin = actual.some(id=>['role_admin','role_platform_admin'].includes(id));
-  const ids = admin ? (STATE.currentRoleIds||actual) : actual;
+  const selected = Array.isArray(STATE.currentRoleIds) && STATE.currentRoleIds.length ? STATE.currentRoleIds : actual;
+  const ids = admin ? selected : actual;
   const roles = ids.map(id=>STATE.roles.find(r=>r.id===id)).filter(Boolean);
   if(roles.length===0) return {id:"none",name:"No assigned role",abilities:{},agencyScope:[]};
   if(roles.length===1) return roles[0];
