@@ -36,24 +36,81 @@
     if(!wsRes.ok||!ws?.success) throw Error(ws?.error||`Unable to load SonoMarzi workspace (${wsRes.status}).`);
 
     if(typeof STATE==='undefined') throw Error('SonoMarzi application state is not available.');
-    const recordMap={};
-    for(const row of (Array.isArray(ws.records)?ws.records:[])){
-      if(!row?.deleted) recordMap[row.key]=row.value;
-    }
     const template=(ws.template&&typeof ws.template==='object')?ws.template:{};
 
-    // Start from the server template, then overlay authoritative persisted records.
+    // Rebuild the application state from the normalized AWS record format:
+    //   [[path...],"$value"] = value/container metadata
+    //   [[path...],"$order"] = ordered collection member IDs
+    //   [[path...],"record-id"] = an individual collection member
+    // This mirrors the record model stored in RDS instead of treating the
+    // JSON record key as a slash-delimited object path.
     STATE=JSON.parse(JSON.stringify(template));
-    for(const [key,value] of Object.entries(recordMap)){
-      const parts=String(key).split('/').filter(Boolean);
-      if(!parts.length) continue;
-      let target=STATE;
-      for(let i=0;i<parts.length-1;i++){
-        const seg=parts[i];
-        if(!target[seg]||typeof target[seg]!=='object') target[seg]={};
-        target=target[seg];
+
+    const getAtPath=(root,path)=>{
+      let cur=root;
+      for(const segment of path){
+        if(cur==null || typeof cur!=='object') return undefined;
+        cur=cur[segment];
       }
-      target[parts[parts.length-1]]=value;
+      return cur;
+    };
+    const setAtPath=(root,path,value)=>{
+      if(!path.length) return;
+      let cur=root;
+      for(let i=0;i<path.length-1;i++){
+        const segment=path[i];
+        if(cur[segment]==null || typeof cur[segment]!=='object') cur[segment]={};
+        cur=cur[segment];
+      }
+      cur[path[path.length-1]]=value;
+    };
+
+    const groups=new Map();
+    for(const row of (Array.isArray(ws.records)?ws.records:[])){
+      if(!row || row.deleted) continue;
+      let decoded;
+      try{decoded=JSON.parse(row.key)}catch{continue}
+      if(!Array.isArray(decoded)||decoded.length!==2||!Array.isArray(decoded[0])) continue;
+      const path=decoded[0], itemId=decoded[1];
+      const groupKey=JSON.stringify(path);
+      if(!groups.has(groupKey)) groups.set(groupKey,{path,valueSet:false,value:null,order:null,items:new Map()});
+      const group=groups.get(groupKey);
+      if(itemId==='$value'){group.valueSet=true;group.value=row.value}
+      else if(itemId==='$order'){group.order=Array.isArray(row.value)?row.value:[]}
+      else group.items.set(String(itemId),row.value);
+    }
+
+    // Parents first so a parent "$value" cannot wipe out children rebuilt earlier.
+    const orderedGroups=[...groups.values()].sort((a,b)=>a.path.length-b.path.length);
+    for(const group of orderedGroups){
+      const existing=getAtPath(STATE,group.path);
+      if(Array.isArray(group.order)){
+        const ids=group.order.map(String);
+        const rebuilt=[];
+        const used=new Set();
+        for(const id of ids){
+          if(group.items.has(id)){rebuilt.push(group.items.get(id));used.add(id)}
+        }
+        for(const [id,value] of group.items){
+          if(!used.has(id)) rebuilt.push(value);
+        }
+        if(group.valueSet && group.value && typeof group.value==='object' && !Array.isArray(group.value)){
+          Object.assign(rebuilt,group.value);
+        }
+        setAtPath(STATE,group.path,rebuilt);
+      }else if(group.items.size){
+        if(Array.isArray(existing)){
+          setAtPath(STATE,group.path,[...group.items.values()]);
+        }else{
+          const rebuilt=(group.valueSet && group.value && typeof group.value==='object' && !Array.isArray(group.value))
+            ? {...group.value}
+            : {};
+          for(const [id,value] of group.items) rebuilt[id]=value;
+          setAtPath(STATE,group.path,rebuilt);
+        }
+      }else if(group.valueSet){
+        setAtPath(STATE,group.path,group.value);
+      }
     }
 
     if(typeof runCoreMigrations==='function') runCoreMigrations();
