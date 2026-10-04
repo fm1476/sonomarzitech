@@ -616,3 +616,13 @@
 #view-readiness .work-layout>.work-aside p{line-height:1.5}
 @media(max-width:640px){.workflow-builder-row{display:grid;grid-template-columns:1fr 1fr}.workflow-builder-row .wf-label,.workflow-builder-row .wf-options,.workflow-builder-row .wf-step-label{grid-column:1/-1}}
 .ft-stat-filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}.ft-stat-filters label{display:flex;flex-direction:column;gap:5px;font-size:12px}.ft-stat-filters select{min-width:145px}.ft-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.ft-form-grid .form-row{min-width:0}.ft-form-grid select{width:100%}#ftActions,#ftFileActions{display:flex;gap:8px;flex-wrap:wrap}#ftFileActions{margin:18px 0}
+
+/* Field Training trainee-file cards */
+#ftFiles .ft-file-card{display:grid;grid-template-columns:4px minmax(0,1fr) auto;align-items:center;gap:16px;padding:18px 20px;border-bottom:1px solid var(--border)}
+#ftFiles .ft-file-card:last-child{border-bottom:0}
+#ftFiles .ft-file-main{min-width:0}
+#ftFiles .ft-file-main h3{margin:0 0 5px}
+#ftFiles .ft-file-main p{margin:0 0 5px;color:var(--text-dim)}
+#ftFiles .ft-file-main small{display:block;line-height:1.45}
+#ftFiles .ft-file-card-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+@media(max-width:760px){#ftFiles .ft-file-card{grid-template-columns:4px minmax(0,1fr)}#ftFiles .ft-file-card-actions{grid-column:2;justify-content:flex-start}}
