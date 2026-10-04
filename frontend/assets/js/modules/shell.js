@@ -44,7 +44,9 @@ const MODULE_META = {
 };
 
 function accessibleModules(){
-  return Object.keys(MODULE_META).filter(key => can(MODULE_META[key].ability));
+  return Object.keys(MODULE_META)
+    .filter(key => can(MODULE_META[key].ability))
+    .sort((a,b)=>MODULE_META[a].name.localeCompare(MODULE_META[b].name));
 }
 
 function renderSuiteNav(){
