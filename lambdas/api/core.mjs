@@ -4279,13 +4279,6 @@ function sharedCollectionReadable(
   abilityMap,
   collection
 ) {
-  if (collection === "roles") {
-    return {
-      allowed: false,
-      error: "System Admin or Platform Admin access is required to modify roles."
-    };
-  }
-
   if (collection === "agencyBranding") {
     return roleHasAbility(
       abilityMap,
@@ -4323,6 +4316,13 @@ async function authorizePersonnelSharedChange(
   const creating = !existingRow || existingRow.deleted === true;
   const deleting = change.deleted === true;
   const afterValue = change.value;
+
+  if (collection === "roles") {
+    return {
+      allowed: false,
+      error: "System Admin or Platform Admin access is required to modify roles."
+    };
+  }
 
   if (collection === "agencyBranding") {
     return {
