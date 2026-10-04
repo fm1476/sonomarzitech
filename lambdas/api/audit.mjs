@@ -5,6 +5,8 @@ import {
   roleHasAbility
 } from "./core.mjs";
 
+/*
+ * ---------------------------------------------------------
  * AWS DURABLE ACTIVITY / AUDIT LOG
  * ---------------------------------------------------------
  * Dedicated append-only persistence. The generic record save path refuses
@@ -193,7 +195,5 @@ async function auditLogApi(client, auth, body, event) {
     error: 'Unsupported audit log action.'
   });
 }
-
-/*
 
 export { auditLogApi };
