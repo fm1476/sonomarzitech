@@ -12,6 +12,8 @@ import {
   authorizePersonnelSharedChange
 } from "./core.mjs";
 
+/*
+ * ---------------------------------------------------------
  * PERMANENT AWS APPLY-CHANGES FOUNDATION
  * ---------------------------------------------------------
  * Phase 2 exact authorization port:
@@ -527,9 +529,5 @@ async function runWritePathProof(client, authUserId) {
     throw error;
   }
 }
-
-
-/*
- * ---------------------------------------------------------
 
 export { applyChanges };
