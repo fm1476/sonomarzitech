@@ -90,7 +90,6 @@ async function staffNoticeContext(client, auth, tenantId, agencyId) {
     ...workspaceAuth,
     canSend:
       workspaceAuth.admin ||
-      workspaceAuth.roleIds.includes("role_supervisor") ||
       roleHasAbility(abilityMap, workspaceAuth.roleIds, "staff_notify_send")
   };
 }
