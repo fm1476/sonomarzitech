@@ -1,19 +1,29 @@
-# SonoMarzi Public Safety Management Suite
+# SonoMarzi Public Safety Management
 
-Canonical source baseline for the SonoMarzi application.
+SonoMarzi is a multi-tenant public-safety management platform deployed on AWS.
 
-## Baseline
+## Source layout
 
-This branch was created from the verified **Field Training v14** release package dated October 1, 2026. The v14 package supersedes v13 and includes the prior Field Training, operations, access, notices, and related module work.
+```
+frontend/
+  index.html
+  manifest.webmanifest
+  sw.js
+  assets/
+    css/
+    js/
+      modules/
+lambdas/
+  api/index.mjs
+  identity-admin/index.mjs
+docs/
+.github/workflows/
+```
 
-## Deployment model
+## Runtime architecture
 
-The current application is a browser-based application backed by Supabase. This repository is being prepared as the source-of-truth baseline before migration to AWS.
+CloudFront serves a private S3 frontend. API Gateway routes application requests to Lambda. Cognito provides identity and tokens. RDS PostgreSQL stores application data. Agency workspaces use `*.sonomarzi.com`.
 
-## Safety
+The user-facing login and recovery experience is owned by SonoMarzi while Cognito remains the identity provider.
 
-Do not commit service-role credentials, passwords, private keys, or other server-side secrets. Browser-publishable configuration should be separated from privileged credentials during the AWS migration.
-
-## Migration
-
-AWS infrastructure work should begin only after the complete v14 application and PWA assets are committed and verified against the release package.
+See `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md`.

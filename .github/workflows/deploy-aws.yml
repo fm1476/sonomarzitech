@@ -1,0 +1,51 @@
+name: Deploy SonoMarzi to AWS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: sonomarzi-dev-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  API_FUNCTION: sonomarzi-api-dev
+  IDENTITY_FUNCTION: sonomarzi-identity-admin-dev
+  FRONTEND_BUCKET: sonomarzi-app-dev-458826002208-us-east-2-an
+  CLOUDFRONT_DISTRIBUTION: EA4Z48KSEJBUU
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::458826002208:role/sonomarzi-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package Lambda functions
+        run: |
+          mkdir -p dist
+          (cd lambdas/api && zip -q ../../dist/api.zip index.mjs)
+          (cd lambdas/identity-admin && zip -q ../../dist/identity-admin.zip index.mjs)
+
+      - name: Deploy Lambda functions
+        run: |
+          aws lambda update-function-code --function-name "$API_FUNCTION" --zip-file fileb://dist/api.zip --region "$AWS_REGION"
+          aws lambda wait function-updated --function-name "$API_FUNCTION" --region "$AWS_REGION"
+          aws lambda update-function-code --function-name "$IDENTITY_FUNCTION" --zip-file fileb://dist/identity-admin.zip --region "$AWS_REGION"
+          aws lambda wait function-updated --function-name "$IDENTITY_FUNCTION" --region "$AWS_REGION"
+
+      - name: Sync frontend
+        run: aws s3 sync frontend/ "s3://$FRONTEND_BUCKET/" --delete --region "$AWS_REGION"
+
+      - name: Invalidate CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION" --paths "/*"

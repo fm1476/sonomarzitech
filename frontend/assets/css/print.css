@@ -1,0 +1,15 @@
+body{ font-family: Georgia, 'Times New Roman', serif; color:#111; max-width:800px; margin:40px auto; padding:0 20px; line-height:1.5; }
+    .caption-box{ border:1px solid #111; padding:16px; margin-bottom:24px; }
+    .reason-box{ background:#f2f2f2; border-left:4px solid #666; padding:10px 14px; margin-bottom:20px; font-size:12.5px; }
+    .caption-row{ display:flex; justify-content:space-between; font-size:13px; }
+    h1{ text-align:center; font-size:18px; letter-spacing:0.08em; text-transform:uppercase; margin:24px 0; }
+    .party-block{ margin-bottom:18px; font-size:13px; }
+    p{ font-size:13.5px; text-align:justify; }
+    table{ width:100%; border-collapse:collapse; margin:14px 0; font-size:12.5px; }
+    th,td{ border:1px solid #999; padding:6px 8px; text-align:left; }
+    .fee-total-row td{ font-weight:bold; border-top:2px solid #111; }
+    .sig-block{ margin-top:50px; display:flex; justify-content:space-between; gap:40px; }
+    .sig-line{ border-top:1px solid #111; margin-top:50px; padding-top:4px; font-size:12px; width:100%; }
+    .jurat{ margin-top:50px; font-size:12.5px; border-top:1px solid #999; padding-top:16px; }
+    .no-print{ text-align:center; margin:20px 0; }
+    @media print { .no-print{ display:none; } }

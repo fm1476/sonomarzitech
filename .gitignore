@@ -1,7 +1,9 @@
 .DS_Store
+.vscode/
+.idea/
+dist/
+*.zip
 .env
 .env.*
 !.env.example
 node_modules/
-dist/
-*.log
