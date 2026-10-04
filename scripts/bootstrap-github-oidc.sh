@@ -5,6 +5,8 @@ ACCOUNT_ID="458826002208"
 REGION="us-east-2"
 ROLE_NAME="sonomarzi-github-deploy"
 REPO="fm1476/sonomarzitech"
+OWNER_ID="325036342"
+REPO_ID="1357788956"
 OIDC_URL="https://token.actions.githubusercontent.com"
 OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 
@@ -34,7 +36,7 @@ cat > /tmp/sonomarzi-github-trust.json <<JSON
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:${REPO}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:fm1476@325036342/sonomarzitech@1357788956:ref:refs/heads/main"
         }
       }
     }
