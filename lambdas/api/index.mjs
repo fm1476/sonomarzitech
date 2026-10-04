@@ -5367,6 +5367,86 @@ function ftVersion(value, expected, label="record") {
   }
 }
 
+async function ftNotifyTransition(client, ctx, state, report, action) {
+  const enrollment = ftEnrollmentFor(state, report.enrollment_id);
+  if (!enrollment) return;
+
+  const recipients =
+    action === "submit" ? [report.supervisor_user] :
+    action === "approve" ? [report.trainee_user] :
+    action === "return" ? [report.trainer_user] :
+    action === "dispute" ? [report.trainer_user, report.supervisor_user] :
+    [];
+
+  const uniqueRecipients = [...new Set(recipients.filter(Boolean))];
+  if (!uniqueRecipients.length) return;
+
+  await ensureStaffNoticeTables(client);
+
+  const people = await client.query(
+    `SELECT m.user_id, m.person_id,
+            COALESCE(u.display_name,u.email,m.person_id::text,'Staff member') AS display_name
+       FROM suite_memberships m
+       JOIN suite_users u ON u.id=m.user_id
+      WHERE m.tenant_id=$1 AND m.agency_id=$2
+        AND m.status='active'
+        AND m.user_id = ANY($3::uuid[])`,
+    [ctx.tenantId, ctx.agencyId, uniqueRecipients]
+  );
+  const personByUser = new Map(people.rows.map(row => [row.user_id, row]));
+
+  const traineeRow = await client.query(
+    `SELECT COALESCE(u.display_name,u.email,m.person_id::text,'Trainee') AS display_name
+       FROM suite_memberships m
+       JOIN suite_users u ON u.id=m.user_id
+      WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.user_id=$3
+      LIMIT 1`,
+    [ctx.tenantId, ctx.agencyId, report.trainee_user]
+  );
+  const traineeName = traineeRow.rows[0]?.display_name || "the trainee";
+  const kindLabel = ({
+    daily: "Daily Observation Report",
+    weekly: "weekly evaluation",
+    phase: "phase report",
+    final: "end-of-training report",
+    coverage: "coverage observation"
+  })[report.kind] || "Field Training report";
+
+  const body =
+    action === "submit" ? `Field Training: ${kindLabel} for ${traineeName} is ready for your supervisor review.` :
+    action === "approve" ? `Field Training: Your ${kindLabel} for ${traineeName} was approved and is ready for your acknowledgment.` :
+    action === "return" ? `Field Training: ${kindLabel} for ${traineeName} was returned to you for correction.` :
+    action === "dispute" ? `Field Training: ${traineeName} submitted a response/dispute on a ${kindLabel}. Please review the trainee's response.` :
+    "";
+
+  if (!body) return;
+
+  const noticeId = ftId("notice");
+  const clientId = `field-training:${report.id}:${action}:${Number(report.version||0)+1}`;
+
+  const inserted = await client.query(
+    `INSERT INTO suite_staff_notices
+       (id, tenant_id, agency_id, body, created_by, client_id, recipient_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (tenant_id, agency_id, client_id) DO NOTHING
+     RETURNING id`,
+    [noticeId, ctx.tenantId, ctx.agencyId, body, ctx.userId, clientId, uniqueRecipients.length]
+  );
+  if (!inserted.rows.length) return;
+
+  for (const userId of uniqueRecipients) {
+    const member = personByUser.get(userId);
+    if (!member) continue;
+    await client.query(
+      `INSERT INTO suite_staff_notice_recipients
+        (notice_id, user_id, person_id)
+       VALUES ($1,$2,$3)
+       ON CONFLICT DO NOTHING`,
+      [noticeId, userId, member.person_id]
+    );
+  }
+}
+
 function ftVisibleState(ctx, state, members) {
   const allowedEnrollments = state.enrollments.filter(e => ftCanSeeEnrollment(ctx,state,e));
   const ids = new Set(allowedEnrollments.map(e=>e.id));
@@ -5458,6 +5538,7 @@ async function fieldTrainingApi(client, auth, body) {
       if(action==="return"){ftAssert((ctx.ftManage||r.supervisor_user===ctx.userId)&&r.status==="supervisor_review","Only the assigned supervisor or a Field Training manager may return this evaluation.");r.status="returned";}
       if(action==="acknowledge"){ftAssert(r.trainee_user===ctx.userId&&r.status==="trainee_ack","Only the trainee may acknowledge this evaluation.");r.status="acknowledged";}
       if(action==="dispute"){ftAssert(r.trainee_user===ctx.userId&&r.status==="trainee_ack","Only the trainee may respond to this evaluation.");r.status="disputed";}
+      await ftNotifyTransition(client,ctx,state,r,action);
       r.history=Array.isArray(r.history)?r.history:[]; r.history.push({action,at:ftIsoNow(),user_id:ctx.userId,note}); r.version++; r.updated_at=ftIsoNow(); result={id:r.id,version:r.version,status:r.status};
     } else if (action === "advance") {
       const e=ftEnrollmentFor(state,payload.enrollmentId); if(!e) throw new Error("Trainee file not found."); ftVersion(e.version,payload.version,"trainee file");
