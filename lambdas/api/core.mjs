@@ -5006,11 +5006,6 @@ async function getWorkspace(client, auth, event) {
   });
 }
 
-
-
-/*
- * ---------------------------------------------------------
-
 export {
   DEMO_TENANT_ID,
   DEMO_AGENCY_ID,
