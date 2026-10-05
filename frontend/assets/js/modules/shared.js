@@ -1937,7 +1937,7 @@ const QM_AUDITOR_ABILITIES = ["qm_equip_view","qm_assign_history","qm_reports_vi
 const FLEET_SUPERVISOR_ABILITIES = ["fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_inspection_conduct","fleet_inspection_view_all","fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export"];
 const FLEET_OFFICER_ABILITIES = ["fleet_vehicle_view","fleet_inspection_conduct"];
 const FLEET_AUDITOR_ABILITIES = ["fleet_vehicle_view","fleet_inspection_view_all","fleet_reports_view"];
-const PM_ADMIN_ABILITIES = ["pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
+const PM_ADMIN_ABILITIES = ["personnel_bulk_import","pm_training_bulk_import","pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
   "pm_discipline_view","pm_discipline_manage","pm_medical_view","pm_medical_manage",
   "pm_inquiries_view","pm_inquiries_manage","pm_lodd_view","pm_lodd_manage",
   "pm_schedule_view","pm_schedule_manage","pm_leave_request_submit","pm_leave_request_approve","pm_training_view_own","pm_training_manage","pm_training_request","pm_training_checkin_submit","pm_instructor_manage",
@@ -1953,8 +1953,8 @@ const PM_OFFICER_ABILITIES = ["pm_training_view_own","pm_training_request","pm_t
   "pm_overtime_view","pm_overtime_optin","pm_bidding_view","pm_bidding_submit","pm_extraduty_view","pm_extraduty_signup","pm_rollcall_view"];
 const PM_AUDITOR_ABILITIES = ["pm_records_view","pm_discipline_view","pm_medical_view","pm_inquiries_view","pm_schedule_view","pm_training_view_own","pm_reports_view",
   "pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view"];
-const PM_TRAINING_COORDINATOR_ABILITIES = ["pm_training_view_own","pm_training_manage","pm_training_request","pm_instructor_manage","pm_reports_view","pm_reports_export"];
-const K9_ADMIN_ABILITIES = ["k9_roster_view","k9_roster_edit","k9_roster_delete","k9_medical_view","k9_medical_manage",
+const PM_TRAINING_COORDINATOR_ABILITIES = ["pm_training_bulk_import","pm_training_view_own","pm_training_manage","pm_training_request","pm_instructor_manage","pm_reports_view","pm_reports_export"];
+const K9_ADMIN_ABILITIES = ["k9_bulk_import","k9_roster_view","k9_roster_edit","k9_roster_delete","k9_medical_view","k9_medical_manage",
   "k9_training_view","k9_training_manage","k9_certification_view","k9_certification_manage",
   "k9_deployment_view","k9_deployment_log","k9_incident_view","k9_incident_manage","k9_gps_view",
   "k9_reports_view","k9_reports_export","k9_admin_categories","k9_admin_audit"];
@@ -1968,7 +1968,7 @@ const K9_SUPERVISOR_ABILITIES = ["k9_roster_view","k9_roster_edit","k9_medical_v
 const K9_OFFICER_ABILITIES = ["k9_roster_view","k9_deployment_view"];
 const K9_AUDITOR_ABILITIES = ["k9_roster_view","k9_medical_view","k9_training_view","k9_certification_view",
   "k9_deployment_view","k9_incident_view","k9_gps_view","k9_reports_view"];
-const DRONE_ADMIN_ABILITIES = ["drone_fleet_view","drone_fleet_edit","drone_fleet_delete","drone_operator_view","drone_operator_manage",
+const DRONE_ADMIN_ABILITIES = ["drone_bulk_import","drone_fleet_view","drone_fleet_edit","drone_fleet_delete","drone_operator_view","drone_operator_manage",
   "drone_flight_view","drone_flight_log","drone_maint_view","drone_maint_manage","drone_incident_view","drone_incident_manage",
   "drone_reports_view","drone_reports_export","drone_admin_categories","drone_admin_audit"];
 const DRONE_PILOT_ABILITIES = ["drone_fleet_view","drone_operator_view","drone_flight_view","drone_flight_log",
@@ -1978,14 +1978,14 @@ const DRONE_SUPERVISOR_ABILITIES = ["drone_fleet_view","drone_fleet_edit","drone
   "drone_reports_view","drone_reports_export"];
 const DRONE_OFFICER_ABILITIES = ["drone_fleet_view","drone_flight_view"];
 const DRONE_AUDITOR_ABILITIES = ["drone_fleet_view","drone_operator_view","drone_flight_view","drone_maint_view","drone_incident_view","drone_reports_view"];
-const EOD_ADMIN_ABILITIES = ["eod_technician_view","eod_technician_manage","eod_inventory_view","eod_inventory_manage",
+const EOD_ADMIN_ABILITIES = ["eod_bulk_import","eod_technician_view","eod_technician_manage","eod_inventory_view","eod_inventory_manage",
   "eod_magazine_view","eod_magazine_manage","eod_inspection_log","eod_incident_view","eod_incident_log","eod_rsp_view",
   "eod_theft_report_view","eod_theft_report_manage","eod_reports_view","eod_reports_export","eod_admin_categories","eod_admin_audit"];
 const EOD_TECH_ABILITIES = ["eod_technician_view","eod_inventory_view","eod_magazine_view","eod_inspection_log",
   "eod_incident_view","eod_incident_log","eod_rsp_view","eod_theft_report_view","eod_theft_report_manage","eod_reports_view"];
 const EOD_SUPERVISOR_ABILITIES = ["eod_technician_view","eod_inventory_view","eod_magazine_view","eod_incident_view","eod_theft_report_view","eod_reports_view"];
 const EOD_AUDITOR_ABILITIES = ["eod_technician_view","eod_inventory_view","eod_magazine_view","eod_incident_view","eod_rsp_view","eod_theft_report_view","eod_reports_view"];
-const SUBPOENA_ADMIN_ABILITIES = ["subpoena_view_own","subpoena_view_all","subpoena_manage","subpoena_acknowledge",
+const SUBPOENA_ADMIN_ABILITIES = ["subpoena_bulk_import","subpoena_view_own","subpoena_view_all","subpoena_manage","subpoena_acknowledge",
   "subpoena_document_upload","subpoena_notify","subpoena_reports_view","subpoena_reports_export","subpoena_admin_categories","subpoena_admin_audit"];
 const SUBPOENA_BASIC_ABILITIES = ["subpoena_view_own","subpoena_acknowledge"];
 const SUBPOENA_SUPERVISOR_ABILITIES = ["subpoena_view_own","subpoena_view_all","subpoena_manage","subpoena_acknowledge","subpoena_document_upload","subpoena_notify","subpoena_reports_view","subpoena_reports_export"];
@@ -1994,7 +1994,7 @@ const GRANTS_ADMIN_ABILITIES = ["grants_bulk_import","grants_seizure_view","gran
   "grants_dashboard_customize","grants_reports_view","grants_reports_export","grants_admin_categories","grants_admin_audit"];
 const GRANTS_SUPERVISOR_ABILITIES = ["grants_seizure_view","grants_award_view","grants_dashboard_customize","grants_reports_view","grants_reports_export"];
 const GRANTS_AUDITOR_ABILITIES = ["grants_seizure_view","grants_award_view","grants_dashboard_customize","grants_reports_view"];
-const CIVIL_ADMIN_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_paper_log_attempt","civil_safety_flag_manage",
+const CIVIL_ADMIN_ABILITIES = ["civil_bulk_import","civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_paper_log_attempt","civil_safety_flag_manage",
   "civil_document_generate","civil_fee_manage","civil_reports_view","civil_reports_export","civil_admin_categories","civil_admin_audit"];
 const CIVIL_SERVER_ABILITIES = ["civil_paper_view_own","civil_paper_log_attempt","civil_document_generate"];
 const CIVIL_SUPERVISOR_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_safety_flag_manage","civil_document_generate","civil_fee_manage","civil_reports_view","civil_reports_export"];
@@ -2010,13 +2010,13 @@ const DEFAULT_ROLES = [
       "qm_assign_checkout","qm_assign_checkin","qm_assign_approve","qm_assign_history",
       "qm_maint_log","qm_maint_schedule","qm_maint_outofservice","qm_reports_view","qm_reports_export",
       "qm_request_submit","qm_request_approve","qm_request_view_all","qm_audit_conduct","qm_audit_view",
-      "qm_admin_categories","qm_admin_audit"])},
+      "qm_bulk_import","qm_admin_categories","qm_admin_audit"])},
   {id:"role_fleet_admin", name:"Fleet Admin", locked:false, description:"Full control over the Fleet Management module only \u2014 cannot see or access Quartermaster or Personnel Management.",
     agencyScope: [], abilities: abilitiesFor(["module_fleet","personnel_view","fleet_bypass_unit_scope",
       "fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_vehicle_delete","fleet_vehicle_retire",
       "fleet_inspection_conduct","fleet_inspection_view_all","fleet_inspection_delete",
       "fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export",
-      "fleet_admin_categories","fleet_admin_audit"])},
+      "fleet_bulk_import","fleet_admin_categories","fleet_admin_audit"])},
   {id:"role_pm_admin", name:"Personnel Admin", locked:false, description:"Full control over the Personnel Management module only \u2014 cannot see or access Quartermaster or Fleet Management.",
     agencyScope: [], abilities: abilitiesFor(["module_personnel","personnel_view","personnel_manage",...PM_ADMIN_ABILITIES])},
   {id:"role_training_coordinator", name:"Training Coordinator", locked:false, description:"Manages training records, instructors, and course requests within Personnel Management only.",
@@ -2633,6 +2633,27 @@ function runCoreMigrations(){
         if(r.locked || r.id==='role_platform_admin') r.abilities[id] = true;
         else if(r.abilities[id]===undefined) r.abilities[id] = false;
       });
+    });
+  });
+  step('roles: module admins retain module-scoped data migration abilities', ()=>{
+    const grants = {
+      role_qm_admin:['qm_bulk_import'],
+      role_fleet_admin:['fleet_bulk_import'],
+      role_pm_admin:['personnel_bulk_import','pm_training_bulk_import','pm_reference_bulk_import'],
+      role_training_coordinator:['pm_training_bulk_import'],
+      role_k9_admin:['k9_bulk_import'],
+      role_drone_admin:['drone_bulk_import'],
+      role_eod_admin:['eod_bulk_import'],
+      role_subpoena_admin:['subpoena_bulk_import'],
+      role_grants_admin:['grants_bulk_import'],
+      role_civil_admin:['civil_bulk_import'],
+      role_permits_admin:['permits_bulk_import'],
+    };
+    STATE.roles.forEach(r=>{
+      const ids=grants[r.id];
+      if(!ids) return;
+      r.abilities=r.abilities||{};
+      ids.forEach(id=>{ r.abilities[id]=true; });
     });
   });
   step('roles: admin_roles is restricted to System Admin and Platform Admin', ()=>{
