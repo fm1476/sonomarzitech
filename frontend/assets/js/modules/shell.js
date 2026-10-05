@@ -48,8 +48,10 @@ const MODULE_META = {
 };
 
 function accessibleModules(){
+  const enabled = Array.isArray(STATE.enabledModules) ? STATE.enabledModules : [];
   return Object.keys(MODULE_META)
     .filter(key => can(MODULE_META[key].ability))
+    .filter(key => enabled.length===0 || enabled.includes(key))
     .sort((a,b)=>MODULE_META[a].name.localeCompare(MODULE_META[b].name));
 }
 
