@@ -749,6 +749,7 @@ function healPaperRecord(p){
   if(!p.feeLineItems) p.feeLineItems = [];
   if(!p.feePayments) p.feePayments = [];
   if(!p.generatedDocuments) p.generatedDocuments = [];
+  if(!p.attachedDocuments) p.attachedDocuments = [];
   if(!p.photos) p.photos = [];
   if(!p.safetyFlags) p.safetyFlags = [];
   if(!p.fieldHistory) p.fieldHistory = [];
@@ -759,9 +760,21 @@ function healPaperRecord(p){
   return p;
 }
 function openPaperDetail(id){
+  // A record can be re-dispatched while it is already open (for example after a confirmed
+  // shared-workspace save/live refresh). In that case keep the user's current tab instead of
+  // bouncing them back to Overview. A normal open from the board/calendar still starts at Overview.
+  const recordViewAlreadyActive =
+    PAPER_DETAIL_ID === id &&
+    document.getElementById('view-record')?.classList.contains('active');
   if(!SuiteUX.openRecord("civil","paper",id)) return;
   healPaperRecord(paperFor(id));
- PAPER_DETAIL_ID = id; PAPER_DETAIL_TAB = 'overview'; PAPER_ADDRESS_SELECTED = 0; renderPaperDetailModal(); }
+  PAPER_DETAIL_ID = id;
+  if(!recordViewAlreadyActive){
+    PAPER_DETAIL_TAB = 'overview';
+    PAPER_ADDRESS_SELECTED = 0;
+  }
+  renderPaperDetailModal();
+}
 // No API key required -- Google Maps' plain query-string embed geocodes a full address string
 // server-side and requires no setup, unlike the JS Maps API or the "official" Embed API.
 function mapEmbedSrc(address){ return `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`; }
