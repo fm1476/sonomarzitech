@@ -3,9 +3,14 @@
   const isSonoMarziAwsHost=authHost==='d1b97r2bbw5qld.cloudfront.net'||authHost.endsWith('.sonomarzi.com');
   if(!isSonoMarziAwsHost) return;
   window.SONOMARZI_AWS_DEV=true;
-  const CLIENT_ID='no3ovb8d8qda221qnh1qomf1e', ENDPOINT='https://cognito-idp.us-east-2.amazonaws.com/';
+  const CLIENT_ID='no3ovb8d8qda221qnh1qomf1e', API_BASE='https://7debzkoq7k.execute-api.us-east-2.amazonaws.com';
   const ID='sonomarzi.aws.id_token', ACCESS='sonomarzi.aws.access_token', REFRESH='sonomarzi.aws.refresh_token';
-  async function cognito(action,payload){const r=await fetch(ENDPOINT,{method:'POST',headers:{'content-type':'application/x-amz-json-1.1','x-amz-target':`AWSCognitoIdentityProviderService.${action}`},body:JSON.stringify(payload)});const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{}}catch{}if(!r.ok){const e=new Error(b?.message||b?.Message||`Authentication failed (${r.status}).`);e.name=(b?.__type||b?.code||'CognitoError').split('#').pop();throw e}return b}
+  async function cognito(action,payload){
+    const r=await fetch(`${API_BASE}/activation`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'public_auth',operation:action,payload})});
+    const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{}}catch{}
+    if(!r.ok||b?.success===false){const e=new Error(b?.error||b?.message||`Authentication failed (${r.status}).`);e.name=(b?.name||b?.code||'CognitoError').split('#').pop();throw e}
+    return b?.data??b;
+  }
   function error(msg=''){const e=document.getElementById('loginError');if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
   function save(a){if(!a?.IdToken)throw Error('Cognito did not return an ID token.');sessionStorage.setItem(ID,a.IdToken);if(a.AccessToken)sessionStorage.setItem(ACCESS,a.AccessToken);if(a.RefreshToken)sessionStorage.setItem(REFRESH,a.RefreshToken)}
   function jwtPayload(token){try{const part=String(token||'').split('.')[1];if(!part)return null;const normalized=part.replace(/-/g,'+').replace(/_/g,'/');const padded=normalized+'='.repeat((4-normalized.length%4)%4);return JSON.parse(atob(padded))}catch{return null}}
