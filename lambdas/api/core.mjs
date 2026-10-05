@@ -1641,6 +1641,40 @@ async function filterOfficerWorkspaceRecords(
       "pm_leave_request_approve"
     );
 
+  // My Work must be able to render the signed-in employee's own duty schedule even when
+  // their role does not include department-wide roster visibility. Keep this owner-scoped:
+  // only their assignment rows and the shift definitions those rows reference are exposed.
+  const canViewSchedule =
+    roleHasAbility(
+      abilityMap,
+      workspaceAuth.roleIds,
+      "pm_schedule_view"
+    );
+
+  const ownScheduleAssignments = records.filter(record => {
+    try {
+      const parsed = collectionFromRecordKey(record.key);
+      if (parsed.collection !== "pm.scheduleAssignments" || record.deleted === true) return false;
+      if (parsed.itemId === "$value" && Array.isArray(record.value)) {
+        return record.value.some(a => a?.personId === workspaceAuth.personId);
+      }
+      return parsed.itemId !== "$order" && record.value?.personId === workspaceAuth.personId;
+    } catch {
+      return false;
+    }
+  });
+
+  const ownShiftIds = new Set();
+  for (const record of ownScheduleAssignments) {
+    if (Array.isArray(record.value)) {
+      record.value.filter(a => a?.personId === workspaceAuth.personId).forEach(a => {
+        if (a?.shiftId) ownShiftIds.add(String(a.shiftId));
+      });
+    } else if (record.value?.shiftId) {
+      ownShiftIds.add(String(record.value.shiftId));
+    }
+  }
+
   const visible = [];
 
   for (const record of records) {
@@ -1659,6 +1693,42 @@ async function filterOfficerWorkspaceRecords(
     }
 
     if (collection === "accounts") {
+      continue;
+    }
+
+    if (collection === "pm.scheduleAssignments") {
+      if (canViewSchedule) {
+        visible.push(record);
+      } else if (itemId === "$order" && Array.isArray(record.value)) {
+        const ownIds = new Set(
+          ownScheduleAssignments
+            .filter(r => {
+              try { return collectionFromRecordKey(r.key).itemId !== "$value"; } catch { return false; }
+            })
+            .map(r => {
+              try { return collectionFromRecordKey(r.key).itemId; } catch { return null; }
+            })
+            .filter(Boolean)
+        );
+        visible.push({ ...record, value: record.value.filter(id => ownIds.has(String(id))) });
+      } else if (itemId === "$value" && Array.isArray(record.value)) {
+        visible.push({ ...record, value: record.value.filter(a => a?.personId === workspaceAuth.personId) });
+      } else if (record.value?.personId === workspaceAuth.personId) {
+        visible.push(record);
+      }
+      continue;
+    }
+
+    if (collection === "pm.scheduleShifts") {
+      if (canViewSchedule) {
+        visible.push(record);
+      } else if (itemId === "$order" && Array.isArray(record.value)) {
+        visible.push({ ...record, value: record.value.filter(id => ownShiftIds.has(String(id))) });
+      } else if (itemId === "$value" && Array.isArray(record.value)) {
+        visible.push({ ...record, value: record.value.filter(s => ownShiftIds.has(String(s?.id))) });
+      } else if (ownShiftIds.has(String(record.value?.id || itemId))) {
+        visible.push(record);
+      }
       continue;
     }
 
