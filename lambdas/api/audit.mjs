@@ -91,6 +91,40 @@ function requestSourceIp(event) {
   );
 }
 
+async function appendAuditEvent(client, auth, {
+  tenantId,
+  agencyId,
+  personId = null,
+  module = 'Shared',
+  entityType = 'general',
+  description,
+  ipAddress = null
+}) {
+  await ensureAuditSchema(client);
+  const text = String(description || '').trim().slice(0, 4000);
+  if (!tenantId || !agencyId || !text) return null;
+  const inserted = await client.query(
+    `INSERT INTO suite_activity_log (
+       tenant_id, agency_id, actor_user_id, actor_person_id,
+       actor_email, actor_name, module, entity_type, description, ip_address
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id, occurred_at`,
+    [
+      tenantId,
+      agencyId,
+      auth.userId,
+      personId,
+      auth.email || null,
+      auth.displayName || auth.email || 'Unknown user',
+      String(module || 'Shared').slice(0,100),
+      String(entityType || 'general').slice(0,100),
+      text,
+      ipAddress
+    ]
+  );
+  return inserted.rows[0];
+}
+
 async function canViewPlatformAudit(client, workspaceAuth) {
   if (workspaceAuth.admin) return true;
 
@@ -230,4 +264,4 @@ async function auditLogApi(client, auth, body, event) {
   });
 }
 
-export { auditLogApi };
+export { auditLogApi, appendAuditEvent };
