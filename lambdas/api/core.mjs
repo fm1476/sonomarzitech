@@ -1512,7 +1512,17 @@ async function loadRoleAbilityMap(client, tenantId, agencyId, roleIds) {
     const roleId = row.value?.id;
     if (typeof roleId === "string") {
       const abilities = { ...(row.value?.abilities || {}) };
-      if (["role_qm_admin","role_fleet_admin"].includes(roleId)) {
+      if ([
+        "role_qm_admin",
+        "role_fleet_admin",
+        "role_k9_admin",
+        "role_drone_admin",
+        "role_eod_admin",
+        "role_subpoena_admin",
+        "role_grants_admin",
+        "role_civil_admin",
+        "role_permits_admin"
+      ].includes(roleId)) {
         abilities.personnel_manage = false;
       }
       if (!["role_admin","role_platform_admin"].includes(roleId)) {
