@@ -710,31 +710,43 @@ function logAuditEntry(moduleName, action, entityType){
     action,
     ip: SESSION_IP || (window.SONOMARZI_AWS_DEV ? 'Pending' : 'Unknown'),
   });
-  // The push above is local-only and gives instant feedback in this tab, but doesn't survive a
-  // reload or reach anyone else -- suite_apply_changes deliberately refuses to save auditLog
-  // changes at all (a real, intentional security boundary, not a bug: it stops any authenticated
-  // user from tampering with their own audit trail through the generic save path). This is the
-  // actual durable write, through the dedicated, restricted function built for exactly this,
-  // fired without blocking whatever code just called logAuditEntry synchronously.
+
+  // Return the durable write promise so critical transitions such as sign-out can wait for it
+  // instead of navigating away while the browser still has the request in flight.
   if(typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
     const ctx = SuiteStore.remoteContext();
     if(ctx.tenantId && ctx.agencyId){
       if(window.SONOMARZI_AWS_DEV){
-        SuiteStore.api('/audit-log', {
+        return SuiteStore.api('/audit-log', {
           method:'POST',
+          keepalive:true,
           body:JSON.stringify({
             action:'log', tenantId:ctx.tenantId, agencyId:ctx.agencyId,
             module:moduleName, description:action, entityType:entityType || 'general'
           })
-        }).catch(error=>console.error('AWS activity log write failed:', error.message));
+        }).then(result=>{
+          REMOTE_AUDIT_LOG = null;
+          return result;
+        }).catch(error=>{
+          console.error('AWS activity log write failed:', error.message);
+          throw error;
+        });
       }else if(typeof supabaseClient!=='undefined' && supabaseClient){
-        supabaseClient.rpc('suite_log_activity', {
+        return supabaseClient.rpc('suite_log_activity', {
           p_tenant_id: ctx.tenantId, p_agency_id: ctx.agencyId,
           p_module: moduleName, p_description: action, p_entity_type: entityType || 'general',
-        }).then(({error})=>{ if(error) console.error('Activity log write failed:', error.message); });
+        }).then(({error})=>{
+          if(error) throw error;
+          REMOTE_AUDIT_LOG = null;
+          return true;
+        }).catch(error=>{
+          console.error('Activity log write failed:', error.message);
+          throw error;
+        });
       }
     }
   }
+  return Promise.resolve(false);
 }
 
 /* =========================================================================
@@ -2936,7 +2948,8 @@ function renderPlatformAuditLogTab(body){
   `;
 
   wireSharedSortHeaders('auditLog', ()=>renderPlatformAuditLogTab(body));
-  if(REMOTE_AUDIT_LOG===null && !REMOTE_AUDIT_LOG_LOADING && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
+  if(!REMOTE_AUDIT_LOG_LOADING && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
+    REMOTE_AUDIT_LOG_LOADING = true;
     fetchRemoteAuditLog().then(()=>renderPlatformAuditLogTab(body));
   }
   const wireFilter = (id, key)=>document.getElementById(id).addEventListener('change', e=>{ AUDIT_LOG_FILTER[key]=e.target.value; renderPlatformAuditLogTab(body); });
