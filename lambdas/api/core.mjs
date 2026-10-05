@@ -3570,7 +3570,7 @@ async function authorizeK9SubpoenaCivilChange(
       onlyFieldsChanged(
         beforeValue,
         afterValue,
-        ["generatedDocuments","fieldHistory"]
+        ["generatedDocuments","attachedDocuments","fieldHistory"]
       )
     ) {
       return { allowed:true };
@@ -4813,6 +4813,7 @@ async function attachmentParentWriteAllowed(
     "fleet.vehicles",
     "grants.seizures",
     "subpoena.subpoenas",
+    "civil.papers",
     "permits.applications"
   ]);
 
@@ -4879,6 +4880,15 @@ async function attachmentParentWriteAllowed(
       (
         has("subpoena_view_all") ||
         value?.personId === workspaceAuth.personId
+      );
+  } else if (parentCollection === "civil.papers") {
+    allowed =
+      has("civil_document_generate") &&
+      civilPaperReadable(
+        workspaceAuth,
+        abilityMap,
+        String(parentId),
+        value
       );
   } else if (parentCollection === "permits.applications") {
     allowed = has("permits_edit") || has("permits_admin");
