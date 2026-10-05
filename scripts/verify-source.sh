@@ -36,4 +36,10 @@ for file in lambdas/api/*.mjs lambdas/api/lib/*.mjs lambdas/identity-admin/*.mjs
   node --check "$file"
 done
 
+# Browser files still benefit from Node's parser. This catches syntax errors before
+# a deployment even when the code references DOM/browser globals at runtime.
+for file in frontend/assets/js/*.js frontend/assets/js/modules/*.js; do
+  node --check "$file"
+done
+
 echo "Source checks passed."
