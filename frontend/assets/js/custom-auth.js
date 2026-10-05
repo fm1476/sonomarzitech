@@ -12,6 +12,47 @@
   function overlay(title,html){document.getElementById('customAuthOverlay')?.remove();const o=document.createElement('div');o.id='customAuthOverlay';o.style.cssText='position:fixed;inset:0;z-index:2147483645;background:rgba(6,15,29,.86);display:flex;align-items:center;justify-content:center;padding:20px';o.innerHTML=`<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;max-width:440px;width:100%;padding:26px;box-shadow:0 18px 60px rgba(0,0,0,.35)"><h3 style="margin:0 0 14px;color:var(--heading)">${title}</h3>${html}</div>`;document.body.appendChild(o);return o}
   async function newPassword(username,session){return new Promise(resolve=>{const o=overlay('Create your password','<p style="font-size:13px;color:var(--text-dim)">Choose your permanent SonoMarzi password.</p><div class="form-row"><label>New password</label><input id="authNewPassword" type="password" autocomplete="new-password"></div><div class="form-row"><label>Confirm password</label><input id="authNewPassword2" type="password" autocomplete="new-password"></div><p id="authChallengeError" class="field-error"></p><button id="authChallengeGo" class="btn btn-primary" style="width:100%;justify-content:center">Continue</button>');o.querySelector('#authChallengeGo').onclick=async()=>{const p=o.querySelector('#authNewPassword').value,p2=o.querySelector('#authNewPassword2').value,e=o.querySelector('#authChallengeError');e.textContent=policy(p);if(e.textContent)return;if(p!==p2){e.textContent='The passwords do not match.';return}try{const r=await cognito('RespondToAuthChallenge',{ClientId:CLIENT_ID,ChallengeName:'NEW_PASSWORD_REQUIRED',Session:session,ChallengeResponses:{USERNAME:username,NEW_PASSWORD:p}});o.remove();resolve(r)}catch(x){e.textContent=x.message}}})}
   async function mfa(username,session){return new Promise(resolve=>{const o=overlay('Security verification','<p style="font-size:13px;color:var(--text-dim)">Enter the 6-digit code from your authenticator app.</p><div class="form-row"><label>Authenticator code</label><input id="authMfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div><p id="authChallengeError" class="field-error"></p><button id="authChallengeGo" class="btn btn-primary" style="width:100%;justify-content:center">Verify</button>');o.querySelector('#authChallengeGo').onclick=async()=>{const code=o.querySelector('#authMfaCode').value.trim(),e=o.querySelector('#authChallengeError');if(!/^\d{6}$/.test(code)){e.textContent='Enter the 6-digit authenticator code.';return}try{const r=await cognito('RespondToAuthChallenge',{ClientId:CLIENT_ID,ChallengeName:'SOFTWARE_TOKEN_MFA',Session:session,ChallengeResponses:{USERNAME:username,SOFTWARE_TOKEN_MFA_CODE:code}});o.remove();resolve(r)}catch(x){e.textContent=x.message}}})}
+  async function getMfaState(accessToken){const u=await cognito('GetUser',{AccessToken:accessToken});const methods=Array.isArray(u?.UserMFASettingList)?u.UserMFASettingList:[];return{enabled:methods.includes('SOFTWARE_TOKEN_MFA'),preferred:u?.PreferredMfaSetting==='SOFTWARE_TOKEN_MFA'}}
+  async function enrollMfa(username,accessToken){
+    const assoc=await cognito('AssociateSoftwareToken',{AccessToken:accessToken});
+    const secret=String(assoc?.SecretCode||'').trim();
+    if(!secret) throw Error('Cognito did not return an authenticator setup key.');
+    const label=encodeURIComponent(`SonoMarzi:${username}`),issuer=encodeURIComponent('SonoMarzi');
+    const uri=`otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}`;
+    return new Promise((resolve,reject)=>{
+      const o=overlay('Set up multi-factor authentication',`<p style="font-size:13px;color:var(--text-dim)">Your agency requires an authenticator app for SonoMarzi. Add this account in Microsoft Authenticator, Google Authenticator, 1Password, or another TOTP app.</p><div class="form-row"><label>Setup key</label><input id="authMfaSecret" value="${secret.replace(/"/g,'&quot;')}" readonly></div><p style="font-size:12px;color:var(--text-dim);word-break:break-all">Authenticator URI: ${uri.replace(/[&<>]/g,'')}</p><div class="form-row"><label>6-digit code</label><input id="authMfaSetupCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div><p id="authChallengeError" class="field-error"></p><button id="authMfaSetupGo" class="btn btn-primary" style="width:100%;justify-content:center">Enable MFA</button>`);
+      o.querySelector('#authMfaSetupGo').onclick=async()=>{
+        const code=o.querySelector('#authMfaSetupCode').value.trim(),e=o.querySelector('#authChallengeError');
+        if(!/^\d{6}$/.test(code)){e.textContent='Enter the 6-digit code from your authenticator app.';return}
+        try{
+          const v=await cognito('VerifySoftwareToken',{AccessToken:accessToken,UserCode:code,FriendlyDeviceName:'SonoMarzi'});
+          if(v?.Status!=='SUCCESS') throw Error('Authenticator verification did not complete.');
+          await cognito('SetUserMFAPreference',{AccessToken:accessToken,SoftwareTokenMfaSettings:{Enabled:true,PreferredMfa:true}});
+          o.remove(); resolve(true);
+        }catch(x){e.textContent=x.message||'Unable to enable MFA.'}
+      };
+    });
+  }
+  async function enforceWorkspaceMfa(ws,username){
+    const policy=String(ws?.mfa_policy||'off');
+    const roles=Array.isArray(ws?.role_ids)?ws.role_ids:[];
+    const required=policy==='all_users'||(policy==='admins'&&(roles.includes('role_admin')||roles.includes('role_platform_admin')));
+    if(!required) return true;
+    const accessToken=sessionStorage.getItem(ACCESS);
+    if(!accessToken) throw Error('MFA verification requires a Cognito access token.');
+    const state=await getMfaState(accessToken);
+    if(state.enabled&&state.preferred) return true;
+    if(state.enabled&&!state.preferred){
+      await cognito('SetUserMFAPreference',{AccessToken:accessToken,SoftwareTokenMfaSettings:{Enabled:true,PreferredMfa:true}});
+    }else{
+      await enrollMfa(username,accessToken);
+    }
+    try{await cognito('GlobalSignOut',{AccessToken:accessToken})}catch{}
+    [ID,ACCESS,REFRESH].forEach(k=>sessionStorage.removeItem(k));
+    const o=overlay('MFA enabled','<p style="font-size:13px;color:var(--text-dim)">Multi-factor authentication is now enabled. Sign in again to verify your authenticator code and continue.</p><button id="authMfaRelogin" class="btn btn-primary" style="width:100%;justify-content:center">Return to sign in</button>');
+    o.querySelector('#authMfaRelogin').onclick=()=>location.replace(location.origin);
+    return false;
+  }
   async function bootstrapAwsSession(){
     const token=sessionStorage.getItem(ID);
     if(!token) return false;
@@ -34,6 +75,8 @@
     const wsRes=await fetch(workspaceUrl,{headers});
     const ws=await wsRes.json().catch(()=>({}));
     if(!wsRes.ok||!ws?.success) throw Error(ws?.error||`Unable to load SonoMarzi workspace (${wsRes.status}).`);
+    const authUser=me?.user?.email||me?.user?.display_name||'user';
+    if(!(await enforceWorkspaceMfa(ws,authUser))) return false;
 
     if(typeof STATE==='undefined') throw Error('SonoMarzi application state is not available.');
     const template=(ws.template&&typeof ws.template==='object')?ws.template:{};
