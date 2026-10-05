@@ -5092,7 +5092,7 @@ fm1476+john@gmail.com</textarea></div>
 // not just visually hidden. Only acts once the app is actually authenticated, so it's a
 // no-op on the login screen or in an unauthenticated tab.
 // ---------------------------------------------------------------------------------------
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;   // full sign-out after this long with no activity
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // full sign-out after this long with no activity
 const IDLE_WARNING_MS = 60 * 1000;        // show the countdown this long before that happens
 let idleLastActivity = Date.now();
 let idleWarningShown = false;
