@@ -996,6 +996,13 @@ async function tenantAdminDbApi(client, auth, body) {
       });
     }
 
+    if (roleIds.includes("role_platform_admin")) {
+      return response(403, {
+        success: false,
+        error: "Platform Admin access cannot be granted through agency role assignment."
+      });
+    }
+
     const q = await client.query(
       `UPDATE suite_memberships
           SET role_ids = $5::text[]
