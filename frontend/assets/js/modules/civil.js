@@ -3838,9 +3838,9 @@ const SuiteStore=(()=>{
     return keys.length===other.length&&keys.every(key=>Object.prototype.hasOwnProperty.call(b,key)&&equal(a[key],b[key]));
   }
   function changes(before,after){const out=[];for(const key of new Set([...before.keys(),...after.keys()]))if(!equal(before.get(key),after.get(key)))out.push({key,value:after.has(key)?after.get(key):null,deleted:!after.has(key),expected:before.has(key)?before.get(key):null,existed:before.has(key)});return out;}
-  function selfServiceOrder(p){
+  function collectionOrder(p){
     const [path,id]=JSON.parse(p.key);
-    return id==='$order'&&path[0]==='pm'&&['trainingCheckins','leaveRequests'].includes(path[1]);
+    return id==='$order' && Array.isArray(path) && path.length>0;
   }
   function mergeSharedOrder(p){
     const before=Array.isArray(p.expected)?p.expected:[];
@@ -3942,7 +3942,7 @@ const SuiteStore=(()=>{
           if(batches.length>1) status('saving',`Saving changes… (${i+1} of ${batches.length})`);
           const batch = batches[i];
           let wireChanges=batch.map(p=>({
-            key:p.key,value:selfServiceOrder(p)?mergeSharedOrder(p):p.value,
+            key:p.key,value:collectionOrder(p)?mergeSharedOrder(p):p.value,
             deleted:p.deleted,expected_version:serverVersions[p.key]||0,
           }));
           let data, error;
@@ -3956,20 +3956,20 @@ const SuiteStore=(()=>{
             error = thrown;
           }
           if(staleSession()) return false; // the session moved on while this request was in flight
-          if(error && /changed in another session/i.test(error.message||'') && batch.some(selfServiceOrder)){
+          if(error && /changed in another session/i.test(error.message||'') && batch.some(collectionOrder)){
             // Rebase only the shared order row. A conflict on a real record still
             // stops the save so another person's changes cannot be overwritten.
             const latest=await remoteRpc('suite_load_workspace',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId});
             if(!latest.error&&!staleSession()){
               const rows=new Map((latest.data.records||[]).map(r=>[r.key,r]));
-              const safe=batch.every(p=>selfServiceOrder(p)||((rows.get(p.key)?.version||0)===(serverVersions[p.key]||0)));
+              const safe=batch.every(p=>collectionOrder(p)||((rows.get(p.key)?.version||0)===(serverVersions[p.key]||0)));
               if(safe){
-                for(const p of batch.filter(selfServiceOrder)){
+                for(const p of batch.filter(collectionOrder)){
                   const row=rows.get(p.key);
                   serverVersions[p.key]=row?.version||0;
                   if(row&&!row.deleted)serverOrders.set(p.key,clone(row.value));else serverOrders.delete(p.key);
                 }
-                wireChanges=batch.map(p=>({key:p.key,value:selfServiceOrder(p)?mergeSharedOrder(p):p.value,deleted:p.deleted,expected_version:serverVersions[p.key]||0}));
+                wireChanges=batch.map(p=>({key:p.key,value:collectionOrder(p)?mergeSharedOrder(p):p.value,deleted:p.deleted,expected_version:serverVersions[p.key]||0}));
                 try{({data,error}=await remoteRpc('suite_apply_changes',{p_tenant_id:remoteContext.tenantId,p_agency_id:remoteContext.agencyId,p_changes:wireChanges}));}catch(thrown){error=thrown;}
               }
             }
