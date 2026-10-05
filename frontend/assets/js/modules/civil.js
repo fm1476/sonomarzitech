@@ -4359,7 +4359,7 @@ const SuiteStore=(()=>{
     const context={...remoteContext};
     if(!context.tenantId||!context.agencyId)return false;
     try{
-      const result=await awsJson(`/workspace-revision?tenantId=${encodeURIComponent(context.tenantId)}&agencyId=${encodeURIComponent(context.agencyId)}`);
+      const result=await awsJson(`/workspace?tenantId=${encodeURIComponent(context.tenantId)}&agencyId=${encodeURIComponent(context.agencyId)}&revision=1`);
       const revision=result?.data||{};
       const recordRevision=revision.records_revision||null;
       const auditRevision=Number(revision.audit_revision||0);
