@@ -3226,6 +3226,20 @@ async function fetchRemoteAuditLog(){
   }
 }
 
+window.SonoMarziRefreshAudit = async function(){
+  if(REMOTE_AUDIT_LOG_LOADING) return false;
+  REMOTE_AUDIT_LOG = null;
+  if(typeof ACTIVE_SHARED_VIEW!=='undefined' && ACTIVE_SHARED_VIEW==='audit'){
+    const body=document.getElementById('view-audit');
+    if(body){
+      await fetchRemoteAuditLog();
+      renderPlatformAuditLogTab(body);
+      return true;
+    }
+  }
+  return false;
+};
+
 function renderPlatformAuditLogTab(body){
   const canExport = can('qm_reports_export') || can('fleet_reports_export') || can('pm_reports_export') || can('k9_reports_export') || can('drone_reports_export') || can('eod_reports_export') || can('subpoena_reports_export') || can('grants_reports_export') || can('civil_reports_export');
   // suite_apply_changes deliberately refuses to save auditLog changes (a real security boundary,
