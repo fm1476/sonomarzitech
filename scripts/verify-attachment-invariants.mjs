@@ -13,6 +13,7 @@ for (const token of [
   'fleet.vehicles',
   'grants.seizures',
   'subpoena.subpoenas',
+  'civil.papers',
   'permits.applications'
 ]) {
   if (!core.includes(token)) throw new Error('Attachment authorization invariant missing: '+token);
