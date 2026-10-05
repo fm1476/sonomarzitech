@@ -1,6 +1,7 @@
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 import pg from "pg";
+import { readFileSync } from "node:fs";
 
 import {
   SecretsManagerClient,
@@ -92,7 +93,11 @@ async function connectDatabase() {
     user: credentials.username,
     password: credentials.password,
     ssl: {
-      rejectUnauthorized: false
+      rejectUnauthorized: true,
+      ca: readFileSync(
+        new URL("./certs/us-east-2-bundle.pem", import.meta.url),
+        "utf8"
+      )
     }
   });
 
