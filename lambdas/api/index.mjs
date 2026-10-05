@@ -7,7 +7,8 @@ import {
   createAttachmentDownloadUrl,
   deleteAttachment,
   getMe,
-  getWorkspace
+  getWorkspace,
+  getWorkspaceRevision
 } from "./core.mjs";
 import { applyChanges } from "./apply-changes.mjs";
 import { fieldTrainingApi } from "./field-training.mjs";
@@ -54,6 +55,7 @@ export const handler = async event => {
     const allowedPaths = new Set([
       "/me",
       "/workspace",
+      "/workspace-revision",
       "/apply-changes",
       "/attachments/upload-url",
       "/attachments/download-url",
@@ -96,7 +98,7 @@ export const handler = async event => {
     }
 
     if (
-      (path === "/me" || path === "/workspace") &&
+      (path === "/me" || path === "/workspace" || path === "/workspace-revision") &&
       method !== "GET"
     ) {
       return response(405, {
@@ -116,6 +118,10 @@ export const handler = async event => {
 
     if (path === "/workspace") {
       return await getWorkspace(client, userAuth, event);
+    }
+
+    if (path === "/workspace-revision") {
+      return await getWorkspaceRevision(client, userAuth, event);
     }
 
     const body = parseBody(event);
