@@ -12,7 +12,8 @@ const requiredModuleAdmins = [
   'role_eod_admin',
   'role_subpoena_admin',
   'role_grants_admin',
-  'role_civil_admin'
+  'role_civil_admin',
+  'role_permits_admin'
 ];
 
 for (const id of requiredModuleAdmins) {
