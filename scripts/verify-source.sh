@@ -46,4 +46,14 @@ node scripts/verify-role-invariants.mjs
 node scripts/verify-attachment-invariants.mjs
 node scripts/verify-mfa-invariants.mjs
 
+if grep -R -n --include='*.mjs' --include='*.js' 'rejectUnauthorized:[[:space:]]*false' lambdas frontend; then
+  echo "ERROR: Database TLS certificate verification must not be disabled."
+  exit 1
+fi
+
+if ! grep -q 'us-east-2-bundle.pem' lambdas/api/core.mjs; then
+  echo "ERROR: API database connection is not pinned to the packaged RDS CA bundle."
+  exit 1
+fi
+
 echo "Source checks passed."
