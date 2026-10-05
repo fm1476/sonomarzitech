@@ -4618,6 +4618,21 @@ async function attachmentReadAllowed(
     }
   }
 
+  let fieldTrainingManager = false;
+  if (fieldTrainingRows.length) {
+    const abilityMap = await loadRoleAbilityMap(
+      client,
+      workspaceAuth.tenantId,
+      workspaceAuth.agencyId,
+      workspaceAuth.roleIds
+    );
+    fieldTrainingManager = roleHasAbility(
+      abilityMap,
+      workspaceAuth.roleIds,
+      "ft_manage"
+    );
+  }
+
   for (const row of fieldTrainingRows) {
     const state = row.value && typeof row.value === "object"
       ? row.value
@@ -4642,6 +4657,7 @@ async function attachmentReadAllowed(
     if (!enrollment) continue;
 
     if (
+      fieldTrainingManager ||
       [
         enrollment.trainee_user,
         enrollment.trainer_user,
