@@ -42,4 +42,6 @@ for file in frontend/assets/js/*.js frontend/assets/js/modules/*.js; do
   node --check "$file"
 done
 
+node scripts/verify-role-invariants.mjs
+
 echo "Source checks passed."
