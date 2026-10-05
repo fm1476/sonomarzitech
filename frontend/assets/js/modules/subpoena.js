@@ -645,7 +645,7 @@ function renderSubpoenaDetailTabContent(s){
         dropZone.style.pointerEvents='none';
         dropZone.style.opacity='.65';
         try{
-          const meta = await AWS_ATTACHMENTS.upload(file);
+          const meta = await AWS_ATTACHMENTS.upload(file, {collection:'subpoena.subpoenas', itemId:s.id});
           s.attachments.push({
             id:'att'+Date.now(),
             ...meta
@@ -684,7 +684,7 @@ function renderSubpoenaDetailTabContent(s){
       if(!removed) return;
       b.disabled = true;
       try{
-        await AWS_ATTACHMENTS.remove(removed);
+        await AWS_ATTACHMENTS.remove(removed, {collection:'subpoena.subpoenas', itemId:s.id});
         s.attachments.splice(idx,1);
         logActivity(`Removed document "${removed.filename}" from subpoena for case ${s.caseNumber}.`, "subpoena", s.id);
         persist();
@@ -751,8 +751,9 @@ const AWS_ATTACHMENTS = (() => {
     return data;
   }
 
-  async function upload(file){
+  async function upload(file, parent){
     if(!file || !file.size) throw Error('Choose a file first.');
+    if(!parent?.collection || !parent?.itemId) throw Error('Attachment parent record is required.');
     if(file.size > 25 * 1024 * 1024) throw Error('Attachments are limited to 25 MB.');
 
     const ctx = context();
@@ -761,7 +762,9 @@ const AWS_ATTACHMENTS = (() => {
       agency_id: ctx.agencyId,
       file_name: file.name,
       content_type: file.type || 'application/octet-stream',
-      size_bytes: file.size
+      size_bytes: file.size,
+      parent_collection: parent.collection,
+      parent_id: parent.itemId
     });
 
     const put = await fetch(reservation.upload_url, {
@@ -807,13 +810,16 @@ const AWS_ATTACHMENTS = (() => {
     window.open(url, '_blank', 'noopener');
   }
 
-  async function remove(attachment){
+  async function remove(attachment, parent){
     if(!attachment?.storageKey) return;
+    if(!parent?.collection || !parent?.itemId) throw Error('Attachment parent record is required.');
     const ctx = context();
     await api('/attachments/delete', {
       tenant_id: ctx.tenantId,
       agency_id: ctx.agencyId,
-      key: attachment.storageKey
+      key: attachment.storageKey,
+      parent_collection: parent.collection,
+      parent_id: parent.itemId
     });
   }
 
