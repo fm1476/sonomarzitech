@@ -1,4 +1,5 @@
 import { response } from "./core.mjs";
+import { appendAuditEvent } from "./audit.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 /*
@@ -869,8 +870,15 @@ async function tenantAdminDbApi(client, auth, body) {
       );
     }
 
-    await platformEvent(client, auth, tenantId,
-      `${needsActivation ? 'Invited' : 'Added'} user ${name} (${email}) to ${agencyInfo.rows[0].agency_name}`);
+    const userAction = `${needsActivation ? 'Invited' : 'Added'} user ${name} (${email}) to ${agencyInfo.rows[0].agency_name}`;
+    await platformEvent(client, auth, tenantId, userAction);
+    await appendAuditEvent(client, auth, {
+      tenantId,
+      agencyId,
+      module: 'User Administration',
+      entityType: 'user_account',
+      description: userAction
+    });
 
     return response(200, {
       success: true,
