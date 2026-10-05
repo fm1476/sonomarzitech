@@ -85,6 +85,19 @@ const AWS_ATTACHMENTS = (() => {
 
   async function signedUrl(attachment){
     if(attachment?.storageKey){
+      // The download API deliberately requires the S3 object key to already be referenced
+      // by a persisted workspace record. Uploads update STATE first and SuiteStore saves on
+      // a short debounce, so an immediate Open could otherwise race that save and receive a
+      // correct-but-confusing 403. Flush any pending record write before asking for the URL.
+      if(
+        typeof SuiteStore !== 'undefined' &&
+        typeof SuiteStore.pending === 'function' &&
+        SuiteStore.pending() &&
+        typeof SuiteStore.flush === 'function'
+      ){
+        await SuiteStore.flush();
+      }
+
       const ctx = context();
       const signed = await api('/attachments/download-url', {
         tenant_id: ctx.tenantId,
