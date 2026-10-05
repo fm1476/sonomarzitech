@@ -1064,7 +1064,7 @@ async function hydrateAwsPhotoImages(container, photos){
   }));
 }
 
-function wirePhotoManager(containerId, photos, idPrefix, canManage, afterChange){
+function wirePhotoManager(containerId, photos, idPrefix, canManage, afterChange, attachmentParent){
   const container = document.getElementById(containerId);
   if(!container) return;
 
@@ -1091,7 +1091,7 @@ function wirePhotoManager(containerId, photos, idPrefix, canManage, afterChange)
         try{
           for(const file of files){
             const prepared = await resizeImageForAwsUpload(file, 1600, 0.82);
-            const meta = await AWS_ATTACHMENTS.upload(prepared);
+            const meta = await AWS_ATTACHMENTS.upload(prepared, attachmentParent);
             photos.push({
               id:'photo'+Date.now()+Math.random().toString(36).slice(2,7),
               ...meta,
@@ -1133,14 +1133,11 @@ function wirePhotoManager(containerId, photos, idPrefix, canManage, afterChange)
     const ph = photos[idx];
     if(!ph) return;
 
-    // Removing the metadata is the user-facing operation. Physical S3 deletion is
-    // attempted for admins, but a denied cleanup must not block the record change.
     try{
-      if(ph.storageKey && ['role_admin','role_platform_admin'].some(id=>(HOME_ROLE_IDS||[]).includes(id))){
-        await AWS_ATTACHMENTS.remove(ph);
-      }
+      if(ph.storageKey) await AWS_ATTACHMENTS.remove(ph, attachmentParent);
     }catch(error){
-      console.warn('S3 photo cleanup deferred:', error);
+      toast(error.message || "Photo could not be removed from secure storage.", true);
+      return;
     }
 
     photos.splice(idx,1);
