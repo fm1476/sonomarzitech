@@ -3773,14 +3773,6 @@ const SuiteStore=(()=>{
     }
 
     if(name==='suite_apply_changes'){
-      let badge=document.getElementById('awsSaveBackendBadge');
-      if(!badge){
-        badge=document.createElement('div');
-        badge.id='awsSaveBackendBadge';
-        badge.style.cssText='position:fixed;right:12px;bottom:12px;z-index:2147483645;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;padding:8px 10px;font:700 11px/1.25 system-ui;max-width:320px';
-        document.body.appendChild(badge);
-      }
-      badge.textContent='AWS save: sending to RDS…';
       try{
         const data=await awsJson('/apply-changes',{
           method:'POST',
@@ -3790,10 +3782,8 @@ const SuiteStore=(()=>{
             changes:args?.p_changes||[]
           })
         });
-        badge.textContent='AWS save: confirmed by RDS';
         return {data,error:null};
       }catch(error){
-        badge.textContent='AWS save FAILED: '+(error?.message||String(error));
         return {data:null,error};
       }
     }
