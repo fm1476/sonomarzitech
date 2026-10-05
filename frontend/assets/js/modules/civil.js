@@ -4080,7 +4080,12 @@ const SuiteStore=(()=>{
         }else{
           consecutiveFailures++;
           lastErrorWasVersionConflict=false;
-          status('error',e.message||'Save failed. Changes remain in this tab.');
+          const networkFailure = navigator.onLine===false || e?.name==='TypeError' || /failed to fetch|networkerror|network request failed/i.test(String(e?.message||''));
+          if(networkFailure){
+            status('error','Connection lost. Your changes are still here but have not been saved. Reconnect to the internet, then click "Retry".');
+          }else{
+            status('error',e.message||'Save failed. Your changes remain in this tab and have not been saved.');
+          }
         }
       }
     }finally{
