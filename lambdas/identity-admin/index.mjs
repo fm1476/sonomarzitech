@@ -9,7 +9,16 @@ import {
   AdminDisableUserCommand,
   DescribeUserPoolClientCommand,
   UpdateUserPoolClientCommand,
-  SetUserPoolMfaConfigCommand
+  SetUserPoolMfaConfigCommand,
+  InitiateAuthCommand,
+  RespondToAuthChallengeCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
+  GlobalSignOutCommand,
+  GetUserCommand,
+  AssociateSoftwareTokenCommand,
+  VerifySoftwareTokenCommand,
+  SetUserMFAPreferenceCommand
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
   ApiGatewayV2Client,
@@ -74,6 +83,93 @@ function parseBody(event) {
     ? Buffer.from(event.body, "base64").toString("utf8")
     : event.body;
   return raw ? JSON.parse(raw) : {};
+}
+
+async function publicAuth(body) {
+  const operation = String(body?.operation || "");
+  const payload = body?.payload && typeof body.payload === "object" ? body.payload : {};
+
+  if (operation === "InitiateAuth") {
+    const authFlow = String(payload.AuthFlow || "");
+    if (!["USER_PASSWORD_AUTH","REFRESH_TOKEN_AUTH","REFRESH_TOKEN"].includes(authFlow)) {
+      const error = new Error("Unsupported authentication flow.");
+      error.statusCode = 400;
+      throw error;
+    }
+    return await cognito.send(new InitiateAuthCommand({
+      ...payload,
+      ClientId: COGNITO_APP_CLIENT_ID,
+      AuthFlow: authFlow
+    }));
+  }
+
+  if (operation === "RespondToAuthChallenge") {
+    const challenge = String(payload.ChallengeName || "");
+    if (!["NEW_PASSWORD_REQUIRED","SOFTWARE_TOKEN_MFA","MFA_SETUP"].includes(challenge)) {
+      const error = new Error("Unsupported authentication challenge.");
+      error.statusCode = 400;
+      throw error;
+    }
+    return await cognito.send(new RespondToAuthChallengeCommand({
+      ...payload,
+      ClientId: COGNITO_APP_CLIENT_ID,
+      ChallengeName: challenge
+    }));
+  }
+
+  if (operation === "ForgotPassword") {
+    return await cognito.send(new ForgotPasswordCommand({
+      ...payload,
+      ClientId: COGNITO_APP_CLIENT_ID
+    }));
+  }
+
+  if (operation === "ConfirmForgotPassword") {
+    return await cognito.send(new ConfirmForgotPasswordCommand({
+      ...payload,
+      ClientId: COGNITO_APP_CLIENT_ID
+    }));
+  }
+
+  if (operation === "GlobalSignOut") {
+    return await cognito.send(new GlobalSignOutCommand({
+      AccessToken: String(payload.AccessToken || "")
+    }));
+  }
+
+  if (operation === "GetUser") {
+    return await cognito.send(new GetUserCommand({
+      AccessToken: String(payload.AccessToken || "")
+    }));
+  }
+
+  if (operation === "AssociateSoftwareToken") {
+    return await cognito.send(new AssociateSoftwareTokenCommand({
+      AccessToken: payload.AccessToken ? String(payload.AccessToken) : undefined,
+      Session: payload.Session ? String(payload.Session) : undefined
+    }));
+  }
+
+  if (operation === "VerifySoftwareToken") {
+    return await cognito.send(new VerifySoftwareTokenCommand({
+      AccessToken: payload.AccessToken ? String(payload.AccessToken) : undefined,
+      Session: payload.Session ? String(payload.Session) : undefined,
+      UserCode: String(payload.UserCode || ""),
+      FriendlyDeviceName: payload.FriendlyDeviceName ? String(payload.FriendlyDeviceName) : undefined
+    }));
+  }
+
+  if (operation === "SetUserMFAPreference") {
+    return await cognito.send(new SetUserMFAPreferenceCommand({
+      AccessToken: String(payload.AccessToken || ""),
+      SMSMfaSettings: payload.SMSMfaSettings,
+      SoftwareTokenMfaSettings: payload.SoftwareTokenMfaSettings
+    }));
+  }
+
+  const error = new Error("Unsupported public identity operation.");
+  error.statusCode = 400;
+  throw error;
 }
 
 function authHeader(event) {
@@ -710,7 +806,13 @@ export const handler = async event => {
     const action = String(body?.action || "");
     const path = event?.rawPath || event?.path || "";
 
-    if (path === "/activation") return await activateAccount(body);
+    if (path === "/activation") {
+      if (body?.action === "public_auth") {
+        const data = await publicAuth(body);
+        return response(200,{success:true,data});
+      }
+      return await activateAccount(body);
+    }
     if (action === "invite_user") return await createUser(event, body);
     if (action === "update_user_profile") return await updateProfile(event, body);
     if (action === "reset_password") return await resetPassword(event, body);
