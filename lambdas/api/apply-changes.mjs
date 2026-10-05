@@ -181,6 +181,9 @@ async function applyChanges(client, auth, body) {
           "Record changed in another session. Reload before retrying."
         );
         conflict.code = "40001";
+        conflict.conflictKey = change.key;
+        conflict.expectedVersion = change.expectedVersion;
+        conflict.currentVersion = currentVersion;
         throw conflict;
       }
 
@@ -334,7 +337,10 @@ async function applyChanges(client, auth, body) {
       return response(409, {
         success: false,
         code: "40001",
-        error: "Record changed in another session. Reload before retrying."
+        error: "Record changed in another session. Reload before retrying.",
+        conflict_key: error.conflictKey || null,
+        expected_version: Number.isSafeInteger(error.expectedVersion) ? error.expectedVersion : null,
+        current_version: Number.isSafeInteger(error.currentVersion) ? error.currentVersion : null
       });
     }
 
