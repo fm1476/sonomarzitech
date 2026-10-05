@@ -23,6 +23,28 @@ aws s3api put-bucket-encryption \
     '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}' \
   --region "$REGION"
 
+# Browser uploads use short-lived pre-signed S3 URLs. The bucket therefore needs CORS for
+# SonoMarzi's production origins even though the bucket itself remains fully private.
+aws s3api put-bucket-cors \
+  --bucket "$ATTACHMENTS_BUCKET" \
+  --cors-configuration '{
+    "CORSRules":[
+      {
+        "AllowedOrigins":[
+          "https://*.sonomarzi.com",
+          "https://sonomarzi.com",
+          "https://www.sonomarzi.com",
+          "https://d1b97r2bbw5qld.cloudfront.net"
+        ],
+        "AllowedMethods":["GET","PUT","HEAD"],
+        "AllowedHeaders":["*"],
+        "ExposeHeaders":["ETag"],
+        "MaxAgeSeconds":3600
+      }
+    ]
+  }' \
+  --region "$REGION"
+
 echo
 echo "Versioning:"
 aws s3api get-bucket-versioning --bucket "$ATTACHMENTS_BUCKET" --region "$REGION"
@@ -34,6 +56,10 @@ aws s3api get-public-access-block --bucket "$ATTACHMENTS_BUCKET" --region "$REGI
 echo
 echo "Encryption:"
 aws s3api get-bucket-encryption --bucket "$ATTACHMENTS_BUCKET" --region "$REGION"
+
+echo
+echo "CORS:"
+aws s3api get-bucket-cors --bucket "$ATTACHMENTS_BUCKET" --region "$REGION"
 
 echo
 echo "Attachment bucket protection configured."
