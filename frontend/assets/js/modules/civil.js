@@ -4377,7 +4377,7 @@ logout=async function(){
     const proceed = confirm('Your latest changes could not be saved to the server (the connection may still be having trouble). Log out anyway and lose those unsaved changes? Choose Cancel to stay and try saving again, or download a backup first from Data & Connection.');
     if(!proceed) return;
   }
-  try{ if(CURRENT_USER_ID) logAuditEntry('Shared',`${personName(CURRENT_USER_ID)} signed out.`,'auth'); }catch(e){ console.error('Audit log entry on sign-out failed (logging out anyway):', e); }
+  try{ if(CURRENT_USER_ID) await logAuditEntry('Shared',`${personName(CURRENT_USER_ID)} signed out.`,'auth'); }catch(e){ console.error('Audit log entry on sign-out failed (logging out anyway):', e); }
   try{ await SuiteStore.signOut(); }catch(e){ console.error('Sign-out failed (clearing this tab anyway):', e); }
   // AWS/Cognito keeps its own browser session at the hosted login domain. Clearing the app
   // session alone is not enough to switch users, so end the Cognito hosted session as well.
