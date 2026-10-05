@@ -2625,13 +2625,14 @@ function runCoreMigrations(){
         r.abilities = r.abilities || {};
         r.abilities.admin_roles = false;
       }
+      const canonicalDefault = DEFAULT_ROLES.find(dr=>dr.id===r.id);
       ALL_ABILITY_IDS.forEach(id=>{
         if(VENDOR_ONLY_ABILITIES.includes(id)){
           if(r.abilities[id]===undefined) r.abilities[id] = false;
           return;
         }
         if(r.locked || r.id==='role_platform_admin') r.abilities[id] = true;
-        else if(r.abilities[id]===undefined) r.abilities[id] = false;
+        else if(r.abilities[id]===undefined) r.abilities[id] = canonicalDefault?.abilities?.[id] === true;
       });
     });
   });
