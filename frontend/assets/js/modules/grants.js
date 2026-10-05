@@ -1281,6 +1281,10 @@ function renderAdmin(){
   }
   const tabs = [];
   if(canManage){ Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label])); tabs.push(['notifications','Notification Routing']); }
+  if(can('grants_bulk_import')){
+    tabs.push(['bulkImportGrantAwards','Data Migration: Grant Awards']);
+    tabs.push(['bulkImportSeizures','Data Migration: Seizures']);
+  }
   if(canAudit) tabs.push(['audit','Platform Audit Log']);
   if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
 
@@ -1298,6 +1302,8 @@ function renderAdminTabBody(){
   const body = document.getElementById('adminTabBodyGr');
   if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
+  else if(ADMIN_TAB==='bulkImportGrantAwards') renderBulkImportTab(body, 'grants_awards');
+  else if(ADMIN_TAB==='bulkImportSeizures') renderBulkImportTab(body, 'grants_seizures');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
 }
 
