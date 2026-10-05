@@ -1678,7 +1678,7 @@ const DEFAULT_ROLES = [
   {id:"role_platform_admin", name:"SonoMarzi Platform Admin", locked:true, hidden:true,
     description:"SonoMarzi-internal role that controls which modules exist for this deployment. Not visible to customer administrators \u2014 this is a vendor-side control, separate from how a customer's own admins manage roles within whatever modules they've been granted.",
     agencyScope: [], abilities: abilitiesFor(["admin_roles","manage_application_access","manage_field_labels","manage_branding","personnel_view",
-      "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil"])},
+      "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil","module_permits"])},
 ];
 DEFAULT_ROLES.forEach(r=>{
   if(!['role_admin','role_platform_admin'].includes(r.id)) r.abilities.admin_roles=false;
