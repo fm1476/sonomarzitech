@@ -3446,6 +3446,7 @@ function renderTimeOffSub(){
   const statusBadge = status=>{
     if(status==='approved') return `<span class="badge badge-available">Approved</span>`;
     if(status==='denied') return `<span class="badge badge-missing">Denied</span>`;
+    if(status==='cancelled') return `<span class="badge">Rescinded</span>`;
     return `<span class="badge badge-maintenance">Pending</span>`;
   };
   const dateRange = r => r.startDate===r.endDate ? escapeHtml(r.startDate) : `${escapeHtml(r.startDate)} \u2192 ${escapeHtml(r.endDate)}`;
@@ -3465,7 +3466,7 @@ function renderTimeOffSub(){
     <td style="max-width:220px;">${escapeHtml(r.reason||'\u2014')}</td>
     <td>${statusBadge(r.status)}${r.decisionNotes?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${escapeHtml(r.decisionNotes)}</div>`:''}</td>
     <td style="font-size:12px;color:var(--text-dim);">${r.submittedAt?SuiteUX.displayInstant(r.submittedAt):'\u2014'}</td>
-    <td>${r.status==='pending'?`<button class="btn-icon" data-cancel-leave="${r.id}" title="Cancel request">${ICONS.trash}</button>`:''}</td>
+    <td>${r.status==='pending'?`<button class="btn btn-sm btn-outline" data-cancel-leave="${r.id}" title="Rescind request">Rescind</button>`:''}</td>
   </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No requests submitted yet.</td></tr>`;
 
   document.getElementById('schedSubBody').innerHTML = `
@@ -3487,9 +3488,13 @@ function renderTimeOffSub(){
   document.querySelectorAll('[data-approve-leave]').forEach(b=>b.addEventListener('click', ()=>decideLeaveRequest(b.dataset.approveLeave, 'approved')));
   document.querySelectorAll('[data-deny-leave]').forEach(b=>b.addEventListener('click', ()=>decideLeaveRequest(b.dataset.denyLeave, 'denied')));
   document.querySelectorAll('[data-cancel-leave]').forEach(b=>b.addEventListener('click', ()=>{
-    if(!confirm('Cancel this time-off request?')) return;
-    STATE.pm.leaveRequests = STATE.pm.leaveRequests.filter(r=>r.id!==b.dataset.cancelLeave);
-    logActivity('Cancelled a time-off request.', "schedule");
+    const req = STATE.pm.leaveRequests.find(r=>r.id===b.dataset.cancelLeave);
+    if(!req || req.status!=='pending') return;
+    if(!confirm('Rescind this pending time-off request?')) return;
+    req.status = 'cancelled';
+    req.rescindedAt = new Date().toISOString();
+    req.rescindedBy = CURRENT_USER_ID;
+    logActivity(`Rescinded a ${req.code} time-off request for ${personName(req.personId)}.`, "schedule");
     persist(); renderTimeOffSub();
   }));
 }
