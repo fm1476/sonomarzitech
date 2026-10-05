@@ -656,8 +656,10 @@ const StaffNotices=(()=>{
     queuedOffer={people,shift,date};
     closeModal();SuiteUX.navigate('shared/notices');
   }
+  // Keep unread indicators responsive in multi-user use. Staff notices live in their
+  // own tables, so they do not participate in the general workspace revision check.
   setInterval(()=>{if(SuiteStore.mode()==='shared'&&CURRENT_USER_ID&&document.visibilityState==='visible')
-    loadInbox().catch(e=>console.warn('Notice refresh failed',e));},60000);
+    loadInbox().catch(e=>console.warn('Notice refresh failed',e));},15000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SuiteStore.mode()==='shared'&&CURRENT_USER_ID)
     loadInbox().catch(()=>{});});
   return {render,offer,enablePush,disablePush,beforeSignOut,loadInbox,updateNavBadge,canCompose};
