@@ -547,7 +547,288 @@ const BULK_IMPORT_SCHEMAS = {
         subject:record.subject||'', issuedBy:record.issuedBy||''};
     },
     existingArray(){ return STATE.subpoena.subpoenas; },
+  },  grants_awards: {
+    label: 'Grant Awards',
+    ability: 'grants_bulk_import',
+    fields: [
+      {key:'grantName', label:'Grant Name', required:true},
+      {key:'grantNumber', label:'Grant Number', required:true},
+      {key:'fundingAgency', label:'Funding Agency', required:false},
+      {key:'programArea', label:'Program Area', required:false},
+      {key:'awardAmount', label:'Award Amount', required:false},
+      {key:'matchRequired', label:'Match Required (true/false)', required:false},
+      {key:'matchAmount', label:'Match Amount', required:false},
+      {key:'awardStartDate', label:'Award Start Date (YYYY-MM-DD)', required:false},
+      {key:'awardEndDate', label:'Award End Date (YYYY-MM-DD)', required:false},
+      {key:'status', label:'Status', required:false},
+      {key:'reportingFrequency', label:'Reporting Frequency', required:false},
+      {key:'nextReportDue', label:'Next Report Due (YYYY-MM-DD)', required:false},
+      {key:'cageCode', label:'CAGE Code', required:false},
+      {key:'grantManager', label:'Grant Manager (Full Name or Badge)', required:false},
+      {key:'notes', label:'Notes', required:false},
+    ],
+    sample: {grantName:'State Public Safety Technology Grant FY2027', grantNumber:'PS-2027-001', fundingAgency:'State Grant', programArea:'Law Enforcement',
+      awardAmount:'75000', matchRequired:'false', matchAmount:'0', awardStartDate:'2027-01-01', awardEndDate:'2027-12-31', status:'Active',
+      reportingFrequency:'Quarterly', nextReportDue:'2027-04-15', cageCode:'8X1234', grantManager:'Jane Doe', notes:''},
+    resolve(row){
+      if(!row.grantManager) return {};
+      const manager=STATE.personnel.find(p=>p.name.toLowerCase()===row.grantManager.toLowerCase() || (p.badge&&p.badge===row.grantManager));
+      if(!manager) return {error:`No matching grant manager found for "${row.grantManager}"`};
+      return {manager};
+    },
+    build(row,resolved){
+      const matchRequired=/^true$/i.test(row.matchRequired||'');
+      const awardAmount=Number(row.awardAmount)||0, matchAmount=Number(row.matchAmount)||0;
+      return {id:'gr'+Date.now()+Math.random().toString(36).slice(2,7), grantName:row.grantName, grantNumber:row.grantNumber,
+        fundingAgency:row.fundingAgency||'', programArea:row.programArea||'', awardAmount, matchRequired, matchAmount,
+        matchPercent:matchRequired&&awardAmount+matchAmount?Math.round((matchAmount/(awardAmount+matchAmount))*100):0,
+        awardStartDate:row.awardStartDate||'', awardEndDate:row.awardEndDate||'', status:row.status||'Active',
+        reportingFrequency:row.reportingFrequency||'', nextReportDue:row.nextReportDue||null, samRegistrationCurrent:true,
+        cageCode:row.cageCode||'', grantManagerId:resolved.manager?.id||'', fundedEquipment:[], fieldHistory:[], notes:row.notes||''};
+    },
+    exportRow(record){
+      const manager=STATE.personnel.find(p=>p.id===record.grantManagerId);
+      return {grantName:record.grantName||'', grantNumber:record.grantNumber||'', fundingAgency:record.fundingAgency||'', programArea:record.programArea||'',
+        awardAmount:record.awardAmount??'', matchRequired:String(!!record.matchRequired), matchAmount:record.matchAmount??'',
+        awardStartDate:record.awardStartDate||'', awardEndDate:record.awardEndDate||'', status:record.status||'',
+        reportingFrequency:record.reportingFrequency||'', nextReportDue:record.nextReportDue||'', cageCode:record.cageCode||'',
+        grantManager:manager?.name||manager?.badge||'', notes:record.notes||''};
+    },
+    existingArray(){ return STATE.grants.grants; },
+    matchExisting(row,arr){ return arr.find(g=>g.grantNumber===row.grantNumber); },
   },
+  grants_seizures: {
+    label: 'Asset Forfeiture / Seizures',
+    ability: 'grants_bulk_import',
+    fields: [
+      {key:'caseNumber', label:'Case Number', required:true},
+      {key:'seizureDate', label:'Seizure Date (YYYY-MM-DD)', required:true},
+      {key:'seizureType', label:'Seizure Type', required:true},
+      {key:'forfeitureType', label:'Forfeiture Type', required:false},
+      {key:'estimatedValue', label:'Estimated Value', required:false},
+      {key:'description', label:'Description', required:false},
+      {key:'status', label:'Status', required:false},
+      {key:'seizingOfficer', label:'Seizing Officer (Full Name or Badge)', required:false},
+      {key:'location', label:'Location', required:false},
+      {key:'dispositionType', label:'Disposition Type', required:false},
+      {key:'dispositionDate', label:'Disposition Date (YYYY-MM-DD)', required:false},
+      {key:'equitableShareAmount', label:'Equitable Share Amount', required:false},
+      {key:'equitableSharePercent', label:'Equitable Share Percent', required:false},
+      {key:'sharingAgencyFederal', label:'Federal Sharing Agency', required:false},
+      {key:'notes', label:'Notes', required:false},
+    ],
+    sample: {caseNumber:'CR27-00001', seizureDate:'2027-01-10', seizureType:'Cash', forfeitureType:'State Civil Forfeiture',
+      estimatedValue:'10000', description:'Example imported seizure', status:'Pending', seizingOfficer:'Jane Doe', location:'Petaluma, CA',
+      dispositionType:'Pending', dispositionDate:'', equitableShareAmount:'', equitableSharePercent:'', sharingAgencyFederal:'', notes:''},
+    resolve(row){
+      if(!row.seizingOfficer) return {};
+      const officer=STATE.personnel.find(p=>p.name.toLowerCase()===row.seizingOfficer.toLowerCase() || (p.badge&&p.badge===row.seizingOfficer));
+      if(!officer) return {error:`No matching seizing officer found for "${row.seizingOfficer}"`};
+      return {officer};
+    },
+    build(row,resolved){
+      return {id:'sz'+Date.now()+Math.random().toString(36).slice(2,7), caseNumber:row.caseNumber, seizureDate:row.seizureDate,
+        seizureType:row.seizureType, forfeitureType:row.forfeitureType||'', estimatedValue:Number(row.estimatedValue)||0,
+        description:row.description||'', status:row.status||'Pending', seizingOfficerId:resolved.officer?.id||'', location:row.location||'',
+        dispositionType:row.dispositionType||'Pending', dispositionDate:row.dispositionDate||null,
+        equitableShareAmount:row.equitableShareAmount?Number(row.equitableShareAmount):null,
+        equitableSharePercent:row.equitableSharePercent?Number(row.equitableSharePercent):null,
+        sharingAgencyFederal:row.sharingAgencyFederal||null, officialUseDesignation:'', samRegistrationCurrent:true,
+        fieldHistory:[], notes:row.notes||'', cashLedger:row.seizureType==='Cash'?[]:undefined, photos:[]};
+    },
+    exportRow(record){
+      const officer=STATE.personnel.find(p=>p.id===record.seizingOfficerId);
+      return {caseNumber:record.caseNumber||'', seizureDate:record.seizureDate||'', seizureType:record.seizureType||'',
+        forfeitureType:record.forfeitureType||'', estimatedValue:record.estimatedValue??'', description:record.description||'',
+        status:record.status||'', seizingOfficer:officer?.name||officer?.badge||'', location:record.location||'',
+        dispositionType:record.dispositionType||'', dispositionDate:record.dispositionDate||'', equitableShareAmount:record.equitableShareAmount??'',
+        equitableSharePercent:record.equitableSharePercent??'', sharingAgencyFederal:record.sharingAgencyFederal||'', notes:record.notes||''};
+    },
+    existingArray(){ return STATE.grants.seizures; },
+    matchExisting(row,arr){ return arr.find(s=>s.caseNumber===row.caseNumber); },
+  },
+  permits_applicants: {
+    label: 'Permit Applicants & Businesses',
+    ability: 'permits_bulk_import',
+    fields: [
+      {key:'type', label:'Applicant Type', required:false},
+      {key:'name', label:'Name', required:true},
+      {key:'email', label:'Email', required:false},
+      {key:'phone', label:'Phone', required:false},
+      {key:'address', label:'Mailing Address', required:false},
+      {key:'aliases', label:'Aliases (semicolon separated)', required:false},
+      {key:'notes', label:'Notes', required:false},
+    ],
+    sample: {type:'Individual', name:'Jordan Lee', email:'jordan.lee@example.gov', phone:'707-555-0100', address:'123 Main St, Petaluma, CA 94952', aliases:'', notes:''},
+    build(row){ return {id:'pa'+Date.now()+Math.random().toString(36).slice(2,7), type:row.type||'Individual', name:row.name,
+      email:row.email||'', phone:row.phone||'', address:row.address||'', aliases:(row.aliases||'').split(';').map(x=>x.trim()).filter(Boolean), notes:row.notes||''}; },
+    exportRow(r){ return {type:r.type||'',name:r.name||'',email:r.email||'',phone:r.phone||'',address:r.address||'',aliases:(r.aliases||[]).join('; '),notes:r.notes||''}; },
+    existingArray(){ return STATE.permits.applicants; },
+    matchExisting(row,arr){ return row.email?arr.find(a=>(a.email||'').toLowerCase()===row.email.toLowerCase()):arr.find(a=>a.name.toLowerCase()===row.name.toLowerCase()); },
+  },
+  permits_locations: {
+    label: 'Permit Locations',
+    ability: 'permits_bulk_import',
+    fields: [
+      {key:'address', label:'Street Address', required:true},
+      {key:'city', label:'City', required:true},
+      {key:'state', label:'State', required:true},
+      {key:'zip', label:'ZIP', required:false},
+      {key:'parcel', label:'Parcel / APN', required:false},
+      {key:'notes', label:'Notes', required:false},
+    ],
+    sample: {address:'123 Main St',city:'Petaluma',state:'CA',zip:'94952',parcel:'',notes:''},
+    build(row){ return {id:'pl'+Date.now()+Math.random().toString(36).slice(2,7),address:row.address,city:row.city,state:row.state,zip:row.zip||'',parcel:row.parcel||'',notes:row.notes||'',lat:null,long:null}; },
+    exportRow(r){ return {address:r.address||'',city:r.city||'',state:r.state||'',zip:r.zip||'',parcel:r.parcel||'',notes:r.notes||''}; },
+    existingArray(){ return STATE.permits.locations; },
+    matchExisting(row,arr){ return arr.find(l=>(l.address||'').toLowerCase()===row.address.toLowerCase()&&(l.city||'').toLowerCase()===row.city.toLowerCase()&&(l.state||'').toLowerCase()===row.state.toLowerCase()); },
+  },
+  permits_applications: {
+    label: 'Permit Applications',
+    ability: 'permits_bulk_import',
+    fields: [
+      {key:'applicationNumber', label:'Application Number', required:true},
+      {key:'permitType', label:'Permit Type', required:true},
+      {key:'applicationType', label:'Application Type', required:false},
+      {key:'applicant', label:'Applicant Name or Email', required:true},
+      {key:'location', label:'Location (Street Address)', required:false},
+      {key:'status', label:'Status', required:false},
+      {key:'submittedOn', label:'Submitted On (YYYY-MM-DD)', required:false},
+      {key:'feesAssessed', label:'Fees Assessed', required:false},
+      {key:'feesPaid', label:'Fees Paid', required:false},
+      {key:'feesWaived', label:'Fees Waived', required:false},
+      {key:'notes', label:'Notes', required:false},
+    ],
+    sample: {applicationNumber:'ALM-2027-00001',permitType:'Alarm Permit',applicationType:'New',applicant:'Jordan Lee',
+      location:'123 Main St',status:'Intake Review',submittedOn:'2027-01-10',feesAssessed:'40',feesPaid:'40',feesWaived:'0',notes:''},
+    resolve(row){
+      const type=STATE.permits.permitTypes.find(t=>t.name.toLowerCase()===row.permitType.toLowerCase()||t.prefix.toLowerCase()===row.permitType.toLowerCase());
+      if(!type) return {error:`No matching permit type found for "${row.permitType}"`};
+      const applicant=STATE.permits.applicants.find(a=>a.name.toLowerCase()===row.applicant.toLowerCase()||(a.email&&a.email.toLowerCase()===row.applicant.toLowerCase()));
+      if(!applicant) return {error:`No matching applicant found for "${row.applicant}" — import applicants first`};
+      let location=null;
+      if(row.location){
+        location=STATE.permits.locations.find(l=>(l.address||'').toLowerCase()===row.location.toLowerCase());
+        if(!location) return {error:`No matching permit location found for "${row.location}" — import locations first`};
+      }
+      return {type,applicant,location};
+    },
+    build(row,resolved){
+      const idx=(resolved.type.workflow||[]).indexOf(row.status);
+      return {id:'app'+Date.now()+Math.random().toString(36).slice(2,7),applicationNumber:row.applicationNumber,permitTypeId:resolved.type.id,
+        applicationType:row.applicationType||'New',applicantId:resolved.applicant.id,locationId:resolved.location?.id||null,status:row.status||'Draft',
+        submittedOn:row.submittedOn||'',feesAssessed:Number(row.feesAssessed)||0,feesPaid:Number(row.feesPaid)||0,feesWaived:Number(row.feesWaived)||0,
+        notes:row.notes||'',requirements:{},history:[],weapons:[],documents:[],correspondence:[],workflowStageIndex:idx>=0?idx:-1,
+        assignedTo:'',stageStartedAt:row.submittedOn||fmt(new Date()),stageDueDate:'',slaDays:10,pendingApplicantRequest:null,decisionReason:'',fieldValues:{},assessedFeeItems:[]};
+    },
+    exportRow(r){
+      const t=STATE.permits.permitTypes.find(x=>x.id===r.permitTypeId), a=STATE.permits.applicants.find(x=>x.id===r.applicantId), l=STATE.permits.locations.find(x=>x.id===r.locationId);
+      return {applicationNumber:r.applicationNumber||'',permitType:t?.name||r.permitTypeId||'',applicationType:r.applicationType||'',applicant:a?.name||a?.email||'',
+        location:l?.address||'',status:r.status||'',submittedOn:r.submittedOn||'',feesAssessed:r.feesAssessed??'',feesPaid:r.feesPaid??'',feesWaived:r.feesWaived??'',notes:r.notes||''};
+    },
+    existingArray(){ return STATE.permits.applications; },
+    matchExisting(row,arr){ return arr.find(a=>a.applicationNumber===row.applicationNumber); },
+  },
+  permits_licenses: {
+    label: 'Licenses & Permits',
+    ability: 'permits_bulk_import',
+    fields: [
+      {key:'licenseNumber', label:'License / Permit Number', required:true},
+      {key:'permitType', label:'Permit Type', required:true},
+      {key:'applicant', label:'Applicant Name or Email', required:true},
+      {key:'location', label:'Location (Street Address)', required:false},
+      {key:'issuedOn', label:'Issued On (YYYY-MM-DD)', required:false},
+      {key:'expiresOn', label:'Expires On (YYYY-MM-DD)', required:false},
+      {key:'status', label:'Status', required:false},
+      {key:'conditions', label:'Conditions', required:false},
+      {key:'issuedBy', label:'Issued By', required:false},
+    ],
+    sample: {licenseNumber:'ALM-2027-00001',permitType:'Alarm Permit',applicant:'Jordan Lee',location:'123 Main St',
+      issuedOn:'2027-01-10',expiresOn:'2028-01-10',status:'Active',conditions:'',issuedBy:'Permit Unit'},
+    resolve(row){
+      const type=STATE.permits.permitTypes.find(t=>t.name.toLowerCase()===row.permitType.toLowerCase()||t.prefix.toLowerCase()===row.permitType.toLowerCase());
+      if(!type) return {error:`No matching permit type found for "${row.permitType}"`};
+      const applicant=STATE.permits.applicants.find(a=>a.name.toLowerCase()===row.applicant.toLowerCase()||(a.email&&a.email.toLowerCase()===row.applicant.toLowerCase()));
+      if(!applicant) return {error:`No matching applicant found for "${row.applicant}" — import applicants first`};
+      let location=null;
+      if(row.location){
+        location=STATE.permits.locations.find(l=>(l.address||'').toLowerCase()===row.location.toLowerCase());
+        if(!location) return {error:`No matching permit location found for "${row.location}" — import locations first`};
+      }
+      return {type,applicant,location};
+    },
+    build(row,resolved){ return {id:'lic'+Date.now()+Math.random().toString(36).slice(2,7),licenseNumber:row.licenseNumber,permitTypeId:resolved.type.id,
+      applicantId:resolved.applicant.id,locationId:resolved.location?.id||null,applicationId:null,issuedOn:row.issuedOn||'',expiresOn:row.expiresOn||'',
+      status:row.status||'Active',conditions:row.conditions||'',issuedBy:row.issuedBy||'',lifecycleHistory:[]}; },
+    exportRow(r){
+      const t=STATE.permits.permitTypes.find(x=>x.id===r.permitTypeId), a=STATE.permits.applicants.find(x=>x.id===r.applicantId), l=STATE.permits.locations.find(x=>x.id===r.locationId);
+      return {licenseNumber:r.licenseNumber||'',permitType:t?.name||r.permitTypeId||'',applicant:a?.name||a?.email||'',location:l?.address||'',
+        issuedOn:r.issuedOn||'',expiresOn:r.expiresOn||'',status:r.status||'',conditions:r.conditions||'',issuedBy:r.issuedBy||''};
+    },
+    existingArray(){ return STATE.permits.licenses; },
+    matchExisting(row,arr){ return arr.find(l=>l.licenseNumber===row.licenseNumber); },
+  },
+  pm_ranks: {
+    label: 'Personnel Ranks',
+    ability: 'pm_reference_bulk_import',
+    fields: [{key:'value',label:'Rank',required:true}],
+    sample:{value:'Police Officer'},
+    build(row){return row.value;},
+    existingArray(){return STATE.pm.refData.ranks;},
+    matchExisting(row,arr){const v=arr.find(x=>String(x).toLowerCase()===row.value.toLowerCase());return v?{value:v}:null;},
+    applyRow(row){const arr=STATE.pm.refData.ranks;if(arr.some(x=>String(x).toLowerCase()===row.value.toLowerCase()))return 'updated';arr.push(row.value);return 'added';},
+    exportRow(record){return {value:record};},
+  },
+  pm_units: {
+    label: 'Personnel Units',
+    ability: 'pm_reference_bulk_import',
+    fields: [{key:'value',label:'Unit',required:true}],
+    sample:{value:'Patrol - A Shift'},
+    build(row){return row.value;},
+    existingArray(){return STATE.pm.refData.units;},
+    matchExisting(row,arr){const v=arr.find(x=>String(x).toLowerCase()===row.value.toLowerCase());return v?{value:v}:null;},
+    applyRow(row){const arr=STATE.pm.refData.units;if(arr.some(x=>String(x).toLowerCase()===row.value.toLowerCase()))return 'updated';arr.push(row.value);return 'added';},
+    exportRow(record){return {value:record};},
+  },
+  pm_training_locations: {
+    label: 'Training Locations',
+    ability: 'pm_reference_bulk_import',
+    fields: [{key:'name',label:'Location Name',required:true},{key:'address',label:'Street Address',required:false}],
+    sample:{name:'In-House Range',address:'123 Training Way, Petaluma, CA'},
+    build(row){return {name:row.name,address:row.address||''};},
+    existingArray(){return STATE.pm.refData.trainingLocations;},
+    matchExisting(row,arr){return arr.find(l=>String(l?.name||l).toLowerCase()===row.name.toLowerCase());},
+    exportRow(record){return {name:typeof record==='string'?record:record.name||'',address:typeof record==='string'?'':record.address||''};},
+  },
+  pm_training_courses: {
+    label: 'Training Course Catalog',
+    ability: 'pm_reference_bulk_import',
+    fields: [
+      {key:'name',label:'Course Name',required:true},{key:'category',label:'Category',required:false},{key:'classification',label:'Classification',required:false},
+      {key:'isRequired',label:'Required (true/false)',required:false},{key:'recertRequired',label:'Recertification Required (true/false)',required:false},
+      {key:'recertIntervalMonths',label:'Recertification Interval (Months)',required:false}
+    ],
+    sample:{name:'Annual Firearms Qualification',category:'Firearms',classification:'Required',isRequired:'true',recertRequired:'true',recertIntervalMonths:'12'},
+    build(row){return {id:'crs'+Date.now()+Math.random().toString(36).slice(2,7),name:row.name,category:row.category||'',classification:row.classification||'Recommended',
+      isRequired:/^true$/i.test(row.isRequired||''),recertRequired:/^true$/i.test(row.recertRequired||''),recertIntervalMonths:row.recertIntervalMonths?Number(row.recertIntervalMonths):null};},
+    exportRow(r){return {name:r.name||'',category:r.category||'',classification:r.classification||'',isRequired:String(!!r.isRequired),recertRequired:String(!!r.recertRequired),recertIntervalMonths:r.recertIntervalMonths??''};},
+    existingArray(){return STATE.pm.trainingCourses;},
+    matchExisting(row,arr){return arr.find(x=>x.name.toLowerCase()===row.name.toLowerCase());},
+  },
+  pm_shift_patterns: {
+    label: 'Shift Patterns',
+    ability: 'pm_reference_bulk_import',
+    fields: [
+      {key:'name',label:'Shift / Pattern Name',required:true},{key:'daysOn',label:'Days On',required:true},{key:'daysOff',label:'Days Off',required:true},
+      {key:'hoursStart',label:'Start Time (HH:MM)',required:true},{key:'hoursEnd',label:'End Time (HH:MM)',required:true}
+    ],
+    sample:{name:'Patrol A - Days',daysOn:'4',daysOff:'3',hoursStart:'06:00',hoursEnd:'18:00'},
+    build(row){return {id:'shift'+Date.now()+Math.random().toString(36).slice(2,7),name:row.name,daysOn:Number(row.daysOn)||0,daysOff:Number(row.daysOff)||0,hoursStart:row.hoursStart,hoursEnd:row.hoursEnd};},
+    exportRow(r){return {name:r.name||'',daysOn:r.daysOn??'',daysOff:r.daysOff??'',hoursStart:r.hoursStart||'',hoursEnd:r.hoursEnd||''};},
+    existingArray(){return STATE.pm.scheduleShifts;},
+    matchExisting(row,arr){return arr.find(x=>x.name.toLowerCase()===row.name.toLowerCase());},
+  },
+
 };
 
 function bulkImportDownloadTemplate(schemaKey){
@@ -584,6 +865,8 @@ function bulkImportExportExisting(schemaKey){
 
 function renderBulkImportTab(body, schemaKey){
   const schema = BULK_IMPORT_SCHEMAS[schemaKey];
+  if(!schema){ body.innerHTML=permissionBlockedView('This data migration template is not available.'); return; }
+  if(schema.ability && !can(schema.ability)){ body.innerHTML=permissionBlockedView("You don't have permission to perform this data migration."); return; }
   let parsedRows = null;
 
   function draw(){
@@ -665,6 +948,11 @@ function renderBulkImportTab(body, schemaKey){
     let added=0, updated=0;
     const arr = schema.existingArray();
     parsedRows.filter(r=>!r.errors.length).forEach(r=>{
+      if(schema.applyRow){
+        const result=schema.applyRow(r.row,r.resolved,r.dup);
+        if(result==='added') added++; else updated++;
+        return;
+      }
       const record = schema.build(r.row, r.resolved);
       if(r.dup){
         const keepId = r.dup.id;
@@ -1345,6 +1633,9 @@ const ABILITY_CATALOG = {
     ["eod_bulk_import","Bulk import EOD technician certifications"],
     ["civil_bulk_import","Bulk import Civil Process papers"],
     ["subpoena_bulk_import","Bulk import Subpoenas"],
+    ["grants_bulk_import","Bulk import Grants and Asset Forfeiture records"],
+    ["permits_bulk_import","Bulk import Licensing & Permits records"],
+    ["pm_reference_bulk_import","Bulk import Personnel setup/reference data"],
   ],
   "Quartermaster: Equipment & Inventory": [
     ["qm_equip_view","View equipment inventory"],
@@ -1646,7 +1937,7 @@ const QM_AUDITOR_ABILITIES = ["qm_equip_view","qm_assign_history","qm_reports_vi
 const FLEET_SUPERVISOR_ABILITIES = ["fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_inspection_conduct","fleet_inspection_view_all","fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export"];
 const FLEET_OFFICER_ABILITIES = ["fleet_vehicle_view","fleet_inspection_conduct"];
 const FLEET_AUDITOR_ABILITIES = ["fleet_vehicle_view","fleet_inspection_view_all","fleet_reports_view"];
-const PM_ADMIN_ABILITIES = ["pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
+const PM_ADMIN_ABILITIES = ["pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
   "pm_discipline_view","pm_discipline_manage","pm_medical_view","pm_medical_manage",
   "pm_inquiries_view","pm_inquiries_manage","pm_lodd_view","pm_lodd_manage",
   "pm_schedule_view","pm_schedule_manage","pm_leave_request_submit","pm_leave_request_approve","pm_training_view_own","pm_training_manage","pm_training_request","pm_training_checkin_submit","pm_instructor_manage",
@@ -1699,7 +1990,7 @@ const SUBPOENA_ADMIN_ABILITIES = ["subpoena_view_own","subpoena_view_all","subpo
 const SUBPOENA_BASIC_ABILITIES = ["subpoena_view_own","subpoena_acknowledge"];
 const SUBPOENA_SUPERVISOR_ABILITIES = ["subpoena_view_own","subpoena_view_all","subpoena_manage","subpoena_acknowledge","subpoena_document_upload","subpoena_notify","subpoena_reports_view","subpoena_reports_export"];
 const SUBPOENA_AUDITOR_ABILITIES = ["subpoena_view_all","subpoena_reports_view"];
-const GRANTS_ADMIN_ABILITIES = ["grants_seizure_view","grants_seizure_manage","grants_award_view","grants_award_manage",
+const GRANTS_ADMIN_ABILITIES = ["grants_bulk_import","grants_seizure_view","grants_seizure_manage","grants_award_view","grants_award_manage",
   "grants_dashboard_customize","grants_reports_view","grants_reports_export","grants_admin_categories","grants_admin_audit"];
 const GRANTS_SUPERVISOR_ABILITIES = ["grants_seizure_view","grants_award_view","grants_dashboard_customize","grants_reports_view","grants_reports_export"];
 const GRANTS_AUDITOR_ABILITIES = ["grants_seizure_view","grants_award_view","grants_dashboard_customize","grants_reports_view"];
@@ -1708,7 +1999,7 @@ const CIVIL_ADMIN_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","ci
 const CIVIL_SERVER_ABILITIES = ["civil_paper_view_own","civil_paper_log_attempt","civil_document_generate"];
 const CIVIL_SUPERVISOR_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_safety_flag_manage","civil_document_generate","civil_fee_manage","civil_reports_view","civil_reports_export"];
 const CIVIL_AUDITOR_ABILITIES = ["civil_paper_view_all","civil_reports_view"];
-const PERMITS_ADMIN_ABILITIES = ["permits_view","permits_create","permits_edit","permits_background_view","permits_background_edit","permits_inspection_view","permits_inspection_manage","permits_fee_view","permits_payment_record","permits_fee_manage","permits_approve","permits_issue","permits_reports_view","permits_reports_export","permits_admin","permits_admin_audit"];
+const PERMITS_ADMIN_ABILITIES = ["permits_bulk_import","permits_view","permits_create","permits_edit","permits_background_view","permits_background_edit","permits_inspection_view","permits_inspection_manage","permits_fee_view","permits_payment_record","permits_fee_manage","permits_approve","permits_issue","permits_reports_view","permits_reports_export","permits_admin","permits_admin_audit"];
 
 const DEFAULT_ROLES = [
   {id:"role_admin", name:"System Admin", locked:true, description:"Full access to every module and every ability. The top-level administrator for the whole suite.",
