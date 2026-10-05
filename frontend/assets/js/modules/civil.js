@@ -4111,7 +4111,7 @@ const SuiteStore=(()=>{
     orphanedWaiters.forEach(resolve=>resolve(false));
     const rows=new Map(data.records.filter(r=>!r.deleted).map(r=>[r.key,r.value]));STATE=mergeTemplate(data.template||{},inflate(rows));STATE.accounts=STATE.accounts||[];STATE.personnel=STATE.personnel||[];STATE.roles=(STATE.roles&&STATE.roles.length)?STATE.roles:[{id:'role_platform_admin',name:'SonoMarzi Platform Admin',locked:true,hidden:true,agencyScope:[],abilities:Object.fromEntries(ALL_ABILITY_IDS.map(id=>[id,id!=='chatbot_access']))}];
     debugLog('[access] RAW roles exactly as received from the server, before any client-side healing:', (STATE.roles||[]).map(r=>({id:r.id, name:r.name})));
-    serverVersions={};serverOrders=new Map();for(const r of data.records){serverVersions[r.key]=r.version;if(JSON.parse(r.key)[1]==='$order'&&!r.deleted)serverOrders.set(r.key,clone(r.value));}try{runCoreMigrations();}catch(e){console.error('Core migrations failed (continuing anyway):',e);}baseline=flatten(STATE);CURRENT_USER_ID=data.person_id;HOME_ROLE_IDS=data.role_ids;STATE.currentRoleIds=[...(data.role_ids||[])];remoteContext={tenantId:data.tenant_id,agencyId:data.agency_id};window.SonoMarziCurrentTenantSecurity={mfaPolicy:(data?.tenant?.metadata?.security?.mfaPolicy||'off'),tenantName:data?.tenant?.name||'',agencyName:data?.agency?.name||''};serverReady=true;mode='shared';pendingWrites=false;notificationReads=new Set();status('ok','Saved to agency workspace');}
+    serverVersions={};serverOrders=new Map();for(const r of data.records){serverVersions[r.key]=r.version;if(JSON.parse(r.key)[1]==='$order'&&!r.deleted)serverOrders.set(r.key,clone(r.value));}lastRecordRevision=(data.records||[]).reduce((max,r)=>r.updated_at&&r.updated_at>max?r.updated_at:max,'')||lastRecordRevision;remoteUpdatePending=false;updateNoticeShown=false;try{runCoreMigrations();}catch(e){console.error('Core migrations failed (continuing anyway):',e);}baseline=flatten(STATE);CURRENT_USER_ID=data.person_id;HOME_ROLE_IDS=data.role_ids;STATE.currentRoleIds=[...(data.role_ids||[])];remoteContext={tenantId:data.tenant_id,agencyId:data.agency_id};window.SonoMarziCurrentTenantSecurity={mfaPolicy:(data?.tenant?.metadata?.security?.mfaPolicy||'off'),tenantName:data?.tenant?.name||'',agencyName:data?.agency?.name||''};serverReady=true;mode='shared';pendingWrites=false;notificationReads=new Set();status('ok','Saved to agency workspace');}
   const notificationModule={Quartermaster:'qm',Fleet:'fleet',Personnel:'pm',K9:'k9',Drone:'drone',EOD:'eod',Subpoena:'subpoena',Grants:'grants',Civil:'civil'};
   const notificationKey=(module,id)=>(notificationModule[module]||module)+'|'+id;
   function isNotificationRead(module,id){return notificationReads.has(notificationKey(module,id));}
@@ -4329,7 +4329,7 @@ const SuiteStore=(()=>{
     return {ok:true};
   }
   async function submitTrainingCheckin(newRecord){return submitSelfServiceRecord('trainingCheckins',newRecord);}
-  let refreshing=false,lastRefresh=0;
+  let refreshing=false,lastRefresh=0,lastRecordRevision=null,lastAuditRevision=null,remoteUpdatePending=false,updateNoticeShown=false;
   async function refreshIfClean(){
     if(refreshing||mode!=='shared'||!serverReady||pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
     const context={...remoteContext},epoch=sessionEpoch;
@@ -4351,6 +4351,52 @@ const SuiteStore=(()=>{
     }catch(error){console.error('Could not refresh agency records:',error);return false;}
     finally{refreshing=false;}
   }
+  function liveSyncBlocked(){
+    return pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open');
+  }
+  async function checkLiveWorkspace(){
+    if(mode!=='shared'||!serverReady||document.hidden||!document.getElementById('app')?.classList.contains('authenticated'))return false;
+    const context={...remoteContext};
+    if(!context.tenantId||!context.agencyId)return false;
+    try{
+      const result=await awsJson(`/workspace-revision?tenantId=${encodeURIComponent(context.tenantId)}&agencyId=${encodeURIComponent(context.agencyId)}`);
+      const revision=result?.data||{};
+      const recordRevision=revision.records_revision||null;
+      const auditRevision=Number(revision.audit_revision||0);
+
+      const recordsChanged=Boolean(lastRecordRevision&&recordRevision&&recordRevision!==lastRecordRevision);
+      const auditChanged=lastAuditRevision!==null&&auditRevision!==lastAuditRevision;
+      if(lastRecordRevision===null)lastRecordRevision=recordRevision;
+      if(lastAuditRevision===null)lastAuditRevision=auditRevision;
+
+      if(auditChanged){
+        lastAuditRevision=auditRevision;
+        if(typeof window.SonoMarziRefreshAudit==='function')window.SonoMarziRefreshAudit();
+      }
+
+      if(recordsChanged||remoteUpdatePending){
+        if(liveSyncBlocked()){
+          remoteUpdatePending=true;
+          if(!updateNoticeShown){
+            updateNoticeShown=true;
+            try{toast('New agency updates are available. Your current work will not be interrupted.');}catch{}
+          }
+          return false;
+        }
+        remoteUpdatePending=false;
+        updateNoticeShown=false;
+        const refreshed=await refreshIfClean();
+        if(refreshed)lastRecordRevision=recordRevision;
+        return refreshed;
+      }
+      return auditChanged;
+    }catch(error){
+      console.warn('Live workspace sync check failed:',error.message);
+      return false;
+    }
+  }
+  setInterval(checkLiveWorkspace,15000);
+
   window.addEventListener('online',async()=>{
     if(pendingWrites){const saved=await flush();if(!saved||pendingWrites)return;}
     await refreshIfClean();
