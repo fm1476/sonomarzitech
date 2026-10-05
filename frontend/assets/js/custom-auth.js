@@ -158,18 +158,19 @@
 
     if(typeof runCoreMigrations==='function') runCoreMigrations();
     if(ws.agency?.branding) STATE.agencyBranding={...(STATE.agencyBranding||{}),...ws.agency.branding};
-    STATE.enabledModules=Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[];
+    STATE.enabledModules=Array.isArray(ws?.tenant?.enabled_modules)?[...ws.tenant.enabled_modules]:(Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[]);
 
     CURRENT_USER_ID=ws.person_id||me.user?.id||null;
     HOME_ROLE_IDS=Array.isArray(ws.role_ids)?[...ws.role_ids]:[];
     STATE.currentRoleIds=[...HOME_ROLE_IDS];
 
-    if(typeof SuiteStore!=='undefined' && SuiteStore?.setRemoteContext){
-      SuiteStore.setRemoteContext({
-        tenantId:ws.tenant_id,
-        agencyId:ws.agency_id,
-        subdomain:ws.agency?.subdomain||subdomain||null
-      });
+    // Put SuiteStore into the same authenticated shared-workspace state used by
+    // a resumed session. Without this, a freshly completed Cognito login leaves
+    // SuiteStore in local mode until the browser is hard-refreshed, which suppresses
+    // durable audit writes and makes module/navigation state initialize incorrectly.
+    if(typeof SuiteStore!=='undefined' && typeof SuiteStore.useWorkspace==='function'){
+      await SuiteStore.useWorkspace(ws);
+      STATE.enabledModules=Array.isArray(ws?.tenant?.enabled_modules)?[...ws.tenant.enabled_modules]:(Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[]);
     }
 
     document.getElementById('loginScreen')?.classList.add('hidden');
