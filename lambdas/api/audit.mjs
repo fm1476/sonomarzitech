@@ -40,13 +40,35 @@ async function ensureAuditSchema(client) {
   // Upgrade legacy audit tables additively before creating indexes or writing rows.
   await client.query(`
     ALTER TABLE suite_activity_log
+      ADD COLUMN IF NOT EXISTS tenant_id UUID,
+      ADD COLUMN IF NOT EXISTS agency_id UUID,
       ADD COLUMN IF NOT EXISTS actor_user_id UUID,
       ADD COLUMN IF NOT EXISTS actor_person_id TEXT,
       ADD COLUMN IF NOT EXISTS actor_email TEXT,
       ADD COLUMN IF NOT EXISTS actor_name TEXT,
+      ADD COLUMN IF NOT EXISTS module TEXT,
       ADD COLUMN IF NOT EXISTS entity_type TEXT DEFAULT 'general',
-      ADD COLUMN IF NOT EXISTS ip_address TEXT
+      ADD COLUMN IF NOT EXISTS description TEXT,
+      ADD COLUMN IF NOT EXISTS ip_address TEXT,
+      ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ DEFAULT now()
   `);
+
+  // Preserve actor identity from the legacy schema when that column exists.
+  const legacyActor = await client.query(
+    `SELECT 1
+       FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'suite_activity_log'
+        AND column_name = 'actor_id'
+      LIMIT 1`
+  );
+  if (legacyActor.rows.length) {
+    await client.query(
+      `UPDATE suite_activity_log
+          SET actor_person_id = COALESCE(actor_person_id, actor_id::text)
+        WHERE actor_person_id IS NULL`
+    );
+  }
 
   await client.query(`
     CREATE INDEX IF NOT EXISTS suite_activity_log_workspace_time_idx
