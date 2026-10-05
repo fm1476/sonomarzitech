@@ -4239,8 +4239,15 @@ function renderAdmin(){
     tabs.push(['schedulingSettings','Scheduling Settings']);
     tabs.push(['notifications','Notification Routing']);
   }
-  if(can('personnel_bulk_import')) tabs.push(['bulkImportPersonnel','Bulk Import: Personnel']);
-  if(can('pm_training_bulk_import')) tabs.push(['bulkImportTraining','Bulk Import: Training']);
+  if(can('personnel_bulk_import')) tabs.push(['bulkImportPersonnel','Data Migration: Personnel']);
+  if(can('pm_training_bulk_import')) tabs.push(['bulkImportTraining','Data Migration: Training Records']);
+  if(can('pm_reference_bulk_import')){
+    tabs.push(['bulkImportRanks','Data Migration: Ranks']);
+    tabs.push(['bulkImportUnits','Data Migration: Units']);
+    tabs.push(['bulkImportTrainingLocations','Data Migration: Training Locations']);
+    tabs.push(['bulkImportTrainingCourses','Data Migration: Course Catalog']);
+    tabs.push(['bulkImportShiftPatterns','Data Migration: Shift Patterns']);
+  }
   if(canAudit) tabs.push(['audit','Platform Audit Log']);
   if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
 
@@ -4263,6 +4270,11 @@ function renderAdminTabBody(){
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImportPersonnel') renderBulkImportTab(body, 'personnel');
   else if(ADMIN_TAB==='bulkImportTraining') renderBulkImportTab(body, 'training');
+  else if(ADMIN_TAB==='bulkImportRanks') renderBulkImportTab(body, 'pm_ranks');
+  else if(ADMIN_TAB==='bulkImportUnits') renderBulkImportTab(body, 'pm_units');
+  else if(ADMIN_TAB==='bulkImportTrainingLocations') renderBulkImportTab(body, 'pm_training_locations');
+  else if(ADMIN_TAB==='bulkImportTrainingCourses') renderBulkImportTab(body, 'pm_training_courses');
+  else if(ADMIN_TAB==='bulkImportShiftPatterns') renderBulkImportTab(body, 'pm_shift_patterns');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
 }
 
