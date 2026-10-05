@@ -1624,6 +1624,7 @@ const CIVIL_ADMIN_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","ci
 const CIVIL_SERVER_ABILITIES = ["civil_paper_view_own","civil_paper_log_attempt","civil_document_generate"];
 const CIVIL_SUPERVISOR_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_safety_flag_manage","civil_document_generate","civil_fee_manage","civil_reports_view","civil_reports_export"];
 const CIVIL_AUDITOR_ABILITIES = ["civil_paper_view_all","civil_reports_view"];
+const PERMITS_ADMIN_ABILITIES = ["permits_view","permits_create","permits_edit","permits_background_view","permits_background_edit","permits_inspection_view","permits_inspection_manage","permits_fee_view","permits_payment_record","permits_fee_manage","permits_approve","permits_issue","permits_reports_view","permits_reports_export","permits_admin","permits_admin_audit"];
 
 const DEFAULT_ROLES = [
   {id:"role_admin", name:"System Admin", locked:true, description:"Full access to every module and every ability. The top-level administrator for the whole suite.",
@@ -1672,6 +1673,8 @@ const DEFAULT_ROLES = [
     agencyScope: [], abilities: abilitiesFor(["module_civil","personnel_view",...CIVIL_ADMIN_ABILITIES])},
   {id:"role_civil_server", name:"Civil Process Server", locked:false, description:"A deputy or civil process technician who logs service attempts and generates Return of Service documents for papers assigned to themselves.",
     agencyScope: [], abilities: abilitiesFor(["module_civil","personnel_view",...CIVIL_SERVER_ABILITIES])},
+  {id:"role_permits_admin", name:"Licensing & Permits Admin", locked:false, description:"Full control over the Licensing & Permits module configuration and operations, with personnel visibility for assignments but without agency personnel or role administration.",
+    agencyScope: [], abilities: abilitiesFor(["module_permits","personnel_view",...PERMITS_ADMIN_ABILITIES])},
   {id:"role_platform_admin", name:"SonoMarzi Platform Admin", locked:true, hidden:true,
     description:"SonoMarzi-internal role that controls which modules exist for this deployment. Not visible to customer administrators \u2014 this is a vendor-side control, separate from how a customer's own admins manage roles within whatever modules they've been granted.",
     agencyScope: [], abilities: abilitiesFor(["admin_roles","manage_application_access","manage_field_labels","manage_branding","personnel_view",
