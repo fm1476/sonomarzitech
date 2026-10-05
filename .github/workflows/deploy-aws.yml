@@ -36,7 +36,12 @@ jobs:
 
       - name: Package Lambda functions
         run: |
-          mkdir -p dist
+          mkdir -p dist lambdas/api/certs
+          curl --fail --silent --show-error --location \
+            "https://truststore.pki.rds.amazonaws.com/us-east-2/us-east-2-bundle.pem" \
+            -o lambdas/api/certs/us-east-2-bundle.pem
+          test -s lambdas/api/certs/us-east-2-bundle.pem
+          grep -q "BEGIN CERTIFICATE" lambdas/api/certs/us-east-2-bundle.pem
           (cd lambdas/api && zip -qr ../../dist/api.zip .)
           (cd lambdas/identity-admin && zip -q ../../dist/identity-admin.zip index.mjs)
 
