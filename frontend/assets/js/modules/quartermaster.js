@@ -1639,7 +1639,7 @@ function renderEqDetailTabContent(item){
       logActivity(`${action==='add'?'Added a photo to':action==='remove'?'Removed a photo from':'Updated a photo description on'} ${item.name} (${item.assetId}).`, "equipment", item.id);
       persist();
       renderEqDetailTabContent(item);
-    });
+    }, {collection:'qm.equipment', itemId:item.id});
 
   } else if(EQ_DETAIL_TAB==='activity'){
     const list = STATE.qm.activity.filter(a=>a.entityId===item.id).slice().reverse();
