@@ -4341,7 +4341,8 @@ const SuiteStore=(()=>{
   document.addEventListener('visibilitychange',()=>{
     if(!document.hidden&&Date.now()-lastRefresh>30000)refreshIfClean();
   });
-  async function useWorkspace(data){acceptRemote(data);await loadNotificationReads();return true;}\n  return {load,persist,flush,signIn,resumeSession,useWorkspace,signOut,backupPending,reload,adopt,loadRemoteContext,flatten,inflate,changes,equal,submitTrainingCheckin,submitSelfServiceRecord,refreshIfClean,isNotificationRead,markNotificationsRead,api:awsJson,pending:()=>pendingWrites||saving,mode:()=>mode,remoteContext:()=>({...remoteContext}),needsReloadBeforeRetry:()=>lastErrorWasVersionConflict,description:()=>mode==='shared'?'Connected to the authenticated agency workspace. Each changed record is checked for concurrent edits.':'This is a demo workspace saved in this browser. It is not shared with other staff. Agency sign-in requires the supplied database migration and account provisioning.'};
+  async function useWorkspace(data){acceptRemote(data);await loadNotificationReads();return true;}
+  return {load,persist,flush,signIn,resumeSession,useWorkspace,signOut,backupPending,reload,adopt,loadRemoteContext,flatten,inflate,changes,equal,submitTrainingCheckin,submitSelfServiceRecord,refreshIfClean,isNotificationRead,markNotificationsRead,api:awsJson,pending:()=>pendingWrites||saving,mode:()=>mode,remoteContext:()=>({...remoteContext}),needsReloadBeforeRetry:()=>lastErrorWasVersionConflict,description:()=>mode==='shared'?'Connected to the authenticated agency workspace. Each changed record is checked for concurrent edits.':'This is a demo workspace saved in this browser. It is not shared with other staff. Agency sign-in requires the supplied database migration and account provisioning.'};
 })();
 
 /* Install unified shell without duplicating domain workflows. */
