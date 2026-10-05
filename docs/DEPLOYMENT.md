@@ -57,3 +57,26 @@ aws cloudfront create-invalidation \
 ```
 
 This is the preferred manual frontend deployment path. The source verification step checks both backend modules and browser JavaScript syntax before anything is uploaded.
+
+
+## Pilot operations hardening
+
+Before an external agency pilot, complete the operational hardening steps below from AWS CloudShell:
+
+```bash
+export DB_INSTANCE_ID="<rds-db-instance-identifier>"
+export ALERT_EMAIL="<operations-alert-email>"
+
+bash scripts/configure-rds-protection.sh
+bash scripts/verify-rds-backups.sh
+bash scripts/configure-attachment-bucket-protection.sh
+bash scripts/configure-cloudwatch-alerts.sh
+```
+
+The SNS email subscription created by the monitoring script must be confirmed before alerts are delivered.
+
+See:
+
+- `docs/PILOT_OPERATIONS_CHECKLIST.md`
+- `docs/DISASTER_RECOVERY.md`
+- `docs/AGENCY_OFFBOARDING.md`
