@@ -1381,6 +1381,7 @@ async function resolveWorkspaceMembership(client, auth, tenantId, agencyId) {
        t.id AS tenant_id,
        t.status AS tenant_status,
        t.enabled_modules,
+       t.metadata,
        a.id AS agency_id,
        a.status AS agency_status,
        m.person_id,
@@ -1456,6 +1457,9 @@ async function resolveWorkspaceMembership(client, auth, tenantId, agencyId) {
     enabledModules: Array.isArray(row.enabled_modules)
       ? row.enabled_modules
       : [],
+    mfaPolicy: ['off','admins','all_users'].includes(String(row.metadata?.security?.mfaPolicy || 'off'))
+      ? String(row.metadata?.security?.mfaPolicy || 'off')
+      : 'off',
     platformAdmin: auth.platformAdmin,
     agencyAdmin,
     admin: auth.platformAdmin || agencyAdmin
@@ -5286,6 +5290,7 @@ async function getWorkspace(client, auth, event) {
     agency_id: agencyId,
     person_id: personId,
     role_ids: roleIds,
+    mfa_policy: workspaceAuth.mfaPolicy,
     records: workspaceRecords,
     template: templateResult.rows[0]?.empty_state || {},
     tenant: tenantResult.rows[0],
