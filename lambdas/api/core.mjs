@@ -4691,6 +4691,105 @@ async function attachmentReadAllowed(
 }
 
 
+async function attachmentParentWriteAllowed(
+  client,
+  workspaceAuth,
+  parentCollection,
+  parentId
+) {
+  if (!parentCollection || !parentId) {
+    return { allowed:false, error:"Attachment parent collection and record are required." };
+  }
+
+  const supported = new Set([
+    "qm.equipment",
+    "fleet.vehicles",
+    "grants.seizures",
+    "subpoena.subpoenas",
+    "permits.applications"
+  ]);
+
+  if (!supported.has(parentCollection)) {
+    return { allowed:false, error:"Attachments are not enabled for this record type." };
+  }
+
+  const recordKey = JSON.stringify([parentCollection.split("."), String(parentId)]);
+  const parent = await client.query(
+    `SELECT key, value, deleted
+       FROM suite_records
+      WHERE tenant_id = $1
+        AND agency_id = $2
+        AND key = $3
+      LIMIT 1`,
+    [workspaceAuth.tenantId, workspaceAuth.agencyId, recordKey]
+  );
+
+  if (!parent.rows.length || parent.rows[0].deleted === true) {
+    return { allowed:false, error:"Attachment parent record was not found." };
+  }
+
+  if (workspaceAuth.admin) {
+    return { allowed:true, parent:parent.rows[0] };
+  }
+
+  const abilityMap = await loadRoleAbilityMap(
+    client,
+    workspaceAuth.tenantId,
+    workspaceAuth.agencyId,
+    workspaceAuth.roleIds
+  );
+
+  const has = ability =>
+    roleHasAbility(abilityMap, workspaceAuth.roleIds, ability);
+
+  const value = parent.rows[0].value || {};
+  let allowed = false;
+
+  if (parentCollection === "qm.equipment") {
+    allowed =
+      has("qm_equip_edit") &&
+      await qmEquipmentVisible(
+        client,
+        workspaceAuth,
+        abilityMap,
+        value,
+        String(parentId)
+      );
+  } else if (parentCollection === "fleet.vehicles") {
+    allowed =
+      has("fleet_vehicle_edit") &&
+      await fleetVehicleVisible(
+        client,
+        workspaceAuth,
+        abilityMap,
+        value
+      );
+  } else if (parentCollection === "grants.seizures") {
+    allowed = has("grants_seizure_manage");
+  } else if (parentCollection === "subpoena.subpoenas") {
+    allowed =
+      has("subpoena_document_upload") &&
+      (
+        has("subpoena_view_all") ||
+        value?.personId === workspaceAuth.personId
+      );
+  } else if (parentCollection === "permits.applications") {
+    allowed = has("permits_edit") || has("permits_admin");
+  }
+
+  return {
+    allowed,
+    parent: parent.rows[0],
+    error: allowed ? null : "You are not authorized to attach files to this record."
+  };
+}
+
+function parentReferencesAttachment(parentRow, key) {
+  return !!parentRow &&
+    JSON.stringify(parentRow.value ?? null).includes(String(key || ""));
+}
+
+
 async function createAttachmentUploadUrl(
   client,
   auth,
@@ -4706,6 +4805,8 @@ async function createAttachmentUploadUrl(
   const tenantId = body?.tenant_id || body?.tenantId;
   const agencyId = body?.agency_id || body?.agencyId;
   const fileName = body?.file_name || body?.fileName;
+  const parentCollection = body?.parent_collection || body?.parentCollection;
+  const parentId = body?.parent_id || body?.parentId;
   const contentType =
     body?.content_type ||
     body?.contentType ||
@@ -4717,11 +4818,11 @@ async function createAttachmentUploadUrl(
     0
   );
 
-  if (!tenantId || !agencyId || !fileName) {
+  if (!tenantId || !agencyId || !fileName || !parentCollection || !parentId) {
     return response(400, {
       success: false,
       error:
-        "tenant_id, agency_id, and file_name are required."
+        "tenant_id, agency_id, file_name, parent_collection, and parent_id are required."
     });
   }
 
@@ -4748,6 +4849,20 @@ async function createAttachmentUploadUrl(
     return workspaceAuth.error;
   }
 
+  const parentAccess = await attachmentParentWriteAllowed(
+    client,
+    workspaceAuth,
+    String(parentCollection),
+    String(parentId)
+  );
+
+  if (!parentAccess.allowed) {
+    return response(403, {
+      success:false,
+      error: parentAccess.error || "You are not authorized to attach files to this record."
+    });
+  }
+
   const key = makeAttachmentKey(
     tenantId,
     agencyId,
@@ -4763,7 +4878,9 @@ async function createAttachmentUploadUrl(
       Metadata: {
         tenant_id: tenantId,
         agency_id: agencyId,
-        uploaded_by: auth.userId
+        uploaded_by: auth.userId,
+        parent_collection: String(parentCollection),
+        parent_id: String(parentId)
       }
     }),
     { expiresIn: 300 }
@@ -4872,11 +4989,13 @@ async function deleteAttachment(
   const tenantId = body?.tenant_id || body?.tenantId;
   const agencyId = body?.agency_id || body?.agencyId;
   const key = body?.key;
+  const parentCollection = body?.parent_collection || body?.parentCollection;
+  const parentId = body?.parent_id || body?.parentId;
 
-  if (!tenantId || !agencyId || !key) {
+  if (!tenantId || !agencyId || !key || !parentCollection || !parentId) {
     return response(400, {
       success: false,
-      error: "tenant_id, agency_id, and key are required."
+      error: "tenant_id, agency_id, key, parent_collection, and parent_id are required."
     });
   }
 
@@ -4905,11 +5024,24 @@ async function deleteAttachment(
     });
   }
 
-  if (!workspaceAuth.admin) {
+  const parentAccess = await attachmentParentWriteAllowed(
+    client,
+    workspaceAuth,
+    String(parentCollection),
+    String(parentId)
+  );
+
+  if (!parentAccess.allowed) {
     return response(403, {
-      success: false,
-      error:
-        "Attachment deletion is currently limited to agency administrators."
+      success:false,
+      error: parentAccess.error || "You are not authorized to remove attachments from this record."
+    });
+  }
+
+  if (!parentReferencesAttachment(parentAccess.parent, key)) {
+    return response(403, {
+      success:false,
+      error:"This attachment is not referenced by the specified parent record."
     });
   }
 
