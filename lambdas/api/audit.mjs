@@ -36,6 +36,18 @@ async function ensureAuditSchema(client) {
     )
   `);
 
+  // CREATE TABLE IF NOT EXISTS does not add columns to an older table.
+  // Upgrade legacy audit tables additively before creating indexes or writing rows.
+  await client.query(`
+    ALTER TABLE suite_activity_log
+      ADD COLUMN IF NOT EXISTS actor_user_id UUID,
+      ADD COLUMN IF NOT EXISTS actor_person_id TEXT,
+      ADD COLUMN IF NOT EXISTS actor_email TEXT,
+      ADD COLUMN IF NOT EXISTS actor_name TEXT,
+      ADD COLUMN IF NOT EXISTS entity_type TEXT DEFAULT 'general',
+      ADD COLUMN IF NOT EXISTS ip_address TEXT
+  `);
+
   await client.query(`
     CREATE INDEX IF NOT EXISTS suite_activity_log_workspace_time_idx
       ON suite_activity_log (tenant_id, agency_id, occurred_at DESC)
