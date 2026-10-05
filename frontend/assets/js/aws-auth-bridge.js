@@ -37,6 +37,29 @@
     return base64url(new Uint8Array(digest));
   }
 
+  async function currentIdToken(){
+    try{
+      const helper=window.SonoMarziAwsAuth;
+      if(typeof helper?.ensureIdToken==='function'){
+        const refreshed=await helper.ensureIdToken();
+        if(refreshed) return refreshed;
+      }
+      if(typeof helper?.getIdToken==='function'){
+        const token=helper.getIdToken();
+        if(token) return token;
+      }
+    }catch(error){
+      console.warn('[auth] Cognito session refresh failed:',error);
+    }
+    return sessionStorage.getItem(AWS_AUTH.idTokenKey);
+  }
+
+  function requireNormalSignIn(message='Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry.'){
+    setStatus(message);
+    try{ window.SonoMarziAwsAuth?.startLogin?.(); }catch{}
+    return null;
+  }
+
   function setStatus(message, good=false){
     let box=document.getElementById('awsAuthBridgeStatus');
     if(!box){
@@ -153,10 +176,10 @@
   
 async function migrateDemoPdAccessRules() {
   const status = document.getElementById('aws-auth-status');
-  const token = sessionStorage.getItem(AWS_AUTH.idTokenKey);
+  const token = await currentIdToken();
 
   if (!token) {
-    const msg = 'AWS login required. Click Test AWS Login first.';
+    const msg = 'Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry.';
     if (status) status.textContent = msg;
     alert(msg);
     return;
@@ -230,7 +253,7 @@ async function migrateDemoPdAccessRules() {
       sessionStorage.removeItem(AWS_AUTH.idTokenKey);
       throw new Error(
         result?.error ||
-        'AWS authentication expired. Click Test AWS Login and try again.'
+        'Your secure SonoMarzi session expired. Sign out and sign back in normally, then retry.'
       );
     }
 
@@ -335,9 +358,9 @@ async function migrateDemoPdMemberships(){
       throw new Error('Sign in to the normal SonoMarzi/Supabase session first, then retry.');
     }
 
-    const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+    const idToken=await currentIdToken();
     if(!idToken){
-      throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the membership copy.');
+      throw new Error('Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry the membership copy.');
     }
 
     setStatus('Reading Demo PD memberships from Supabase...');
@@ -382,7 +405,7 @@ async function migrateDemoPdMemberships(){
       sessionStorage.removeItem(AWS_AUTH.idTokenKey);
       throw new Error(
         result?.error ||
-        'AWS authentication expired. Click Test AWS Login and try again.'
+        'Your secure SonoMarzi session expired. Sign out and sign back in normally, then retry.'
       );
     }
 
@@ -427,9 +450,9 @@ async function inspectAwsMemberships(){
   const button=document.getElementById('awsMembershipInspectButton');
   if(button) button.disabled=true;
   try{
-    const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+    const idToken=await currentIdToken();
     if(!idToken){
-      throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the inspection.');
+      throw new Error('Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry the inspection.');
     }
 
     setStatus('Inspecting the AWS suite_memberships table...');
@@ -485,9 +508,9 @@ async function inspectAwsAccessRules(){
     const button=document.getElementById('awsAccessRulesInspectButton');
     if(button) button.disabled=true;
     try{
-      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const idToken=await currentIdToken();
       if(!idToken){
-        throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the inspection.');
+        throw new Error('Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry the inspection.');
       }
 
       setStatus('Inspecting the AWS suite_access_rules table...');
@@ -535,9 +558,9 @@ async function inspectAwsAccessRules(){
     const button=document.getElementById('awsDemoTemplateButton');
     if(button) button.disabled=true;
     try{
-      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const idToken=await currentIdToken();
       if(!idToken){
-        throw new Error('AWS authentication token not found. Use Test AWS Login first, then retry the template copy.');
+        throw new Error('Your secure SonoMarzi session is missing or expired. Sign out and sign back in normally, then retry the template copy.');
       }
 
       if(typeof supabaseClient==='undefined' || !supabaseClient){
@@ -599,7 +622,7 @@ async function inspectAwsAccessRules(){
     const button=document.getElementById('awsDemoMigrationButton');
     if(button) button.disabled=true;
     try{
-      const idToken=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const idToken=await currentIdToken();
       if(!idToken){
         sessionStorage.setItem(AWS_AUTH.migrateIntentKey,'1');
         setStatus('AWS sign-in is required before the Demo PD copy. Opening Cognito...');
@@ -749,10 +772,9 @@ async function inspectAwsAccessRules(){
 
   async function testAwsMe(){
     try{
-      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const token=await currentIdToken();
       if(!token){
-        setStatus('AWS login required. Opening Cognito...');
-        await startLogin();
+        requireNormalSignIn();
         return;
       }
 
@@ -845,11 +867,10 @@ async function inspectAwsAccessRules(){
 
   async function testAwsWorkspace(){
     try{
-      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const token=await currentIdToken();
 
       if(!token){
-        setStatus('AWS login required. Opening Cognito...');
-        await startLogin();
+        requireNormalSignIn();
         return;
       }
 
@@ -956,11 +977,10 @@ async function inspectAwsAccessRules(){
 
   async function testAwsWritePath(){
     try{
-      const token=sessionStorage.getItem(AWS_AUTH.idTokenKey);
+      const token=await currentIdToken();
 
       if(!token){
-        setStatus('AWS login required. Opening Cognito...');
-        await startLogin();
+        requireNormalSignIn();
         return;
       }
 
