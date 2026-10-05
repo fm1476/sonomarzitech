@@ -4065,10 +4065,14 @@ const SuiteStore=(()=>{
           // point the person at the reload action that's already sitting in the save-status strip.
           saveAgain=false;
           lastErrorWasVersionConflict=true;
-          const conflictSuffix=e.conflictKey
-            ? ` Conflicting record: ${e.conflictKey} (browser expected v${e.expectedVersion ?? '?'}, server has v${e.currentVersion ?? '?'}).`
-            : '';
-          status('error','Someone or something else already saved a newer version of this data in the meantime.'+conflictSuffix+' Use "Reload saved copy" below before making further changes here.');
+          if(e.conflictKey){
+            console.warn('Concurrent edit conflict', {
+              conflictKey:e.conflictKey,
+              expectedVersion:e.expectedVersion,
+              currentVersion:e.currentVersion
+            });
+          }
+          status('error','This record was updated by another user while you were editing it. Your changes have not been saved. Use "Reload saved copy" below to load the latest version before continuing.');
         }else if(e.isPermissionFailure){
           saveAgain=false;
           lastErrorWasVersionConflict=false;
