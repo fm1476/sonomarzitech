@@ -33,3 +33,27 @@ After bootstrap:
 2. Run **Deploy SonoMarzi to AWS** manually.
 3. Verify `demo.sonomarzi.com` and `temp5.sonomarzi.com`.
 4. Only after the manual deployment succeeds, enable automatic deployment on pushes to `main`.
+
+
+## Manual frontend deployment
+
+When GitHub Actions is unavailable, deploy the frontend with cache-busting headers and delete files that no longer exist in the repository:
+
+```bash
+cd ~/sonomarzitech
+git pull
+
+bash scripts/verify-source.sh
+
+aws s3 sync frontend/ \
+  s3://sonomarzi-app-dev-458826002208-us-east-2-an/ \
+  --region us-east-2 \
+  --delete \
+  --cache-control "no-cache, no-store, must-revalidate"
+
+aws cloudfront create-invalidation \
+  --distribution-id EA4Z48KSEJBUU \
+  --paths "/*"
+```
+
+This is the preferred manual frontend deployment path. The source verification step checks both backend modules and browser JavaScript syntax before anything is uploaded.
