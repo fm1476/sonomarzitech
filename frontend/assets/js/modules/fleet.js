@@ -1285,7 +1285,7 @@ function renderVehDetailTabContent(v){
       logActivity(`${action==='add'?'Added a photo to':action==='remove'?'Removed a photo from':'Updated a photo description on'} ${v.unitNumber}.`, "vehicle", v.id);
       persist();
       renderVehDetailTabContent(v);
-    });
+    }, {collection:'fleet.vehicles', itemId:v.id});
 
   } else if(VEH_DETAIL_TAB==='activity'){
     const list = STATE.fleet.activity.filter(a=>a.entityId===v.id).slice().reverse();
