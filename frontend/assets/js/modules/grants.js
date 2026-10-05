@@ -809,7 +809,7 @@ function renderSeizureDetailTabContent(s){
       logActivity(`${action==='add'?'Added a photo to':action==='remove'?'Removed a photo from':'Updated a photo description on'} seizure ${s.caseNumber}.`, "seizure", s.id);
       persist();
       renderSeizureDetailTabContent(s);
-    });
+    }, {collection:'grants.seizures', itemId:s.id});
 
   } else if(SEIZURE_DETAIL_TAB==='history'){
     const rows = s.fieldHistory.slice().reverse().map(h=>`
