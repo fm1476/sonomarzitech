@@ -5214,6 +5214,12 @@ async function getWorkspace(client, auth, event) {
   let agencyId = params.agencyId || params.agency_id || null;
   const requestedSubdomain = String(params.subdomain || '').trim().toLowerCase();
 
+  // Lightweight live-sync probe. Reuse the existing authenticated /workspace route so
+  // deployments do not need an additional API Gateway route just for polling.
+  if (String(params.revision || '') === '1' && tenantId && agencyId && !requestedSubdomain) {
+    return await getWorkspaceRevision(client, auth, event);
+  }
+
   if (requestedSubdomain) {
     let subdomain;
     try { subdomain = cleanAgencySubdomain(requestedSubdomain); }
