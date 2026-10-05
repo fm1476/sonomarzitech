@@ -274,6 +274,9 @@ const BULK_IMPORT_SCHEMAS = {
     build(row){
       return {id:'p'+Date.now()+Math.random().toString(36).slice(2,7), name:row.name, badge:row.badge||'', email:row.email||'', unit:row.unit||'', roleIds:[], status:'Active'};
     },
+    exportRow(record){
+      return {name:record.name||'', badge:record.badge||'', email:record.email||'', unit:record.unit||''};
+    },
     existingArray(){ return STATE.personnel; },
     matchExisting(row, arr){ return row.email ? arr.find(p=>(p.email||'').toLowerCase()===row.email.toLowerCase()) : null; },
   },
@@ -304,6 +307,13 @@ const BULK_IMPORT_SCHEMAS = {
         attendedStatus:'Completed', score:row.score?Number(row.score):null, passed: row.passed ? /^true$/i.test(row.passed) : null,
         recertRequired:false, recertDate:null, narrative:'', documents:[]};
     },
+    exportRow(record){
+      const person = STATE.personnel.find(p=>p.id===record.personId);
+      const course = STATE.pm.trainingCourses.find(c=>c.id===record.courseId);
+      return {personName:person?.name||person?.badge||record.personId||'', courseName:course?.name||record.description||record.courseId||'',
+        date:record.date||'', hours:record.hours??'', provider:record.provider||'', location:record.location||'',
+        passed:record.passed==null?'':String(!!record.passed), score:record.score??''};
+    },
     existingArray(){ return STATE.pm.trainingRecords; },
   },
   quartermaster: {
@@ -331,6 +341,12 @@ const BULK_IMPORT_SCHEMAS = {
         replacementDate:null, notes:'', isConsumable:false, serialNumber:row.serialNumber||null, quantity:Number(row.quantity)||1, minQuantity:null,
         ownershipType:'Agency', assignedTo:null, assignedToType:null, personalWeaponAuth:null, photoDataUrl:null, disposal:null};
     },
+    exportRow(record){
+      return {assetId:record.assetId||'', name:record.name||'', category:record.category||record.equipmentType||'',
+        manufacturer:record.manufacturer||'', model:record.model||'', serialNumber:record.serialNumber||'', status:record.status||'',
+        condition:record.condition||'', location:record.location||'', value:record.value??'', purchaseDate:record.purchaseDate||'',
+        quantity:record.quantity??''};
+    },
     existingArray(){ return STATE.qm.equipment; },
     matchExisting(row, arr){ return row.assetId ? arr.find(e=>e.assetId===row.assetId) : null; },
   },
@@ -357,6 +373,11 @@ const BULK_IMPORT_SCHEMAS = {
         status:row.status||'In Service', mileage:Number(row.mileage)||0, fuelType:'Gasoline', location:row.location||'', agency:'', isSharedAsset:false,
         assignedToType:null, assignedTo:null, purchaseDate:row.purchaseDate||'', inServiceDate:row.purchaseDate||'', notes:'', currentFuelLevel:100,
         equipmentChecklist: (typeof stdEquipmentChecklist==='function'?stdEquipmentChecklist():[]), photoDataUrl:null, disposal:null};
+    },
+    exportRow(record){
+      return {unitNumber:record.unitNumber||'', make:record.make||'', model:record.model||'', year:record.year??'', vin:record.vin||'',
+        licensePlate:record.licensePlate||'', vehicleType:record.vehicleType||'', status:record.status||'', mileage:record.mileage??'',
+        location:record.location||'', purchaseDate:record.purchaseDate||''};
     },
     existingArray(){ return STATE.fleet.vehicles; },
     matchExisting(row, arr){ return arr.find(v=>v.unitNumber===row.unitNumber); },
@@ -390,6 +411,12 @@ const BULK_IMPORT_SCHEMAS = {
         retirementDisposition:'N/A', photoDataUrl:null, agency:'', unit:'K9 Unit', medical:(typeof emptyMedicalK9==='function'?emptyMedicalK9():{}),
         equipment:[], deceasedDate:null, lastKnownLocation:null, locationHistory:[], fieldHistory:[]};
     },
+    exportRow(record){
+      const handler = STATE.personnel.find(p=>p.id===record.handlerId);
+      return {name:record.name||'', breed:record.breed||'', sex:record.sex||'', dob:record.dob||'', dateAcquired:record.dateAcquired||'',
+        handlerName:handler?.name||handler?.badge||'', status:record.status||'', tagId:record.tagId||'', vendor:record.vendor||'',
+        microchipNumber:record.microchipNumber||''};
+    },
     existingArray(){ return STATE.k9.k9s; },
     matchExisting(row, arr){ return row.tagId ? arr.find(k=>k.tagId===row.tagId) : null; },
   },
@@ -414,6 +441,11 @@ const BULK_IMPORT_SCHEMAS = {
         assignedOperatorId:'', homeDock:'', sensorPayload:[], dateAcquired:row.dateAcquired||'', registrationExpiration:row.registrationExpiration||'',
         maxFlightTimeMin:30, vendor:row.vendor||'', purchasePrice:0, notes:'', retirementDate:null, photoDataUrl:null, remoteIdCompliant:true,
         totalFlightHours:0, totalFlights:0, batteries:[], deceasedDate:null, fieldHistory:[]};
+    },
+    exportRow(record){
+      return {name:record.name||'', model:record.model||'', category:record.category||'', serialNumber:record.serialNumber||'',
+        faaRegistrationNumber:record.faaRegistrationNumber||'', status:record.status||'', dateAcquired:record.dateAcquired||'',
+        registrationExpiration:record.registrationExpiration||'', vendor:record.vendor||''};
     },
     existingArray(){ return STATE.drone.drones; },
     matchExisting(row, arr){ return row.serialNumber ? arr.find(d=>d.serialNumber===row.serialNumber) : null; },
@@ -442,6 +474,13 @@ const BULK_IMPORT_SCHEMAS = {
         hazmatTechCert:/^true$/i.test(row.hazmatTechCert||''), hazmatTechCertDate:null, cesCredential:/^true$/i.test(row.cesCredential||''),
         cesNumber:row.cesNumber||null, cesCertDate:null, status:row.status||'Active', fieldHistory:[]};
     },
+    exportRow(record){
+      const person = STATE.personnel.find(p=>p.id===record.personId);
+      return {personName:person?.name||person?.badge||record.personId||'', hdsCertNumber:record.hdsCertNumber||'',
+        hdsCertDate:record.hdsCertDate||'', hdsRecertDueDate:record.hdsRecertDueDate||'',
+        hazmatTechCert:String(!!record.hazmatTechCert), cesCredential:String(!!record.cesCredential),
+        cesNumber:record.cesNumber||'', status:record.status||''};
+    },
     existingArray(){ return STATE.eod.technicians; },
     matchExisting(row, arr, resolved){ return resolved.person ? arr.find(t=>t.personId===resolved.person.id) : null; },
   },
@@ -466,6 +505,12 @@ const BULK_IMPORT_SCHEMAS = {
         serviceAddresses:row.address?[{id:'addr1',address:row.address,isPrimary:true}]:[], receivedDate:row.receivedDate||'', returnByDate:row.returnByDate||'',
         assignedServerId:null, notes:'', priority:'Standard', stage:'Unassigned', serviceMethod:null, attempts:[], servedDate:null, servedTime:null,
         servedOnName:null, feeLineItems:[], feePayments:[], mileage:0, returnFiledDate:null, fieldHistory:[]};
+    },
+    exportRow(record){
+      const primary = Array.isArray(record.serviceAddresses) ? (record.serviceAddresses.find(a=>a?.isPrimary)||record.serviceAddresses[0]) : null;
+      return {caseNumber:record.caseNumber||'', paperType:record.paperType||'', plaintiff:record.plaintiff||'', defendant:record.defendant||'',
+        courtOfOrigin:record.courtOfOrigin||'', attorneyOfRecord:record.attorneyOfRecord||'', address:primary?.address||'',
+        receivedDate:record.receivedDate||'', returnByDate:record.returnByDate||''};
     },
     existingArray(){ return STATE.civil.papers; },
     matchExisting(row, arr){ return arr.find(p=>p.caseNumber===row.caseNumber); },
@@ -495,6 +540,12 @@ const BULK_IMPORT_SCHEMAS = {
         issuedDate:fmt(new Date()), issuedBy:row.issuedBy||'', notes:'', notifiedDate:null, notifiedBy:null, acknowledgedDate:null, acknowledgedBy:null,
         attachments:[], fieldHistory:[]};
     },
+    exportRow(record){
+      const person = STATE.personnel.find(p=>p.id===record.personId);
+      return {personName:person?.name||person?.badge||record.personId||'', caseNumber:record.caseNumber||'', courtDate:record.courtDate||'',
+        courtTime:record.courtTime||'', courtLocation:record.courtLocation||'', courtroom:record.courtroom||'',
+        subject:record.subject||'', issuedBy:record.issuedBy||''};
+    },
     existingArray(){ return STATE.subpoena.subpoenas; },
   },
 };
@@ -512,26 +563,47 @@ function bulkImportDownloadTemplate(schemaKey){
   URL.revokeObjectURL(url);
 }
 
+function bulkImportExportExisting(schemaKey){
+  const schema = BULK_IMPORT_SCHEMAS[schemaKey];
+  const headers = schema.fields.map(field=>field.label);
+  const rows = schema.existingArray().map(record=>{
+    const mapped = schema.exportRow ? schema.exportRow(record) : record;
+    return schema.fields.map(field=>mapped?.[field.key] ?? '');
+  });
+  const csv = Papa.unparse({fields:headers, data:rows});
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${schema.label.replace(/[^a-z0-9]+/gi,'_')}_existing_records.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderBulkImportTab(body, schemaKey){
   const schema = BULK_IMPORT_SCHEMAS[schemaKey];
   let parsedRows = null;
 
   function draw(){
     body.innerHTML = `
-      <div class="panel"><div class="panel-head"><h2>Bulk Import \u2014 ${escapeHtml(schema.label)}</h2></div>
+      <div class="panel"><div class="panel-head"><h2>Data Migration \u2014 ${escapeHtml(schema.label)}</h2></div>
         <div class="panel-body">
           <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;max-width:680px;">
-            Download the current template, fill in one row per record, then upload it here. The template's columns match what this screen actually supports right now \u2014 re-download it any time fields change, rather than reusing an old copy.
+            Download the current SonoMarzi template for this module, fill or map the agency's existing data into it, upload the completed CSV, review validation results, and import. You can also export the module's existing records in the same compatible column layout.
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-            <button class="btn btn-outline" id="btnDownloadTemplate">${ICONS.download||''} Download Template</button>
-            <label class="btn btn-primary" style="cursor:pointer;margin:0;">${ICONS.plus||''} Choose File to Upload<input type="file" id="fBulkFile" accept=".csv" style="display:none;"></label>
+            <button class="btn btn-outline" id="btnDownloadTemplate">${ICONS.download||''} Download Import Template</button>
+            <label class="btn btn-primary" style="cursor:pointer;margin:0;">${ICONS.plus||''} Upload Completed CSV<input type="file" id="fBulkFile" accept=".csv,text/csv" style="display:none;"></label>
+            <button class="btn btn-outline" id="btnExportExisting">${ICONS.download||''} Export Existing Records</button>
           </div>
           <div id="bulkPreviewArea"></div>
         </div>
       </div>
     `;
     document.getElementById('btnDownloadTemplate').addEventListener('click', ()=>bulkImportDownloadTemplate(schemaKey));
+    document.getElementById('btnExportExisting').addEventListener('click', ()=>bulkImportExportExisting(schemaKey));
     document.getElementById('fBulkFile').addEventListener('change', handleFile);
   }
 
