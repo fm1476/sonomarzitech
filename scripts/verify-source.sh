@@ -44,5 +44,6 @@ done
 
 node scripts/verify-role-invariants.mjs
 node scripts/verify-attachment-invariants.mjs
+node scripts/verify-mfa-invariants.mjs
 
 echo "Source checks passed."
