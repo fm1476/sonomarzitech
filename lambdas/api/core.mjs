@@ -5167,6 +5167,46 @@ async function getMe(client, auth) {
   });
 }
 
+async function getWorkspaceRevision(client, auth, event) {
+  const params = event?.queryStringParameters || {};
+  const tenantId = params.tenantId || params.tenant_id || null;
+  const agencyId = params.agencyId || params.agency_id || null;
+
+  if (!tenantId || !agencyId) {
+    return response(400, { success:false, error:"tenantId and agencyId are required." });
+  }
+
+  const workspaceAuth = await resolveWorkspaceMembership(client, auth, tenantId, agencyId);
+  if (workspaceAuth.error) return workspaceAuth.error;
+
+  const recordResult = await client.query(
+    `SELECT COALESCE(MAX(updated_at), TIMESTAMPTZ 'epoch') AS records_revision
+       FROM suite_records
+      WHERE tenant_id = $1 AND agency_id = $2`,
+    [tenantId, agencyId]
+  );
+
+  let auditRevision = 0;
+  const auditTable = await client.query(`SELECT to_regclass('suite_activity_log') AS name`);
+  if (auditTable.rows[0]?.name) {
+    const auditResult = await client.query(
+      `SELECT COALESCE(MAX(id),0)::bigint AS audit_revision
+         FROM suite_activity_log
+        WHERE tenant_id = $1 AND agency_id = $2`,
+      [tenantId, agencyId]
+    );
+    auditRevision = Number(auditResult.rows[0]?.audit_revision || 0);
+  }
+
+  return response(200, {
+    success:true,
+    data:{
+      records_revision: recordResult.rows[0]?.records_revision || null,
+      audit_revision: auditRevision
+    }
+  });
+}
+
 async function getWorkspace(client, auth, event) {
   await ensureAgencySubdomainSchema(client);
   const params = event?.queryStringParameters || {};
@@ -5323,5 +5363,6 @@ export {
   createAttachmentDownloadUrl,
   deleteAttachment,
   getMe,
-  getWorkspace
+  getWorkspace,
+  getWorkspaceRevision
 };
