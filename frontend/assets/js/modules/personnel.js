@@ -3432,7 +3432,7 @@ function rollCallFor(date, shiftId){ return (STATE.pm.rollCalls||[]).find(rc=>rc
 function renderTimeOffSub(){
   if(!STATE.pm.leaveRequests) STATE.pm.leaveRequests = [];
   const canSubmit = can('pm_leave_request_submit');
-  const canApprove = can('pm_leave_request_approve');
+  const canApprove = authoritativeRoleAdmin() || can('pm_leave_request_approve');
   const me = STATE.personnel.find(p=>p.id===CURRENT_USER_ID);
   const requestableCodes = (STATE.pm.refData.exceptionCodes||[]).filter(c=>c.active!==false && c.requestable);
 
