@@ -115,7 +115,7 @@
 
     if(typeof runCoreMigrations==='function') runCoreMigrations();
     if(ws.agency?.branding) STATE.agencyBranding={...(STATE.agencyBranding||{}),...ws.agency.branding};
-    if(ws.tenant?.enabled_modules) STATE.enabledModules=[...ws.tenant.enabled_modules];
+    STATE.enabledModules=Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[];
 
     CURRENT_USER_ID=ws.person_id||me.user?.id||null;
     HOME_ROLE_IDS=Array.isArray(ws.role_ids)?[...ws.role_ids]:[];
