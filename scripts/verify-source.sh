@@ -43,5 +43,6 @@ for file in frontend/assets/js/*.js frontend/assets/js/modules/*.js; do
 done
 
 node scripts/verify-role-invariants.mjs
+node scripts/verify-attachment-invariants.mjs
 
 echo "Source checks passed."
