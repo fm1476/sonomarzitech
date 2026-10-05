@@ -2948,9 +2948,14 @@ function renderPlatformAuditLogTab(body){
   `;
 
   wireSharedSortHeaders('auditLog', ()=>renderPlatformAuditLogTab(body));
-  if(!REMOTE_AUDIT_LOG_LOADING && typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
-    REMOTE_AUDIT_LOG_LOADING = true;
-    fetchRemoteAuditLog().then(()=>renderPlatformAuditLogTab(body));
+  if(typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared'){
+    const ctx = SuiteStore.remoteContext();
+    const refreshKey = `${ctx.tenantId||''}/${ctx.agencyId||''}`;
+    if(body.dataset.auditRefreshKey !== refreshKey && !REMOTE_AUDIT_LOG_LOADING){
+      body.dataset.auditRefreshKey = refreshKey;
+      REMOTE_AUDIT_LOG = null;
+      fetchRemoteAuditLog().then(()=>renderPlatformAuditLogTab(body));
+    }
   }
   const wireFilter = (id, key)=>document.getElementById(id).addEventListener('change', e=>{ AUDIT_LOG_FILTER[key]=e.target.value; renderPlatformAuditLogTab(body); });
   wireFilter('auditModuleFilter','module');
