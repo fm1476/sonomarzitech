@@ -2513,6 +2513,34 @@ async function authorizeOfficerSelfServiceChange(
         error: "Record identity cannot be changed."
       };
     }
+
+    if (collection === "pm.leaveRequests" && !hasElevated) {
+      const beforeStatus = String(existingValue?.status || "pending");
+      const afterStatus = String(incoming?.status || "pending");
+      const allowedKeys = new Set([
+        "id","personId","code","startDate","endDate","reason","status",
+        "submittedAt","submittedBy","rescindedAt","rescindedBy"
+      ]);
+      const changedOutsideRescind = Object.keys({
+        ...(existingValue || {}),
+        ...(incoming || {})
+      }).some(key =>
+        !allowedKeys.has(key) ||
+        JSON.stringify(existingValue?.[key]) !== JSON.stringify(incoming?.[key]) &&
+        !["status","rescindedAt","rescindedBy"].includes(key)
+      );
+
+      if (
+        beforeStatus !== "pending" ||
+        afterStatus !== "cancelled" ||
+        changedOutsideRescind
+      ) {
+        return {
+          allowed: false,
+          error: "You may only rescind your own pending time-off request."
+        };
+      }
+    }
   }
 
   return { allowed: true };
