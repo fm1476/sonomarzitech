@@ -3738,6 +3738,10 @@ const SuiteStore=(()=>{
         const error=Error(body?.error||body?.message||`AWS request failed (${res.status}).`);
         error.status=res.status;
         error.code=body?.code||String(res.status);
+        error.conflictKey=body?.conflict_key||null;
+        error.expectedVersion=Number.isSafeInteger(body?.expected_version)?body.expected_version:null;
+        error.currentVersion=Number.isSafeInteger(body?.current_version)?body.current_version:null;
+        error.responseBody=body;
         throw error;
       }
       return body;
@@ -4008,8 +4012,16 @@ const SuiteStore=(()=>{
                 // fall through to the normal path below
               }
             }
-            const staleErr = Error(error.message||'Shared save failed. Changes remain pending.');
-            if(isVersionConflict) staleErr.isVersionConflict = true;
+            const conflictDetail = isVersionConflict && error.conflictKey
+              ? ` [record ${error.conflictKey}; expected v${error.expectedVersion ?? '?'}; server v${error.currentVersion ?? '?'}]`
+              : '';
+            const staleErr = Error((error.message||'Shared save failed. Changes remain pending.') + conflictDetail);
+            if(isVersionConflict){
+              staleErr.isVersionConflict = true;
+              staleErr.conflictKey = error.conflictKey || null;
+              staleErr.expectedVersion = error.expectedVersion;
+              staleErr.currentVersion = error.currentVersion;
+            }
             if(error.code==='42501'||/cannot change this collection or record/i.test(error.message||''))staleErr.isPermissionFailure=true;
             throw staleErr;
           }
@@ -4047,7 +4059,10 @@ const SuiteStore=(()=>{
           // point the person at the reload action that's already sitting in the save-status strip.
           saveAgain=false;
           lastErrorWasVersionConflict=true;
-          status('error','Someone or something else already saved a newer version of this data in the meantime. Use "Reload saved copy" below before making further changes here.');
+          const conflictSuffix=e.conflictKey
+            ? ` Conflicting record: ${e.conflictKey} (browser expected v${e.expectedVersion ?? '?'}, server has v${e.currentVersion ?? '?'}).`
+            : '';
+          status('error','Someone or something else already saved a newer version of this data in the meantime.'+conflictSuffix+' Use "Reload saved copy" below before making further changes here.');
         }else if(e.isPermissionFailure){
           saveAgain=false;
           lastErrorWasVersionConflict=false;
