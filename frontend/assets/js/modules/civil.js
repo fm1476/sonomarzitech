@@ -4340,7 +4340,11 @@ const SuiteStore=(()=>{
       if(epoch!==sessionEpoch||pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
       const changed=data.records.some(row=>serverVersions[row.key]!==row.version) ||
         Object.keys(serverVersions).some(key=>!data.records.some(row=>row.key===key));
-      if(!changed){await loadNotificationReads();return false;}
+      if(!changed){
+        lastRecordRevision=(data.records||[]).reduce((max,r)=>r.updated_at&&r.updated_at>max?r.updated_at:max,'')||lastRecordRevision;
+        await loadNotificationReads();
+        return false;
+      }
       acceptRemote(data);
       await loadNotificationReads();
       renderRoleSwitcher();
