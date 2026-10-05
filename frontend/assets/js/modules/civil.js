@@ -3830,7 +3830,13 @@ const SuiteStore=(()=>{
   let mode='local',remoteContext={tenantId:null,agencyId:null};
   const clone=v=>JSON.parse(JSON.stringify(v));
   function flatten(state){const result=new Map();function add(path,value){const selfService=path[0]==='pm'&&['trainingCheckins','leaveRequests'].includes(path[1]);const hasRecords=Array.isArray(value)&&(selfService||value.length&&value.every(x=>x&&typeof x==='object'&&(x.id||x.personId)));const idFor=x=>String(x.id||x.personId);if(hasRecords&&new Set(value.map(idFor)).size===value.length){result.set(JSON.stringify([path,'$order']),value.map(idFor));value.forEach(x=>result.set(JSON.stringify([path,idFor(x)]),x));}else result.set(JSON.stringify([path,'$value']),value);}
-    Object.entries(state).forEach(([key,value])=>{if(['currentRoleIds','currentRoleId'].includes(key))return;if(['qm','fleet','pm','k9','drone','eod','subpoena','grants','civil'].includes(key)&&value&&typeof value==='object')Object.entries(value).forEach(([k,v])=>add([key,k],v));else add([key],value);});return new Map([...result].map(([k,v])=>[k,clone(v)]));}
+    Object.entries(state).forEach(([key,value])=>{
+      // These values are derived from authenticated workspace/tenant context and are
+      // server-owned configuration, not ordinary suite records. Persisting them from
+      // every user session makes unrelated module saves carry stale tenant config.
+      if(['currentRoleIds','currentRoleId','enabledModules'].includes(key))return;
+      if(['qm','fleet','pm','k9','drone','eod','subpoena','grants','civil'].includes(key)&&value&&typeof value==='object')Object.entries(value).forEach(([k,v])=>add([key,k],v));else add([key],value);
+    });return new Map([...result].map(([k,v])=>[k,clone(v)]));}
   function inflate(map){const state={},groups=new Map();for(const [key,value] of map){const [path,id]=JSON.parse(key),p=JSON.stringify(path);if(!groups.has(p))groups.set(p,{path,items:new Map()});groups.get(p).items.set(id,value);}for(const {path,items} of groups.values()){let target=state;for(const p of path.slice(0,-1))target=target[p]||(target[p]={});target[path.at(-1)]=items.has('$value')?clone(items.get('$value')):(items.get('$order')||[...items.keys()]).filter(id=>items.has(id)&&!id.startsWith('$')).map(id=>clone(items.get(id)));}return state;}
   function mergeTemplate(base,data){if(Array.isArray(data))return data;if(!data||typeof data!=='object')return data;const out={...base};for(const [k,v] of Object.entries(data))out[k]=mergeTemplate(base?.[k],v);return out;}
   function equal(a,b){
@@ -3881,7 +3887,7 @@ const SuiteStore=(()=>{
       const rejected=[];
       if(mode==='shared')patches=patches.filter(p=>{
         const [path]=JSON.parse(p.key);
-        if(path[0]==='accounts'||path[0]==='auditLog') return false;
+        if(path[0]==='accounts'||path[0]==='auditLog'||path[0]==='enabledModules') return false;
         // Alerts are derived while rendering. Read receipts have their own per-user table.
         if(['activity','dashboardPrefs','notifications'].includes(path[1])) return false;
         if(path[0]==='ssoConfig'){
