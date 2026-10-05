@@ -2,6 +2,123 @@
    SHARED ICONS
    ========================================================================= */
 const WEEKDAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+/* Shared AWS attachment client used by Fleet, Quartermaster, Personnel, Subpoena and other modules. */
+const AWS_ATTACHMENTS = (() => {
+  const apiBase = 'https://7debzkoq7k.execute-api.us-east-2.amazonaws.com';
+  const tokenKey = 'sonomarzi.aws.id_token';
+
+  function token(){
+    return sessionStorage.getItem(tokenKey);
+  }
+
+  function context(){
+    const ctx = SuiteStore.remoteContext?.() || {};
+    if(!ctx.tenantId || !ctx.agencyId){
+      throw Error('Choose an agency workspace first.');
+    }
+    return ctx;
+  }
+
+  async function api(path, body){
+    const idToken = token();
+    if(!idToken) throw Error('AWS Cognito session is not available.');
+
+    const res = await fetch(`${apiBase}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const text = await res.text();
+    let data = null;
+    try{ data = text ? JSON.parse(text) : {}; }
+    catch{ data = {raw:text}; }
+
+    if(!res.ok){
+      throw Error(data?.error || data?.message || `Attachment request failed (${res.status}).`);
+    }
+    return data;
+  }
+
+  async function upload(file, parent){
+    if(!file || !file.size) throw Error('Choose a file first.');
+    if(!parent?.collection || !parent?.itemId) throw Error('Attachment parent record is required.');
+    if(file.size > 25 * 1024 * 1024) throw Error('Attachments are limited to 25 MB.');
+
+    const ctx = context();
+    const reservation = await api('/attachments/upload-url', {
+      tenant_id: ctx.tenantId,
+      agency_id: ctx.agencyId,
+      file_name: file.name,
+      content_type: file.type || 'application/octet-stream',
+      size_bytes: file.size,
+      parent_collection: parent.collection,
+      parent_id: parent.itemId
+    });
+
+    const put = await fetch(reservation.upload_url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream'
+      },
+      body: file
+    });
+
+    if(!put.ok){
+      throw Error(`S3 upload failed (${put.status}).`);
+    }
+
+    return {
+      storageKey: reservation.key,
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      sizeKb: Math.max(1, Math.round(file.size / 1024)),
+      uploadedDate: fmt(new Date()),
+      uploadedBy: personName(CURRENT_USER_ID)
+    };
+  }
+
+  async function signedUrl(attachment){
+    if(attachment?.storageKey){
+      const ctx = context();
+      const signed = await api('/attachments/download-url', {
+        tenant_id: ctx.tenantId,
+        agency_id: ctx.agencyId,
+        key: attachment.storageKey
+      });
+      return signed.download_url;
+    }
+
+    if(attachment?.dataUrl) return attachment.dataUrl;
+    throw Error('This attachment does not have a downloadable file.');
+  }
+
+  async function download(attachment){
+    const url = await signedUrl(attachment);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  async function remove(attachment, parent){
+    if(!attachment?.storageKey) return;
+    if(!parent?.collection || !parent?.itemId) throw Error('Attachment parent record is required.');
+    const ctx = context();
+    await api('/attachments/delete', {
+      tenant_id: ctx.tenantId,
+      agency_id: ctx.agencyId,
+      key: attachment.storageKey,
+      parent_collection: parent.collection,
+      parent_id: parent.itemId
+    });
+  }
+
+  return {upload, signedUrl, download, remove};
+})();
+
 const ICONS = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>',
