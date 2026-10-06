@@ -1,0 +1,8 @@
+{
+  "name": "sonomarzi-api",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-location": "^3.0.0"
+  }
+}
