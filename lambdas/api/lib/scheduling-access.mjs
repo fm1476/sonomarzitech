@@ -1,3 +1,4 @@
+import {validateStaffingRequirements,staffingSummary,staffingPersonHasSkill} from './staffing-categories.mjs';
 import {planShiftBidAward} from './shift-bid-planner.mjs';
 // Calendar membership is independent of role-wide scheduling abilities.
 export function schedulingSnapshot(records) {
@@ -30,6 +31,13 @@ export function biddingSeniorityProjection(records,personId) {
     else if(record.value&&eligible(record.value.personId))output.push({...record,value:limited(record.value)});
   }
   return output;
+}
+export function schedulingSkillsProjection(records,personId,canManage){
+  const snapshot=schedulingSnapshot(records),groups=(snapshot['pm.scheduleWorkGroups']||[]).filter(g=>managesGroup(g,personId));
+  const participants=new Set([...groups.flatMap(g=>[...(g.viewerIds||[]),...(g.managerIds||[])]),...(snapshot['pm.specialEvents']||[]).filter(e=>(e.eligibleWorkGroupIds||[]).length&&(e.eligibleWorkGroupIds||[]).every(id=>groups.some(g=>g.id===id))).flatMap(e=>(e.requests||[]).map(r=>r.personId))]);
+  const eligible=id=>id===personId||canManage&&(participants.has(id)||groups.some(g=>g.visibility==='agency')||personGroupIds(id,{},snapshot).some(id=>groups.some(g=>g.id===id)));
+  const limited=v=>({id:v.id,personId:v.personId,specialSkills:Array.isArray(v.specialSkills)?v.specialSkills:[]});
+  return records.flatMap(row=>{let path,id;try{[path,id]=JSON.parse(row.key);}catch{return [];}if(path.join('.')!=='pm.records'||row.deleted||id==='$order')return [];if(id==='$value'&&Array.isArray(row.value))return [{...row,value:row.value.filter(v=>eligible(v.personId)).map(limited)}];return row.value&&eligible(row.value.personId)?[{...row,value:limited(row.value)}]:[];});
 }
 const normalize = value => String(value || '').trim().toLowerCase();
 export function viewsGroup(group, person, personId) {
@@ -197,7 +205,7 @@ export function scheduleWriteDecision(collection, change, before, snapshot, pers
       Array.isArray(newRequests) && newRequests.length === oldRequests.length + 1 &&
       JSON.stringify(newRequests.slice(0,-1)) === JSON.stringify(oldRequests) &&
       !oldRequests.some(r => r.personId === personId) && request?.personId === personId && request.status === 'pending' &&
-      Object.keys(request).every(k => ['personId','status','requestedAt','conflict'].includes(k));
+      Object.keys(request).every(k => ['personId','status','requestedAt','conflict',...(collection==='pm.specialEvents'?['staffingCategoryId']:[])].includes(k));
     return {allowed, error:'You may only submit your own pending request to an accessible open opportunity.'};
   }
   return {allowed:false, error:'You are not assigned to manage this work group calendar.'};
@@ -220,6 +228,7 @@ export function filterSchedulingRecords(records, personId, canViewSchedule, abil
   const visibleIds = new Map();
   const allowed = (collection, value) => {
     if (collection === 'pm.scheduleWorkGroups') return viewsGroup(value, person, personId);
+    if(collection==='pm.specialEvents'&&(value.requests || []).some(r=>r.personId===personId&&r.status==='awarded'))return true;
     if (collection === 'pm.scheduleAssignments' && value.personId === personId) return true;
     if(['pm.scheduleAssignments','pm.scheduleShifts'].includes(collection) && abilities.biddingManage && recordGroupIds(collection,value,snapshot).some(id=>managesGroup(groups.find(g=>g.id===id),personId)))return true;
     if (collection === 'pm.scheduleShifts' && ownShiftIds.has(value.id)) return true;
@@ -317,16 +326,42 @@ export function validateSchedulingBatch(snapshot,changes) {
       if(!uniquePeople(signups))fail('An employee can sign up for a job only once.');
       if(signups.filter(s=>s.status==='approved').length>job.slots)fail('This extra-duty job is already fully staffed. Reload before approving.');
     }
+    if(['pm.scheduleShifts','pm.specialEvents'].includes(collection)) {
+      try{validateStaffingRequirements(value.staffingRequirements||[]);}catch(error){fail(error.message);}
+      const minimum=(value.staffingRequirements||[]).reduce((sum,r)=>sum+r.count,0);
+      const catalog=(final['pm.refData']||[]).flatMap(r=>r.skillsCatalog||[]);
+      if((value.staffingRequirements||[]).some(r=>!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a required skill from the Personnel Special Skills Catalog.');
+      if(minimum>0&&Number(collection==='pm.specialEvents'?value.staffNeeded:value.minStaff)!==minimum)fail('The total staffing requirement must equal the category requirements.');
+    }
+    if(['pm.scheduleAssignments','pm.scheduleCoverages','pm.overtimeOpportunities'].includes(collection)&&value.staffingCategoryId){
+      const shift=(final['pm.scheduleShifts']||[]).find(s=>s.id===value.shiftId);
+      const category=(shift?.staffingRequirements||[]).find(c=>c.id===value.staffingCategoryId);
+      if(category&&value.personId&&!staffingPersonHasSkill(final['pm.records'],value.personId,category))fail('This employee does not have the required staffing skill.');
+      if(!shift||(shift.staffingRequirements||[]).length&&!shift.staffingRequirements.some(r=>r.id===value.staffingCategoryId))fail('Select a staffing category defined for this shift.');
+    }
     if(collection==='pm.specialEvents') {
       if(!validDates(value)||dayDifference(value.startDate,value.endDate)>366)fail('Enter a valid special-event date range of no more than one year.');
       if(!Number.isSafeInteger(value.staffNeeded)||value.staffNeeded<1)fail('Event staffing must be a positive whole number.');
       const requests=value.requests || [];
       if(!Array.isArray(requests)||!uniquePeople(requests))fail('Each employee may request an event only once.');
       if(requests.filter(r=>r.status==='awarded').length>value.staffNeeded)fail('The special event is already fully staffed.');
+      const requirements=value.staffingRequirements||[],summary=staffingSummary(requirements,requests.filter(r=>r.status==='awarded'),value.staffNeeded);
+      if(requirements.length&&requests.some(r=>r.status==='awarded'&&!requirements.some(c=>c.id===r.staffingCategoryId)))fail('Each assigned employee must fill a defined staffing category.');
+      if(requirements.length&&requests.some(r=>r.status==='pending'&&r.staffingCategoryId&&!requirements.some(c=>c.id===r.staffingCategoryId)))fail('Select a defined event staffing category.');
+      for(const request of requests.filter(r=>r.status==='awarded'||r.status==='pending'&&r.staffingCategoryId)){const category=requirements.find(c=>c.id===request.staffingCategoryId);if(category&&!staffingPersonHasSkill(final['pm.records'],request.personId,category))fail('This employee does not have the required event staffing skill.');}
+      if(summary.categories.some(r=>r.staffed>r.count))fail('The selected staffing category is already fully staffed.');
       const previous=(snapshot[collection] || []).find(e=>e.id===value.id);
       for(const request of requests.filter(r=>r.status==='awarded'&&!(previous?.requests || []).some(old=>old.personId===r.personId&&old.status==='awarded'))) {
+        const person=(final.personnel || []).find(p=>p.id===request.personId);
+        if(!person)fail('The assigned employee no longer exists.');
+        const groups=final['pm.scheduleWorkGroups'] || [],scope=value.eligibleWorkGroupIds || [];
+        const membership=personGroupIds(request.personId,value,final);
+        if(scope.length&&!scope.some(id=>membership.includes(id)||viewsGroup(groups.find(g=>g.id===id),person,request.personId)))fail("This employee is outside the event's eligible Work Groups.");
+        if(value.status!=='published')fail('Only published events can receive new assignments.');
         for(let offset=0;offset<=dayDifference(value.startDate,value.endDate);offset++) {
           const date=new Date(Date.parse(value.startDate)+offset*86400000).toISOString().slice(0,10);
+          const blocked=(final['pm.scheduleExceptions'] || []).some(e=>e.personId===request.personId&&e.startDate<=date&&e.endDate>=date&&!(e.code==='EVT'&&e.sourceEventId===value.id));
+          if(blocked)fail('This employee has time off or another schedule exception during the event. Resolve it before assigning.');
           const covered=(final['pm.scheduleCoverages'] || []).some(c=>c.personId===request.personId&&c.date===date);
           const otherEvent=(final[collection] || []).some(e=>e.id!==value.id&&e.status!=='cancelled'&&e.startDate<=date&&e.endDate>=date&&(e.requests || []).some(r=>r.personId===request.personId&&r.status==='awarded'));
           if(regularDuty(request.personId,date,final)||covered||otherEvent)fail('This employee has a conflicting assignment during the event. Reassign or resolve the conflict first.');
@@ -343,10 +378,12 @@ export function validateSchedulingBatch(snapshot,changes) {
       }
     }
     if(collection==='pm.overtimeOpportunities') {
+      const shift=(final['pm.scheduleShifts']||[]).find(s=>s.id===value.shiftId),category=(shift?.staffingRequirements||[]).find(c=>c.id===value.staffingCategoryId);
+      if(category&&(value.requests||[]).some(r=>['pending','awarded'].includes(r.status)&&!staffingPersonHasSkill(final['pm.records'],r.personId,category)))fail('This employee does not have the required overtime staffing skill.');
       const requests=value.requests || [];
       if(!Array.isArray(requests)||!uniquePeople(requests)||requests.filter(r=>r.status==='awarded').length>1)fail('An overtime opportunity can award only one employee.');
       const awarded=requests.find(r=>r.status==='awarded');
-      if(awarded&&!((final['pm.scheduleCoverages'] || []).some(c=>c.overtimeOpportunityId===value.id&&c.personId===awarded.personId&&c.shiftId===value.shiftId&&c.date===value.date)))fail('An overtime award must include its Duty Roster coverage record.');
+      if(awarded&&!((final['pm.scheduleCoverages'] || []).some(c=>c.overtimeOpportunityId===value.id && (c.staffingCategoryId||'')===(value.staffingCategoryId||'')&&c.personId===awarded.personId&&c.shiftId===value.shiftId&&c.date===value.date)))fail('An overtime award must include its Duty Roster coverage record.');
     }
     if(collection==='pm.leaveRequests'&&value.status==='approved') {
       const exception=(final['pm.scheduleExceptions'] || []).find(e=>e.id===value.exceptionId);

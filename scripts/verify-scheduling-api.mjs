@@ -73,3 +73,34 @@ assert(database.get(key('pm.scheduleAssignments','$order')).value.includes('hidd
 result=await act('scheduler',['pm_bidding_manage'],[change('pm.bidCycles',{...award,status:'open'})]);
 assert.equal(result.status,403);assert.equal(database.get(key('pm.bidCycles','bid')).value.status,'awarded');
 console.log('Bidding-only API award, linked order writes, history, and repeat rejection passed.');
+
+// Direct multi-person event assignment persists without staff opt-in requests.
+const directEvent={id:'directEvent',name:'Parade',eligibleWorkGroupIds:['patrol'],status:'published',staffNeeded:2,startDate:'2099-03-01',endDate:'2099-03-02',requests:[]};
+database.set(key('pm.specialEvents',directEvent.id),record('pm.specialEvents',directEvent));
+database.set(key('personnel','partner'),record('personnel',{id:'partner',unit:'Patrol'}));
+const directAward={...directEvent,requests:[{personId:'officer',status:'awarded',source:'manual',awardedBy:'scheduler'},{personId:'partner',status:'awarded',source:'manual',awardedBy:'scheduler'}]};
+const eventException={id:'manualEventException',personId:'officer',code:'EVT',sourceEventId:directEvent.id,startDate:directEvent.startDate,endDate:directEvent.endDate};
+result=await act('officer',['pm_overtime_optin'],[change('pm.specialEvents',directAward),change('pm.scheduleExceptions',eventException)]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,0);
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.specialEvents',directAward),change('pm.scheduleExceptions',eventException)]);
+assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,2);
+assert.equal(database.get(key('pm.scheduleExceptions',eventException.id)).value.sourceEventId,directEvent.id);
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.specialEvents',{...directAward,requests:[...directAward.requests,{personId:'dispatcher',status:'awarded',source:'manual'}]})]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,2);
+console.log('API direct multi-person special assignments, staff denial, linked exception, and overcapacity rollback passed.');
+
+// Authoritative skill matching in the actual API pipeline, including a forged staff skill grant.
+const classNeeds=[{id:'law',name:'Law Dispatcher',requiredSkill:'Law Dispatch',count:2},{id:'fire',name:'Fire Dispatcher',requiredSkill:'Fire Dispatch',count:2},{id:'call',name:'Call Taker',requiredSkill:'Call Taking',count:1}];
+result=await act('admin',[],[change('pm.refData',{id:'refs',skillsCatalog:['Law Dispatch','Fire Dispatch','Call Taking']}),change('pm.records',{id:'officerSkills',personId:'officer',specialSkills:['Law Dispatch','Call Taking']})],true);
+assert.equal(result.status,200);assert(commands.some(c=>c.includes('pg_advisory_xact_lock')));
+const classShift={id:'classShift',workGroupId:'patrol',minStaff:5,staffingRequirements:classNeeds,patternType:'weekly',weekdays:[0,1,2,3,4,5,6]};
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleShifts',classShift)]);assert.equal(result.status,200,JSON.stringify(result.body));
+const classAssignment={id:'classAssignment',personId:'officer',shiftId:classShift.id,startDate:'2102-01-01',staffingCategoryId:'fire'};
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',classAssignment)]);assert.equal(result.status,403);assert(!database.has(key('pm.scheduleAssignments',classAssignment.id)));
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',{...classAssignment,staffingCategoryId:'call'})]);assert.equal(result.status,200,JSON.stringify(result.body));
+const typedOt={id:'typedOt',shiftId:classShift.id,date:'2101-01-01',staffingCategoryId:'fire',status:'open',requests:[]};
+database.set(key('pm.overtimeOpportunities',typedOt.id),record('pm.overtimeOpportunities',typedOt));
+result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);assert.equal(result.status,403);
+result=await act('officer',['pm_overtime_optin'],[change('pm.records',{id:'officerSkills',personId:'officer',specialSkills:['Fire Dispatch']}),change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);
+assert.equal(result.status,403);assert.deepEqual(Array.from(database.get(key('pm.records','officerSkills')).value.specialSkills),['Law Dispatch','Call Taking']);assert.equal(database.get(key('pm.overtimeOpportunities',typedOt.id)).value.requests.length,0);
+console.log('API category assignments, multi-skill eligibility, skill-write locking, ineligible overtime, and forged skill-grant rollback passed.');

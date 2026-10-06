@@ -22,7 +22,11 @@ function planShiftBidAward(cycle, records, shifts, assignments, today) {
     const id='bidAssignment:'+cycle.id+':'+sub.personId;
     if (assignments.some(a=>a.id===id)) fail('This shift award has already been applied.');
     prior.forEach(a=>updates.push({...a,endDate:date}));
-    updates.push({id,personId:sub.personId,shiftId,unit:shift.unit || '',location:shift.location || '',startDate:date,endDate:shift.endDate ? new Date(Date.parse(shift.endDate)+86400000).toISOString().slice(0,10) : null,bidCycleId:cycle.id});
+    const names=[...new Set(prior.map(a=>(shifts.find(s=>s.id===a.shiftId)?.staffingRequirements || []).find(r=>r.id===a.staffingCategoryId)?.name?.trim().toLowerCase()).filter(Boolean))];
+    const matching=names.length===1?(shift.staffingRequirements || []).find(r=>r.name.trim().toLowerCase()===names[0]):null;
+    const skills=records.find(r=>r.personId===sub.personId)?.specialSkills||[];
+    const category=matching&&skills.some(skill=>skill.trim().toLowerCase()===(matching.requiredSkill||matching.name).trim().toLowerCase())?matching:null;
+    updates.push({id,personId:sub.personId,shiftId,unit:shift.unit || '',location:shift.location || '',startDate:date,endDate:shift.endDate ? new Date(Date.parse(shift.endDate)+86400000).toISOString().slice(0,10) : null,bidCycleId:cycle.id,...(category?{staffingCategoryId:category.id}:{})});
     awards.push({personId:sub.personId,shiftId,assignmentId:id});
     remaining[shiftId]--;
   }

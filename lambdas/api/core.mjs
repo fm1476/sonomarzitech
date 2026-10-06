@@ -1,4 +1,4 @@
-import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection } from "./lib/scheduling-access.mjs";
+import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 import pg from "pg";
@@ -1687,7 +1687,13 @@ async function filterOfficerWorkspaceRecords(
     ) || roleHasAbility(abilityMap,workspaceAuth.roleIds,"pm_reports_view");
 
   const canManageBids=roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_manage');
-  const bidSeniority=new Map(biddingSeniorityProjection(records,workspaceAuth.personId).map(row=>[row.key,row]));
+  const canManageSchedulingSkills=canManageBids||roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_schedule_manage')||roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_overtime_manage');
+  const bidSeniority=new Map((canManageBids?biddingSeniorityProjection(records,workspaceAuth.personId):[]).map(row=>[row.key,row]));
+  for(const row of schedulingSkillsProjection(records,workspaceAuth.personId,canManageSchedulingSkills)){
+    const prior=bidSeniority.get(row.key);
+    if(prior&&Array.isArray(prior.value)&&Array.isArray(row.value)){const merged=new Map(prior.value.map(v=>[v.personId,v]));row.value.forEach(v=>merged.set(v.personId,{...merged.get(v.personId),...v}));bidSeniority.set(row.key,{...row,value:[...merged.values()]});}
+    else bidSeniority.set(row.key,prior?{...row,value:{...prior.value,...row.value}}:row);
+  }
   records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule, {
     overtime: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_overtime_view'),
     rollcall: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_rollcall_view'),
@@ -1794,6 +1800,11 @@ async function filterOfficerWorkspaceRecords(
         visible.push(record);
       }
       continue;
+    }
+
+    if(collection==='pm.specialEvents' && (record.value?.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded')){visible.push(record);continue;}
+    if(collection==='pm.specialEvents' && itemId==='$value' && Array.isArray(record.value) && record.value.some(e=>(e.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded'))){
+      visible.push({...record,value:pmRecordReadable(workspaceAuth,abilityMap,collection,itemId,record.value)?record.value:record.value.filter(e=>(e.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded'))});continue;
     }
 
     if (OFFICER_UNIVERSAL_READ.has(collection)) {
@@ -2396,7 +2407,7 @@ async function filterOfficerWorkspaceRecords(
       continue;
     }
 
-    if(collection==='pm.records' && roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_manage') && !roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view')) {
+    if(collection==='pm.records' && !roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view')) {
       const projected=bidSeniority.get(record.key);
       if(projected)visible.push(projected);
       continue;
