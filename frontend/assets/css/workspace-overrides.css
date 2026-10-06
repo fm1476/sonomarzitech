@@ -35,3 +35,14 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .suite-clickable-row:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;background:var(--row-hover)!important}
 .suite-clickable-row .suite-row-open-cell{width:0;padding-left:0!important;padding-right:0!important;border-left:0!important}
 .suite-clickable-row .suite-row-open-cell>button{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+
+/* Licensing & Permits license detail modal: keep action controls inside the dialog. */
+.permit-license-modal{max-width:min(1180px,94vw)}
+.permit-license-modal .modal-foot{flex-wrap:wrap;align-items:center}
+.permit-license-modal .modal-foot .btn{white-space:nowrap}
+@media(max-width:760px){
+  .permit-license-modal{max-width:96vw}
+  .permit-license-modal .modal-foot{justify-content:stretch}
+  .permit-license-modal .modal-foot .btn{flex:1 1 calc(50% - 8px)}
+}
