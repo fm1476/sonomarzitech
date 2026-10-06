@@ -33,7 +33,7 @@
       // Ask the browser to check for a new service worker periodically, since it otherwise only
       // checks on navigation -- a tab left open for hours might not notice a new deploy for a
       // long time without this nudge.
-      setInterval(()=>{ navigator.serviceWorker.getRegistration().then(r=>r?.update()); }, 10*60*1000);
+      setInterval(()=>{ navigator.serviceWorker.getRegistration().then(r=>r?.update()).catch(()=>{}); }, 10*60*1000);
     });
   }
 
@@ -69,11 +69,12 @@
     installBtn.addEventListener('click', async ()=>{
       if(!deferredInstallPrompt) return;
       installBtn.disabled = true;
-      deferredInstallPrompt.prompt();
-      const {outcome} = await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-      installBtn.disabled = false;
-      if(outcome === 'accepted') installBtn.hidden = true;
+      try{
+        await deferredInstallPrompt.prompt();
+        const {outcome} = await deferredInstallPrompt.userChoice;
+        if(outcome === 'accepted') installBtn.hidden = true;
+      }catch{ /* The browser may expire an install prompt. */ }
+      finally{ deferredInstallPrompt = null; installBtn.disabled = false; }
     });
   }
 
@@ -84,8 +85,16 @@
 
   // iOS Safari never fires beforeinstallprompt, "Add to Home Screen" is manual
   // via the share sheet. Surface a one-line hint there instead of a dead button.
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isInStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if(isInStandalone && installBtn) installBtn.hidden = true;
+  window.addEventListener('online', checkForNewBuildDirectly);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible'){
+      checkForNewBuildDirectly();
+      navigator.serviceWorker?.getRegistration().then(r=>r?.update()).catch(()=>{});
+    }
+  });
   if(isIOS && !isInStandalone && installBtn){
     installBtn.hidden = false;
     installBtn.addEventListener('click', ()=>{
