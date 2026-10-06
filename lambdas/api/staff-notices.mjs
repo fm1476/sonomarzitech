@@ -53,6 +53,7 @@ async function ensureStaffNoticeTables(client) {
       response text,
       cleared_at timestamptz,
       push_status text NOT NULL DEFAULT 'not_configured',
+      push_error text,
       PRIMARY KEY (notice_id, user_id)
     )
   `);
@@ -534,7 +535,6 @@ async function staffNoticesApi(client, auth, body) {
     }
 
     let pushed = 0;
-    await client.query(`ALTER TABLE suite_staff_notice_recipients ADD COLUMN IF NOT EXISTS push_error text`);
     if (pushConfigured()) {
       const userIds = resolved.map(member => member.user_id);
       const subscriptions = await client.query(
