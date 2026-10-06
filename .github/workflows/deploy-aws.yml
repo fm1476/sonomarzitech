@@ -42,6 +42,7 @@ jobs:
             -o lambdas/api/certs/us-east-2-bundle.pem
           test -s lambdas/api/certs/us-east-2-bundle.pem
           grep -q "BEGIN CERTIFICATE" lambdas/api/certs/us-east-2-bundle.pem
+          (cd lambdas/api && npm install --omit=dev --no-audit --no-fund)
           (cd lambdas/api && zip -qr ../../dist/api.zip .)
           (cd lambdas/identity-admin && zip -q ../../dist/identity-admin.zip index.mjs)
 
