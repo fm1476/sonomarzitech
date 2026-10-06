@@ -528,7 +528,7 @@ async function staffNoticesApi(client, auth, body) {
     if (pushConfigured()) {
       const userIds = resolved.map(member => member.user_id);
       const subscriptions = await client.query(
-        `SELECT id,user_id,endpoint,p256dh,auth
+        `SELECT user_id,endpoint,p256dh,auth
            FROM suite_push_subscriptions
           WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
         [tenantId, agencyId, userIds]
@@ -549,7 +549,7 @@ async function staffNoticesApi(client, auth, body) {
         } catch (error) {
           const status=Number(error?.statusCode||0);
           if(status===404||status===410) {
-            await client.query(`DELETE FROM suite_push_subscriptions WHERE id=$1`,[sub.id]);
+            await client.query(`DELETE FROM suite_push_subscriptions WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,[tenantId,agencyId,sub.user_id,sub.endpoint]);
           }
           console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status});
         }
