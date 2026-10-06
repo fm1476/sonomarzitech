@@ -2701,9 +2701,10 @@ function renderRosterSub(){
   const pastCount = STATE.pm.scheduleShifts.filter(s=>shiftPatternStatus(s,todayStr)==='past').length;
   const shiftRows = visibleShifts.map(s=>{
     const status = shiftPatternStatus(s, todayStr);
-    const statusBadge = status==='future' ? `<span class="badge" style="background:var(--gold)22;color:var(--gold);margin-left:8px;">Upcoming</span>` : status==='past' ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Past</span>` : '';
+    const published = s.published !== false;
+    const statusBadge = !published ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Draft / Hidden</span>` : status==='future' ? `<span class="badge" style="background:var(--gold)22;color:var(--gold);margin-left:8px;">Upcoming</span>` : status==='past' ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Past</span>` : '';
     return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shiftColor(s)};margin-right:8px;"></span>${escapeHtml(s.name)}${statusBadge}</td><td>${escapeHtml(describeShiftPattern(s))}</td><td>${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)}</td><td>${s.minStaff||0}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(formatShiftDateRange(s))}</td>
-    ${canManage?`<td><div class="cell-actions"><button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
+    ${canManage?`<td><div class="cell-actions">${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">${SHOW_PAST_SHIFT_PATTERNS ? 'No shift patterns defined yet.' : 'No current or upcoming shift patterns. '+(pastCount?'<button class="btn-sm btn btn-outline" id="btnShowPastShiftsInline">Show past patterns</button>':'')}</td></tr>`;
 
   const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate).map(a=>{
@@ -2760,7 +2761,7 @@ function renderRosterSub(){
             <button class="work-tab ${SCHED_VIEW==='roster'?'active':''}" aria-pressed="${SCHED_VIEW==='roster'}" data-sched-view="roster">List</button>
             <button class="work-tab ${SCHED_VIEW==='calendar'?'active':''}" aria-pressed="${SCHED_VIEW==='calendar'}" data-sched-view="calendar">Calendar</button>
           </div>
-          ${canManage?`<button class="btn btn-sm btn-outline" id="btnAddAssignment">${ICONS.plus} Assign Shift</button>`:''}
+          ${canManage?`<button class="btn btn-sm btn-outline" id="btnAddAssignment">${ICONS.plus} Assign Pattern</button><button class="btn btn-sm btn-outline" id="btnAddOneOff">${ICONS.plus} Add Person to Shift</button>`:''}
           ${can('staff_notify_send')?`<button class="btn btn-sm btn-outline" id="btnRosterStaffNotice">${ICONS.chat||''} Send Staff Notice</button>`:''}
           <button class="btn btn-sm btn-outline" id="btnPrintRoster">Print / Save as PDF</button>
         `)}
@@ -2843,6 +2844,14 @@ function renderRosterSub(){
   if(canManage){
     document.getElementById('btnAddShift').addEventListener('click', ()=>openShiftFormModal(null));
     document.getElementById('btnAddAssignment').addEventListener('click', ()=>openAssignmentFormModal(null));
+    document.getElementById('btnAddOneOff').addEventListener('click', ()=>openOneOffCoverageModal());
+    document.querySelectorAll('[data-publish-shift]').forEach(b=>b.addEventListener('click', ()=>{
+      if(!can('pm_schedule_publish')) return;
+      const shift=STATE.pm.scheduleShifts.find(s=>s.id===b.dataset.publishShift); if(!shift)return;
+      shift.published = shift.published===false;
+      logActivity((shift.published?'Published ':'Hid ')+'shift pattern "'+shift.name+'" '+(shift.published?'to':'from')+' the duty roster.', 'schedule', shift.id);
+      persist(); renderScheduling();
+    }));
     document.getElementById('btnAddException').addEventListener('click', ()=>openExceptionFormModal(null));
     document.querySelectorAll('[data-edit-shift]').forEach(b=>b.addEventListener('click', ()=>openShiftFormModal(STATE.pm.scheduleShifts.find(s=>s.id===b.dataset.editShift))));
     document.querySelectorAll('[data-del-shift]').forEach(b=>b.addEventListener('click', ()=>{
@@ -2901,7 +2910,7 @@ function onDutyRoster(shift, dateStr){
 }
 function computeCoverageGaps(days){
   const todayStr = fmt(new Date());
-  const shifts = STATE.pm.scheduleShifts.filter(s=>shiftPatternStatus(s,todayStr)!=='past' && (Number(s.minStaff)||0)>0);
+  const shifts = STATE.pm.scheduleShifts.filter(s=>s.published!==false && shiftPatternStatus(s,todayStr)!=='past' && (Number(s.minStaff)||0)>0);
   const gaps = [];
   for(let i=0;i<days;i++){
     const dateStr = fmt(addDays(new Date(), i));
@@ -3653,7 +3662,7 @@ function renderRollCallSub(){
 }
 
 function renderDutyCalendar(body){
-  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts);
+  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false));
   const shiftOrder = new Map(shifts.map((s,i)=>[s.id,i]));
   if(SCHED_CAL_SHIFT!=='all' && !shifts.some(s=>s.id===SCHED_CAL_SHIFT)) SCHED_CAL_SHIFT = 'all';
   const year = SCHED_CAL_YEAR, month = SCHED_CAL_MONTH;
@@ -3844,9 +3853,9 @@ function openShiftFormModal(existing){
       toast("Shift pattern updated.");
     } else {
       const color = SHIFT_COLOR_PALETTE[STATE.pm.scheduleShifts.length % SHIFT_COLOR_PALETTE.length];
-      STATE.pm.scheduleShifts.push({id:'shift'+Date.now(), color, ...data});
-      logActivity(`Created shift pattern "${name}".`, "schedule");
-      toast("Shift pattern created.");
+      STATE.pm.scheduleShifts.push({id:'shift'+Date.now(), color, published:false, ...data});
+      logActivity(`Created draft shift pattern "${name}".`, "schedule");
+      toast("Shift pattern created as Draft. A Schedule Admin must publish it before it appears on the live Duty Roster.");
     }
     persist();
     closeModal();
