@@ -106,6 +106,40 @@ async function connectDatabase() {
   }
 }
 
+function parseBody(event) {
+  if (!event?.body) return {};
+
+  if (typeof event.body === "object") {
+    return event.body;
+  }
+
+  let raw = event.body;
+
+  if (event.isBase64Encoded) {
+    raw = Buffer.from(raw, "base64").toString("utf8");
+  }
+
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const error = new Error("Request body must be valid JSON.");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function response(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  };
+}
+
 /*
  * ---------------------------------------------------------
  * AUTHORIZATION
