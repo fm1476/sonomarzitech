@@ -3715,7 +3715,7 @@ function renderDutyCalendar(body){
       ${dayCoverages.map(c=>{
         const shift = shifts.find(s=>s.id===c.shiftId);
         const label = SCHED_CAL_SHIFT==='all' ? `${personName(c.personId)} (covering, ${shift?shift.name:''})` : `${personName(c.personId)} (covering)`;
-        return `<a href="#" class="cal-event" style="background:${SWAP_COVERAGE_COLOR}22;color:${SWAP_COVERAGE_COLOR};border-left:3px solid ${SWAP_COVERAGE_COLOR};" title="${escapeHtml(personName(c.personId)+' is covering this shift via an approved swap')}">${escapeHtml(label)}</a>`;
+        return `<a href="#" data-cal-coverage-event="${c.id}" class="cal-event" style="background:${SWAP_COVERAGE_COLOR}22;color:${SWAP_COVERAGE_COLOR};border-left:3px solid ${SWAP_COVERAGE_COLOR};" title="${escapeHtml(personName(c.personId)+(c.swapRequestId?' is covering this shift via an approved swap':' is assigned to this one-off shift'))}">${escapeHtml(label)}</a>`;
       }).join('')}
     </div>`;
   }
@@ -3758,11 +3758,40 @@ function renderDutyCalendar(body){
     const assign = STATE.pm.scheduleAssignments.find(x=>x.id===a.dataset.calAssignEvent);
     if(assign && can('pm_schedule_manage')) openAssignmentFormModal(assign);
   }));
+  body.querySelectorAll('[data-cal-coverage-event]').forEach(a=>a.addEventListener('click', (ev)=>{
+    ev.preventDefault();
+    const coverage = (STATE.pm.scheduleCoverages||[]).find(x=>x.id===a.dataset.calCoverageEvent);
+    if(coverage && can('pm_schedule_manage')) openCoverageDetailModal(coverage);
+  }));
   body.querySelectorAll('[data-cal-exception-event]').forEach(a=>a.addEventListener('click', (ev)=>{
     ev.preventDefault();
     const exception = STATE.pm.scheduleExceptions.find(x=>x.id===a.dataset.calExceptionEvent);
     if(exception && can('pm_schedule_manage')) openExceptionFormModal(exception);
   }));
+}
+
+
+function openCoverageDetailModal(coverage){
+  const shift=STATE.pm.scheduleShifts.find(s=>s.id===coverage.shiftId);
+  const sourceLabel=coverage.swapRequestId?'Approved Shift Swap':coverage.source==='overtime'?'Overtime':coverage.source==='callback'?'Callback':'One-Off Staffing';
+  document.getElementById('modalBox').className='modal';
+  document.getElementById('modalBox').innerHTML=`
+    <div class="modal-head"><h3>One-Off Shift Assignment</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div><div class="detail-label">Employee</div><div class="detail-value">${escapeHtml(personName(coverage.personId))}</div></div>
+        <div><div class="detail-label">Date</div><div class="detail-value">${escapeHtml(coverage.date||'—')}</div></div>
+        <div><div class="detail-label">Shift</div><div class="detail-value">${escapeHtml(shift?.name||'—')}</div></div>
+        <div><div class="detail-label">Hours</div><div class="detail-value">${shift?escapeHtml(SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd)):'—'}</div></div>
+        <div><div class="detail-label">Assignment Type</div><div class="detail-value">${escapeHtml(sourceLabel)}</div></div>
+        <div><div class="detail-label">Notes</div><div class="detail-value">${escapeHtml(coverage.notes||'—')}</div></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick=closeModal;
+  document.getElementById('mCancel').onclick=closeModal;
 }
 
 function openShiftFormModal(existing){
