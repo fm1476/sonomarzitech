@@ -6,10 +6,8 @@ self.addEventListener('push', event => {
   try { notice=event.data?.json() || {}; } catch {}
   event.waitUntil(self.registration.showNotification(notice.title || 'SonoMarzi', {
     body: notice.body || 'You have a new staff notice. Open the app to review it.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    tag: 'staff-notice-' + Date.now(),
-    data: {url: '/#/shared/notices'},
+    tag: notice.id ? 'staff-notice-' + notice.id : 'staff-notice-' + Date.now(),
+    data: {url: notice.url || '/#/shared/notices'},
   }));
 });
 self.addEventListener('notificationclick', event => {
