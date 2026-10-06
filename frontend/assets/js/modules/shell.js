@@ -589,7 +589,7 @@ const StaffNotices=(()=>{
     const shifts=STATE.pm.scheduleShifts.filter(s=>!s.endDate||s.endDate>=today);
     root.innerHTML=`<section class="panel"><div class="panel-head"><h2>My notices</h2><div style="display:flex;gap:8px;flex-wrap:wrap">${canSend?'<button type="button" id="noticeComposeJump" class="btn btn-primary btn-sm">Send staff notice</button>':''}<button type="button" id="noticeRefresh" class="btn btn-outline btn-sm">Refresh</button></div></div>
       <div id="noticeInbox" aria-live="polite" class="panel-body">Loading…</div></section>
-      ${canSend?`<section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Send staff notice</h2></div><div class="panel-body">
+      ${canSend?`<section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Send staff notice</h2>${sessionStorage.getItem('sonomarzi.staffNotice.return')?'<button type="button" id="noticeReturn" class="btn btn-outline btn-sm">← Back to Duty Roster</button>':''}</div><div class="panel-body">
        <p>Choose individuals, units, or shift patterns. Each signed-in member receives one notice.</p>
        <div class="form-row"><label for="noticeBody">Message</label><textarea id="noticeBody" rows="4" maxlength="1000" placeholder="Coverage is needed for…"></textarea><small id="noticeCount">0 / 1000 characters</small></div>
        <div class="form-row"><label for="noticeDate">Shift assignment date</label><input type="date" id="noticeDate" value="${fmt(new Date())}"><small>Used when targeting a shift pattern.</small></div>
@@ -604,6 +604,14 @@ const StaffNotices=(()=>{
     root.querySelector('#noticeRefresh').onclick=()=>loadInbox().catch(e=>toast(e.message,true));
     loadInbox().catch(e=>{document.getElementById('noticeInbox').textContent=e.message;});
     if(canSend){
+      root.querySelector('#noticeReturn')?.addEventListener('click',()=>{
+        const destination=sessionStorage.getItem('sonomarzi.staffNotice.return');
+        sessionStorage.removeItem('sonomarzi.staffNotice.return');
+        if(destination==='personnel/scheduling'){
+          enterModule('personnel');
+          PM.switchView('pm-scheduling');
+        }
+      });
       root.querySelector('#noticeComposeJump').onclick=()=>{root.querySelector('#noticeBody').scrollIntoView({behavior:'smooth',block:'center'});root.querySelector('#noticeBody').focus({preventScroll:true});};
       root.querySelectorAll('input[type="checkbox"],#noticeDate').forEach(x=>x.addEventListener('change',preview));
       root.querySelector('#noticeSearch').oninput=e=>{const q=e.target.value.toLowerCase();root.querySelectorAll('#noticePeople label').forEach(l=>l.hidden=!l.textContent.toLowerCase().includes(q));};
