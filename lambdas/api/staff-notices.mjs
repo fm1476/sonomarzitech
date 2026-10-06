@@ -534,6 +534,13 @@ async function staffNoticesApi(client, auth, body) {
     }
 
     let pushed = 0;
+    const pushDiagnostics = {
+      configured: pushConfigured(),
+      subscriptions: 0,
+      attempted: 0,
+      accepted: 0,
+      failures: []
+    };
     if (pushConfigured()) {
       const userIds = resolved.map(member => member.user_id);
       const subscriptions = await client.query(
@@ -542,7 +549,8 @@ async function staffNoticesApi(client, auth, body) {
           WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
         [tenantId, agencyId, userIds]
       );
-      console.info("Staff notice push diagnostics",{
+      pushDiagnostics.subscriptions = subscriptions.rows.length;
+      console.warn("Staff notice push diagnostics",{
         noticeId:id,
         recipientCount:resolved.length,
         subscriptionCount:subscriptions.rows.length,
@@ -553,7 +561,8 @@ async function staffNoticesApi(client, auth, body) {
       // Bound each provider request so a slow APNs/FCM/WebPush endpoint cannot consume the
       // Lambda/API request timeout.
       for (const sub of subscriptions.rows) {
-        console.info("Staff notice push attempt",{noticeId:id,userId:sub.user_id});
+        pushDiagnostics.attempted++;
+        console.warn("Staff notice push attempt",{noticeId:id,userId:sub.user_id});
         try {
           await webpush.sendNotification(
             {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
@@ -561,7 +570,8 @@ async function staffNoticesApi(client, auth, body) {
             {TTL:300,urgency:"normal",timeout:2500}
           );
           pushed++;
-          console.info("Staff notice push accepted",{noticeId:id,userId:sub.user_id});
+          pushDiagnostics.accepted++;
+          console.warn("Staff notice push accepted",{noticeId:id,userId:sub.user_id});
           await client.query(
             `UPDATE suite_staff_notice_recipients SET push_status='submitted'
               WHERE notice_id=$1 AND user_id=$2`,
@@ -572,13 +582,15 @@ async function staffNoticesApi(client, auth, body) {
           if(status===404||status===410) {
             await client.query(`DELETE FROM suite_push_subscriptions WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,[tenantId,agencyId,sub.user_id,sub.endpoint]);
           }
-          console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status,message:error?.message});
+          const failure = {status,message:String(error?.message || "Push provider error").slice(0,240)};
+          pushDiagnostics.failures.push(failure);
+          console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,...failure});
         }
       }
     }
 
     if (!pushConfigured()) {
-      console.info("Staff notice push diagnostics",{
+      console.warn("Staff notice push diagnostics",{
         noticeId:id,
         recipientCount:resolved.length,
         subscriptionCount:0,
@@ -592,7 +604,8 @@ async function staffNoticesApi(client, auth, body) {
         id,
         recipients: resolved.length,
         unmatched: unresolved,
-        pushed
+        pushed,
+        pushDiagnostics
       }
     });
   }
