@@ -3831,7 +3831,7 @@ const SuiteUX = (()=>{
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
    No writes are made to the legacy all-in-one app_state row. */
 function schedulingSaveBatches(patches,batchSize=60){
-  const collections=new Set(['scheduleShifts','scheduleAssignments','scheduleCoverages','overtimeOpportunities','specialEvents','leaveRequests','scheduleExceptions','shiftSwapRequests','rollCalls','otCallbackOptIns','bidCycles','extraDutyJobs','extraDutySignups','scheduleWorkGroups','schedulingSettings']);
+  const collections=new Set(['scheduleShifts','scheduleAssignments','scheduleCoverages','overtimeOpportunities','specialEvents','leaveRequests','scheduleExceptions','shiftSwapRequests','rollCalls','otCallbackOptIns','bidCycles','extraDutyJobs','extraDutySignups','scheduleWorkGroups','schedulingSettings','records','refData']);
   const scheduling=[],other=[];
   for(const patch of patches){const [path]=JSON.parse(patch.key);(path[0]==='pm'&&collections.has(path[1])?scheduling:other).push(patch);}
   if(scheduling.length>5000)throw Error('Too many scheduling changes for one atomic save. Download pending changes before reloading.');

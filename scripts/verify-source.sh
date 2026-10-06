@@ -60,5 +60,6 @@ fi
 
 node scripts/verify-shift-bids.mjs
 node scripts/verify-special-event-assignments.mjs
+node scripts/verify-staffing-categories.mjs
 
 echo "Source checks passed."

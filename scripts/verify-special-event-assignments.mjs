@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {validateStaffingRequirements,staffingSummary} from '../lambdas/api/lib/staffing-categories.mjs';
 import {assignmentOnDuty,validateSchedulingBatch,scheduleWriteDecision,filterSchedulingRecords} from '../lambdas/api/lib/scheduling-access.mjs';
 const groups=[{id:'patrol',active:true,visibility:'unit',unitNames:['Patrol'],managerIds:['scheduler']},{id:'dispatch',active:true,visibility:'unit',unitNames:['Dispatch'],managerIds:['other']}];
 const people=[{id:'senior',name:'Senior',unit:'Patrol'},{id:'junior',name:'Junior',unit:'Patrol'},{id:'foreign',name:'Foreign',unit:'Dispatch'}];
 const shifts=[{id:'patrolShift',workGroupId:'patrol',patternType:'weekly',weekdays:[0,1,2,3,4,5,6]},{id:'dispatchShift',workGroupId:'dispatch',patternType:'weekly',weekdays:[0,1,2,3,4,5,6]}];
 const event={id:'event',name:'Parade',eligibleWorkGroupIds:['patrol'],status:'published',staffNeeded:2,startDate:'2099-01-10',endDate:'2099-01-11',requests:[{personId:'junior',status:'pending',requestedAt:'earlier'}]};
 const state=()=>({personnel:structuredClone(people),pm:{scheduleWorkGroups:structuredClone(groups),scheduleShifts:structuredClone(shifts),scheduleAssignments:[],scheduleExceptions:[],scheduleCoverages:[],specialEvents:[structuredClone(event)]}});
-const context={STATE:state(),CURRENT_USER_ID:'scheduler',currentRole:()=>({id:'role_scheduler'}),can:a=>a==='pm_schedule_manage',fmt:d=>d.toISOString().slice(0,10),addDays:(d,n)=>new Date(d.getTime()+n*86400000),isOnDutyOnDate:assignmentOnDuty,personName:id=>people.find(p=>p.id===id)?.name || id,toast:message=>{context.lastError=message;},logActivity:()=>{},persist:()=>{},openSpecialEventDetail:()=>{},renderSpecialEventsSub:()=>{}};
+const context={validateStaffingRequirements,staffingSummary,STATE:state(),CURRENT_USER_ID:'scheduler',currentRole:()=>({id:'role_scheduler'}),can:a=>a==='pm_schedule_manage',fmt:d=>d.toISOString().slice(0,10),addDays:(d,n)=>new Date(d.getTime()+n*86400000),isOnDutyOnDate:assignmentOnDuty,personName:id=>people.find(p=>p.id===id)?.name || id,toast:message=>{context.lastError=message;},logActivity:()=>{},persist:()=>{},openSpecialEventDetail:()=>{},renderSpecialEventsSub:()=>{}};
 vm.createContext(context);
 const source=fs.readFileSync('frontend/assets/js/modules/personnel.js','utf8');
 vm.runInContext(source.slice(source.indexOf('function activeExceptionFor('),source.indexOf('const SHIFT_COLOR_PALETTE')),context);

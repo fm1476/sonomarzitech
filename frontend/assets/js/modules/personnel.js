@@ -930,7 +930,7 @@ function openRecordEditModal(personId){
         </div>
       </div></div>
 
-      <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Special Skills</h2></div><div class="panel-body">
+      <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Special Skills & Scheduling Eligibility</h2></div><div class="panel-body"><p class="hint">Select every skill this employee is qualified to perform. Scheduling uses these skills to determine eligibility for required staffing categories.</p>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
           ${STATE.pm.refData.skillsCatalog.map(sk=>`<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;"><input type="checkbox" class="fSkill" value="${escapeHtml(sk)}" ${r.specialSkills.includes(sk)?'checked':''} style="width:auto;">${escapeHtml(sk)}</label>`).join('')}
         </div>
@@ -2769,6 +2769,65 @@ function personScheduledDuring(personId,startDate,endDate){
 }
 function canManageOvertimeShift(shift){return !!shift&&(isGlobalScheduleAdmin()||((can('pm_schedule_manage')||can('pm_overtime_manage'))&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.active!==false&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.managerIds?.includes(CURRENT_USER_ID)));}
 function visibleScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canViewWorkGroup(g));}
+function staffingSkillOptions(selected=''){
+  return '<option value="">Select required skill</option>'+[...new Set([...(STATE.pm.refData?.skillsCatalog||[]),...(selected?[selected]:[])])].sort((a,b)=>a.localeCompare(b)).map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('');
+}
+function staffingNeedsRow(row={}){
+  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Required skill">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+}
+function staffingNeedsEditor(id,record){
+  return `<div class="form-row"><label>Staffing Requirements by Category</label><p class="hint">Optional. Define any staffing categories and required counts, such as 2 Deputies and 1 Sergeant, or Law Dispatchers, Fire Dispatchers, and Call Takers. Choose the personnel skill required for each category. Define skills in Personnel Administration → Special Skills Catalog and assign them on the employee record. These are separate from permission roles.</p><div id="${id}">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><button type="button" class="btn btn-sm btn-outline" id="${id}Add">Add Staffing Category</button></div>`;
+}
+function readStaffingNeeds(id){
+  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value)}));
+  try{validateStaffingRequirements(rows);return rows;}catch(error){toast(error.message,true);return null;}
+}
+function wireStaffingNeedsEditor(id,totalId){
+  const container=document.getElementById(id),total=document.getElementById(totalId);
+  const update=()=>{const rows=[...container.querySelectorAll('[data-staffing-row]')];total.readOnly=rows.length>0;if(rows.length)total.value=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[data-staffing-count]').value)||0),0);};
+  container.addEventListener('input',update);container.addEventListener('click',e=>{if(e.target.closest('[data-remove-staffing]')){e.target.closest('[data-staffing-row]').remove();update();}});
+  document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());update();};update();
+}
+function staffingCategoryOptions(record,selected=''){
+  return '<option value="">General / Unclassified</option>'+(record?.staffingRequirements||[]).map(row=>`<option value="${escapeHtml(row.id)}" ${row.id===selected?'selected':''}>${escapeHtml(row.name)}</option>`).join('');
+}
+function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
+  const shiftSelect=document.getElementById(shiftId),categorySelect=document.getElementById(categoryId),personSelect=document.getElementById(personId);
+  const update=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftSelect.value),category=(shift?.staffingRequirements||[]).find(c=>c.id===categorySelect.value),selected=personSelect.value;
+    const people=STATE.personnel.filter(p=>staffingPersonHasSkill(STATE.pm.records,p.id,category));
+    personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  };
+  categorySelect.addEventListener('change',update);shiftSelect.addEventListener('change',update);update();
+}
+function staffingCategoryName(record,id){return (record?.staffingRequirements||[]).find(row=>row.id===id)?.name||'Unclassified';}
+function staffingBreakdownHtml(summary){
+  return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
+}
+function shiftStaffingSummary(shift,date){
+  const assigned=STATE.pm.scheduleAssignments.filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
+  const coverage=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
+  return staffingSummary(shift.staffingRequirements,[...assigned,...coverage],shift.minStaff,STATE.pm.records);
+}
+function eventStaffingSummary(event){return staffingSummary(event.staffingRequirements,(event.requests||[]).filter(r=>r.status==='awarded'),event.staffNeeded,STATE.pm.records);}
+function openEventStaffingNeedsModal(event){
+  if(!canManageSpecialEvent(event))return;
+  document.getElementById('modalBox').className='modal modal-lg';
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Staffing Needs: ${escapeHtml(event.name)}</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><div class="form-row"><label>Total People Needed</label><input type="number" min="1" id="fEventStaffTotal" value="${event.staffNeeded}"></div>${staffingNeedsEditor('fEventStaffNeeds',event)}<div id="fExistingEventCategories">${(event.requests||[]).filter(r=>r.status==='awarded').map(r=>`<div class="form-row"><label>${escapeHtml(personName(r.personId))}</label><select data-existing-event-category="${r.personId}">${staffingCategoryOptions(event,r.staffingCategoryId)}</select></div>`).join('')}</div></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back</button><button class="btn btn-primary" id="mSave">Save Staffing Needs</button></div>`;
+  openModal();wireStaffingNeedsEditor('fEventStaffNeeds','fEventStaffTotal');
+  const syncAssigned=()=>{const requirements=[...document.getElementById('fEventStaffNeeds').querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value}));document.querySelectorAll('[data-existing-event-category]').forEach(select=>{const selected=select.value;select.innerHTML=staffingCategoryOptions({staffingRequirements:requirements},selected);});};
+  document.getElementById('fEventStaffNeeds').addEventListener('input',syncAssigned);document.getElementById('fEventStaffNeeds').addEventListener('click',syncAssigned);document.getElementById('fEventStaffNeedsAdd').addEventListener('click',syncAssigned);
+  document.getElementById('mClose').onclick=()=>openSpecialEventDetail(event);document.getElementById('mCancel').onclick=()=>openSpecialEventDetail(event);
+  document.getElementById('mSave').onclick=()=>{
+    const requirements=readStaffingNeeds('fEventStaffNeeds');if(!requirements)return;
+    const staffNeeded=Number(document.getElementById('fEventStaffTotal').value);
+    if(!Number.isSafeInteger(staffNeeded)||staffNeeded<1){toast('Enter a positive whole-number staffing requirement.',true);return;}
+    const requests=(event.requests||[]).map(r=>r.status==='awarded'?{...r,staffingCategoryId:document.querySelector('[data-existing-event-category="'+r.personId+'"]').value}:r);
+    const awards=requests.filter(r=>r.status==='awarded'),summary=staffingSummary(requirements,awards,staffNeeded,STATE.pm.records);
+    if(awards.some(r=>{const category=requirements.find(c=>c.id===r.staffingCategoryId);return category&&!staffingPersonHasSkill(STATE.pm.records,r.personId,category);})){toast('An assigned employee lacks the required skill. Update their personnel record or choose a matching staffing category.',true);return;}
+    if(awards.length>staffNeeded||requirements.length&&awards.some(r=>!requirements.some(c=>c.id===r.staffingCategoryId))||summary.categories.some(r=>r.staffed>r.count)){toast('Existing assignments must fit the revised staffing categories and counts. Keep assigned categories or increase their requirements.',true);return;}
+    Object.assign(event,{staffingRequirements:requirements,staffNeeded,requests});persist();openSpecialEventDetail(event);renderSpecialEventsSub();
+  };
+}
 function calendarUnitOptions(group){
   const units=new Map();
   [...(STATE.pm.refData?.units||[]),...STATE.personnel.map(p=>p.unit||p.department||''),...(group.unitNames||[])].forEach(value=>{
@@ -2804,8 +2863,8 @@ function renderSpecialEventsSub(){
   const canManage=can('pm_schedule_manage');
   const visibleGroupIds=new Set(visibleScheduleWorkGroups().map(g=>g.id));
   const rows=(STATE.pm.specialEvents||[]).filter(e=>(e.requests||[]).some(r=>r.personId===CURRENT_USER_ID&&r.status==='awarded')||!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>visibleGroupIds.has(id))).slice().sort((a,b)=>a.startDate.localeCompare(b.startDate)).map(e=>{
-    const awarded=(e.requests||[]).filter(r=>r.status==='awarded').length, needed=Number(e.staffNeeded)||1;
-    return `<tr><td><strong>${escapeHtml(e.name)}</strong></td><td>${escapeHtml(e.startDate)}${e.endDate&&e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''}</td><td>${escapeHtml(e.startTime)} - ${escapeHtml(e.endTime)}</td><td>${escapeHtml(e.location||'—')}</td><td style="color:${awarded>=needed?'var(--green)':'var(--red)'};font-weight:700;">${awarded}/${needed}</td><td><button class="btn btn-sm btn-outline" data-event-open="${e.id}">Open</button></td></tr>`;
+    const summary=eventStaffingSummary(e),awarded=summary.staffed,needed=summary.minStaff;
+    return `<tr><td><strong>${escapeHtml(e.name)}</strong></td><td>${escapeHtml(e.startDate)}${e.endDate&&e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''}</td><td>${escapeHtml(e.startTime)} - ${escapeHtml(e.endTime)}</td><td>${escapeHtml(e.location||'—')}</td><td style="color:${awarded>=needed?'var(--green)':'var(--red)'};font-weight:700;">${awarded}/${needed}<br>${staffingBreakdownHtml(summary)}</td><td><button class="btn btn-sm btn-outline" data-event-open="${e.id}">Open</button></td></tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:18px;">No special events created yet.</td></tr>';
   document.getElementById('schedSubBody').innerHTML=`<div class="panel"><div class="panel-head"><div><h2>Special Events & Activities</h2><span class="hint">Standalone assignments, details, staffing requests, and awards</span></div>${canManage?'<button class="btn btn-primary btn-sm" id="btnNewSpecialEvent">'+ICONS.plus+' New Event</button>':''}</div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Event</th><th>Date(s)</th><th>Hours</th><th>Location</th><th>Staffed</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   document.getElementById('btnNewSpecialEvent')?.addEventListener('click',()=>openSpecialEventModal());
@@ -2820,11 +2879,12 @@ function openSpecialEventModal(){
   <div class="form-2col"><div class="form-row"><label>Start Date</label><input type="date" id="fEventStart" value="${fmt(new Date())}"></div><div class="form-row"><label>End Date</label><input type="date" id="fEventEnd" value="${fmt(new Date())}"></div>
   <div class="form-row"><label>Start Time</label><input type="time" id="fEventStartTime" value="08:00"></div><div class="form-row"><label>End Time</label><input type="time" id="fEventEndTime" value="17:00"></div></div>
   <div class="form-row"><label>Location</label><input id="fEventLocation"></div><div class="form-row"><label>People Needed</label><input type="number" min="1" id="fEventNeeded" value="1"></div>
+  ${staffingNeedsEditor('fEventStaffNeeds',null)}
   <div class="form-row"><label>Eligible Work Groups</label><div style="display:flex;gap:12px;flex-wrap:wrap;">${groups.map(g=>`<label><input type="checkbox" data-event-wg="${g.id}" checked> ${escapeHtml(g.name)}</label>`).join('')}</div></div>
   <div class="form-row"><label>Notes / Instructions</label><textarea id="fEventNotes" rows="4"></textarea></div></div>
   <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Create Event</button></div>`;
-  openModal(); document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
-  document.getElementById('mSave').onclick=()=>{const name=document.getElementById('fEventName').value.trim();if(!name){toast('Event name is required.',true);return;} const startDate=document.getElementById('fEventStart').value,endDate=document.getElementById('fEventEnd').value;if(!startDate||!endDate||endDate<startDate||daysBetween(startDate,endDate)>366){toast('Enter a valid event date range of no more than one year.',true);return;} const eligibleWorkGroupIds=[...document.querySelectorAll('[data-event-wg]:checked')].map(x=>x.dataset.eventWg);if(!eligibleWorkGroupIds.length){toast('Select at least one Work Group.',true);return;}STATE.pm.specialEvents.push({id:'sev'+Date.now(),name,startDate,endDate,startTime:document.getElementById('fEventStartTime').value,endTime:document.getElementById('fEventEndTime').value,location:document.getElementById('fEventLocation').value.trim(),staffNeeded:Math.max(1,Number(document.getElementById('fEventNeeded').value)||1),notes:document.getElementById('fEventNotes').value.trim(),eligibleWorkGroupIds,status:'published',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Created special event "${name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();};
+  openModal();wireStaffingNeedsEditor('fEventStaffNeeds','fEventNeeded'); document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mSave').onclick=()=>{const name=document.getElementById('fEventName').value.trim();if(!name){toast('Event name is required.',true);return;} const startDate=document.getElementById('fEventStart').value,endDate=document.getElementById('fEventEnd').value;if(!startDate||!endDate||endDate<startDate||daysBetween(startDate,endDate)>366){toast('Enter a valid event date range of no more than one year.',true);return;} const eligibleWorkGroupIds=[...document.querySelectorAll('[data-event-wg]:checked')].map(x=>x.dataset.eventWg);if(!eligibleWorkGroupIds.length){toast('Select at least one Work Group.',true);return;}const staffingRequirements=readStaffingNeeds('fEventStaffNeeds');if(!staffingRequirements)return;STATE.pm.specialEvents.push({staffingRequirements,id:'sev'+Date.now(),name,startDate,endDate,startTime:document.getElementById('fEventStartTime').value,endTime:document.getElementById('fEventEndTime').value,location:document.getElementById('fEventLocation').value.trim(),staffNeeded:Math.max(1,Number(document.getElementById('fEventNeeded').value)||1),notes:document.getElementById('fEventNotes').value.trim(),eligibleWorkGroupIds,status:'published',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Created special event "${name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();};
 }
 function canManageSpecialEvent(event){
   return !!event&&(isGlobalScheduleAdmin()||((event.eligibleWorkGroupIds||[]).length>0&&(event.eligibleWorkGroupIds||[]).every(id=>canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)))));
@@ -2852,15 +2912,20 @@ function specialEventConflicts(personId,event){
   }
   return {blocking:'',regularDuty};
 }
-function planSpecialEventAssignments(event,personIds,reassign=false,manual=true){
+function planSpecialEventAssignments(event,personIds,reassign=false,manual=true,categoryId=''){
   if(!canManageSpecialEvent(event)||event.status!=='published')throw new Error("Only this calendar's schedulers can assign personnel to a published event.");
   if(!personIds.length||new Set(personIds).size!==personIds.length)throw new Error('Select one or more employees, once each.');
+  const requirements=validateStaffingRequirements(event.staffingRequirements||[]);
+  if(requirements.length&&!requirements.some(r=>r.id===categoryId))throw new Error('Choose the staffing category these personnel will fill.');
   const requests=(event.requests||[]).map(r=>({...r})),exceptions=[];
+  const category=requirements.find(r=>r.id===categoryId);
+  if(category&&requests.filter(r=>r.status==='awarded'&&r.staffingCategoryId===categoryId).length+personIds.length>category.count)throw new Error('Your selections exceed the remaining slots for '+category.name+'.');
   const count=requests.filter(r=>r.status==='awarded').length;
   if(count+personIds.length>event.staffNeeded)throw new Error("Your selections exceed the event's remaining staffing slots.");
   const now=new Date().toISOString();
   for(const personId of personIds){
     if(!personEligibleForSpecialEvent(personId,event))throw new Error("An employee is outside the event's eligible Work Groups.");
+    if(category&&!staffingPersonHasSkill(STATE.pm.records,personId,category))throw new Error(personName(personId)+' does not have the required skill for '+category.name+'.');
     const existing=requests.find(r=>r.personId===personId);
     if(existing?.status==='awarded')throw new Error('An employee is already assigned to this event.');
     const conflict=specialEventConflicts(personId,event);
@@ -2870,14 +2935,14 @@ function planSpecialEventAssignments(event,personIds,reassign=false,manual=true)
       if(!canManagePersonSchedule(personId,event))throw new Error("You must manage the employee's existing calendar to reassign regular duty.");
       exceptions.push({id:'ex'+Date.now()+Math.random().toString(36).slice(2,8),personId,code:'EVT',startDate:event.startDate,endDate:event.endDate||event.startDate,notes:'Reassigned to special event: '+event.name,sourceEventId:event.id});
     }
-    const assigned={...(existing||{personId,requestedAt:now}),status:'awarded',conflict:false,awardedAt:now,awardedBy:CURRENT_USER_ID,...(manual?{source:'manual'}:{})};
+    const assigned={...(existing||{personId,requestedAt:now}),status:'awarded',staffingCategoryId:categoryId,conflict:false,awardedAt:now,awardedBy:CURRENT_USER_ID,...(manual?{source:'manual'}:{})};
     if(existing)Object.assign(existing,assigned);else requests.push(assigned);
   }
   return {requests,exceptions};
 }
-function applySpecialEventAssignments(event,personIds,reassign=false,manual=true){
+function applySpecialEventAssignments(event,personIds,reassign=false,manual=true,categoryId=''){
   try{
-    const plan=planSpecialEventAssignments(event,personIds,reassign,manual);
+    const plan=planSpecialEventAssignments(event,personIds,reassign,manual,categoryId);
     event.requests=plan.requests;STATE.pm.scheduleExceptions.push(...plan.exceptions);
     logActivity(`Assigned ${personIds.length} employee(s) to special event "${event.name}".`,'schedule');persist();
     toast('Personnel assigned.');openSpecialEventDetail(event);renderSpecialEventsSub();return true;
@@ -2889,19 +2954,21 @@ function openSpecialEventAssignmentModal(event){
   const people=STATE.personnel.filter(p=>personEligibleForSpecialEvent(p.id,event)&&!assigned.has(p.id)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const remaining=Math.max(0,event.staffNeeded-assigned.size);
   document.getElementById('modalBox').className='modal modal-lg';
-  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Assign Personnel: ${escapeHtml(event.name)}</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p class="hint">${remaining} staffing slot(s) remaining. Select one or several people; a volunteer request is not required.</p><div class="form-row"><label>Find Personnel</label><input id="fEventPersonnelSearch" placeholder="Name or Unit"></div><div class="access-person-list">${people.map(p=>{const conflict=specialEventConflicts(p.id,event);return `<label data-event-person-row="${p.id}" data-search="${escapeHtml((p.name+' '+(p.unit||'')).toLowerCase())}"><input type="checkbox" data-event-person="${p.id}" ${conflict.blocking?'disabled':''}><span>${escapeHtml(p.name)} <span class="hint">${escapeHtml(p.unit||'')}</span>${conflict.blocking?`<br><span class="hint" style="color:var(--red);">${escapeHtml(conflict.blocking)}</span>`:conflict.regularDuty?'<br><span class="hint">Regular duty; reassignment required</span>':''}</span></label>`;}).join('')||'<p class="hint">No eligible unassigned personnel.</p>'}</div><div class="form-row" style="margin-top:12px;"><label style="display:flex;gap:10px;align-items:center;"><input type="checkbox" id="fEventReassign" style="width:18px;height:18px;"> Reassign selected personnel from regular duty for these dates</label><div class="hint">Preserves their normal shift pattern and adds an event exception for this date range. Time off, overtime, and other special assignments must be resolved first.</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back</button><button class="btn btn-primary" id="mAssign" ${remaining?'':'disabled'}>Assign Selected Personnel</button></div>`;
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Assign Personnel: ${escapeHtml(event.name)}</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p class="hint">${remaining} staffing slot(s) remaining. Select one or several people; a volunteer request is not required.</p><div class="form-row"><label>Staffing Category to Fill</label><select id="fEventAssignCategory">${staffingCategoryOptions(event)}</select></div><div>${staffingBreakdownHtml(eventStaffingSummary(event))}</div><div class="form-row"><label>Find Personnel</label><input id="fEventPersonnelSearch" placeholder="Name or Unit"></div><div class="access-person-list">${people.map(p=>{const conflict=specialEventConflicts(p.id,event);return `<label data-event-person-row="${p.id}" data-search="${escapeHtml((p.name+' '+(p.unit||'')).toLowerCase())}"><input type="checkbox" data-event-person="${p.id}" data-blocked="${conflict.blocking?'true':'false'}" ${conflict.blocking?'disabled':''}><span>${escapeHtml(p.name)} <span class="hint">${escapeHtml(p.unit||'')}</span>${conflict.blocking?`<br><span class="hint" style="color:var(--red);">${escapeHtml(conflict.blocking)}</span>`:conflict.regularDuty?'<br><span class="hint">Regular duty; reassignment required</span>':''}</span></label>`;}).join('')||'<p class="hint">No eligible unassigned personnel.</p>'}</div><div class="form-row" style="margin-top:12px;"><label style="display:flex;gap:10px;align-items:center;"><input type="checkbox" id="fEventReassign" style="width:18px;height:18px;"> Reassign selected personnel from regular duty for these dates</label><div class="hint">Preserves their normal shift pattern and adds an event exception for this date range. Time off, overtime, and other special assignments must be resolved first.</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back</button><button class="btn btn-primary" id="mAssign" ${remaining?'':'disabled'}>Assign Selected Personnel</button></div>`;
   openModal();document.getElementById('mClose').onclick=()=>openSpecialEventDetail(event);document.getElementById('mCancel').onclick=()=>openSpecialEventDetail(event);
-  document.getElementById('fEventPersonnelSearch').oninput=e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll('[data-event-person-row]').forEach(row=>row.style.display=row.dataset.search.includes(q)?'grid':'none');};
-  document.getElementById('mAssign').onclick=()=>applySpecialEventAssignments(event,[...document.querySelectorAll('[data-event-person]:checked')].map(x=>x.dataset.eventPerson),document.getElementById('fEventReassign').checked);
+  const syncEventPeople=()=>{const category=(event.staffingRequirements||[]).find(c=>c.id===document.getElementById('fEventAssignCategory').value),q=document.getElementById('fEventPersonnelSearch').value.trim().toLowerCase();document.querySelectorAll('[data-event-person-row]').forEach(row=>{const input=row.querySelector('[data-event-person]'),matches=staffingPersonHasSkill(STATE.pm.records,input.dataset.eventPerson,category);input.disabled=input.dataset.blocked==='true'||!matches||((event.staffingRequirements||[]).length>0&&!category);if(input.disabled)input.checked=false;row.style.display=matches&&row.dataset.search.includes(q)?'grid':'none';});};
+  document.getElementById('fEventPersonnelSearch').oninput=syncEventPeople;document.getElementById('fEventAssignCategory').onchange=syncEventPeople;syncEventPeople();
+  document.getElementById('mAssign').onclick=()=>applySpecialEventAssignments(event,[...document.querySelectorAll('[data-event-person]:checked')].map(x=>x.dataset.eventPerson),document.getElementById('fEventReassign').checked,true,document.getElementById('fEventAssignCategory').value);
 }
 function openSpecialEventDetail(e){
   if(!e)return; const mine=(e.requests||[]).find(r=>r.personId===CURRENT_USER_ID),canManage=canManageSpecialEvent(e);const conflict=personScheduledDuring(CURRENT_USER_ID,e.startDate,e.endDate||e.startDate);
-  const reqRows=(e.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${r.conflict?'<span style="color:var(--red);font-weight:700;">Schedule conflict</span>':'Clear'}</td><td style="text-transform:capitalize;">${escapeHtml(r.status)}${r.source==='manual'?' <span class="badge">Assigned by scheduler</span>':''}</td>${canManage?`<td>${r.status==='pending'&&e.status==='published'?'<button class="btn btn-sm btn-primary" data-event-award="'+r.personId+'">Award</button>':''}</td>`:''}</tr>`).join('')||`<tr><td colspan="${canManage?4:3}" style="padding:16px;color:var(--text-dim);text-align:center;">No requests or assignments yet.</td></tr>`;
-  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${canManage&&e.status==='published'?'<button class="btn btn-primary" id="mAssignEvent">Assign Personnel</button>':''}${!mine&&e.status==='published'&&can('pm_overtime_optin')?'<button class="btn btn-outline" id="mRequestEvent">Request Assignment</button>':''}</div>`;
+  const reqRows=(e.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${r.conflict?'<span style="color:var(--red);font-weight:700;">Schedule conflict</span>':'Clear'}</td><td style="text-transform:capitalize;">${escapeHtml(r.status)}${r.source==='manual'?' <span class="badge">Assigned by scheduler</span>':''}${r.staffingCategoryId?' · '+escapeHtml(staffingCategoryName(e,r.staffingCategoryId)):''}</td>${canManage?`<td>${r.status==='pending'&&e.status==='published'?'<select aria-label="Award staffing category" data-event-award-category="'+r.personId+'">'+staffingCategoryOptions(e,r.staffingCategoryId)+' </select><button class="btn btn-sm btn-primary" data-event-award="'+r.personId+'">Award</button>':''}</td>`:''}</tr>`).join('')||`<tr><td colspan="${canManage?4:3}" style="padding:16px;color:var(--text-dim);text-align:center;">No requests or assignments yet.</td></tr>`;
+  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><div>${staffingBreakdownHtml(eventStaffingSummary(e))}</div><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${canManage?'<button class="btn btn-outline" id="mEventStaffNeeds">Staffing Needs</button>':''}${canManage&&e.status==='published'?'<button class="btn btn-primary" id="mAssignEvent">Assign Personnel</button>':''}${!mine&&e.status==='published'&&can('pm_overtime_optin')?'<select aria-label="Requested staffing category" id="mRequestEventCategory">'+staffingCategoryOptions(e)+' </select><button class="btn btn-outline" id="mRequestEvent">Request Assignment</button>':''}</div>`;
   openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mEventStaffNeeds')?.addEventListener('click',()=>openEventStaffingNeedsModal(e));
   document.getElementById('mAssignEvent')?.addEventListener('click',()=>openSpecialEventAssignmentModal(e));
-  document.getElementById('mRequestEvent')?.addEventListener('click',()=>{e.requests.push({personId:CURRENT_USER_ID,status:'pending',conflict,requestedAt:new Date().toISOString()});logActivity(`Requested assignment to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();});
-  document.querySelectorAll('[data-event-award]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.eventAward;const regular=specialEventConflicts(id,e).regularDuty;if(regular&&!confirm(personName(id)+' is scheduled for regular duty. Reassign them to this special event for these dates?'))return;applySpecialEventAssignments(e,[id],regular,false);}));
+  document.getElementById('mRequestEvent')?.addEventListener('click',()=>{const staffingCategoryId=document.getElementById('mRequestEventCategory').value;if((e.staffingRequirements||[]).length&&!staffingCategoryId){toast('Choose the staffing category you are requesting.',true);return;}const category=(e.staffingRequirements||[]).find(c=>c.id===staffingCategoryId);if(!staffingPersonHasSkill(STATE.pm.records,CURRENT_USER_ID,category)){toast('You do not have the required skill for this category.',true);return;}e.requests.push({personId:CURRENT_USER_ID,staffingCategoryId,status:'pending',conflict,requestedAt:new Date().toISOString()});logActivity(`Requested assignment to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();});
+  document.querySelectorAll('[data-event-award]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.eventAward;const regular=specialEventConflicts(id,e).regularDuty;if(regular&&!confirm(personName(id)+' is scheduled for regular duty. Reassign them to this special event for these dates?'))return;applySpecialEventAssignments(e,[id],regular,false,document.querySelector('[data-event-award-category="'+id+'"]').value);}));
   wireRecordLinks();
 }
 
@@ -2935,14 +3002,14 @@ function renderRosterSub(){
     const status = shiftPatternStatus(s, todayStr);
     const published = s.published !== false;
     const statusBadge = !published ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Draft / Hidden</span>` : status==='future' ? `<span class="badge" style="background:var(--gold)22;color:var(--gold);margin-left:8px;">Upcoming</span>` : status==='past' ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Past</span>` : '';
-    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shiftColor(s)};margin-right:8px;"></span>${escapeHtml(s.name)}${statusBadge}</td><td>${escapeHtml(describeShiftPattern(s))}</td><td>${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)}</td><td>${s.minStaff||0}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(formatShiftDateRange(s))}</td>
+    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shiftColor(s)};margin-right:8px;"></span>${escapeHtml(s.name)}${statusBadge}</td><td>${escapeHtml(describeShiftPattern(s))}</td><td>${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)}</td><td>${s.minStaff||0}${(s.staffingRequirements||[]).map(r=>`<br><span class="hint">${escapeHtml(r.name)}: ${r.count}</span>`).join('')}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(formatShiftDateRange(s))}</td>
     ${canManage?`<td><div class="cell-actions">${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">${SHOW_PAST_SHIFT_PATTERNS ? 'No shift patterns defined yet.' : 'No current or upcoming shift patterns. '+(pastCount?'<button class="btn-sm btn btn-outline" id="btnShowPastShiftsInline">Show past patterns</button>':'')}</td></tr>`;
 
   const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate&&canViewScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId))).map(a=>{
     const shift = STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId);
     const canManage=canManageScheduleShift(shift);
-    return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name)+(shift.published===false?' <span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);">Draft</span>':''):'—'}</td>
+    return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name)+(a.staffingCategoryId?' · '+escapeHtml(staffingCategoryName(shift,a.staffingCategoryId)):'')+(shift.published===false?' <span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);">Draft</span>':''):'—'}</td>
     <td>${shift?SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd):''}</td><td>${escapeHtml(a.location)}</td>
     ${canManage?`<td><div class="cell-actions"><button class="btn-icon" data-edit-assign="${a.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-assign="${a.id}" title="End assignment">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No active shift assignments.</td></tr>`;
@@ -3144,7 +3211,7 @@ function shiftHours(shift){
 // Everyone actually on duty for a shift/date: assigned per rotation, minus anyone with an
 // active time-off exception that day, plus anyone added via a one-off coverage (swap or OT).
 function onDutyRoster(shift, dateStr){
-  const assigned = STATE.pm.scheduleAssignments.filter(a=>!a.endDate && isOnDutyOnDate(a, shift, dateStr) && !activeExceptionFor(a.personId, dateStr)).map(a=>a.personId);
+  const assigned = STATE.pm.scheduleAssignments.filter(a=>a.shiftId===shift.id && isOnDutyOnDate(a, shift, dateStr) && !activeExceptionFor(a.personId, dateStr)).map(a=>a.personId);
   const covering = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && c.shiftId===shift.id).map(c=>c.personId);
   return [...new Set([...assigned, ...covering])];
 }
@@ -3155,9 +3222,11 @@ function computeCoverageGaps(days){
   for(let i=0;i<days;i++){
     const dateStr = fmt(addDays(new Date(), i));
     shifts.forEach(shift=>{
-      const minStaff = Number(shift.minStaff)||0;
-      const staffed = onDutyRoster(shift, dateStr).length;
-      if(staffed < minStaff) gaps.push({date:dateStr, shiftId:shift.id, shift, staffed, minStaff, needed:minStaff-staffed});
+      const summary=shiftStaffingSummary(shift,dateStr);
+      if(!summary.ok){
+        if(summary.categories.length)summary.categories.filter(r=>r.needed>0).forEach(r=>gaps.push({date:dateStr,shiftId:shift.id,shift,staffed:r.staffed,minStaff:r.count,needed:r.needed,staffingCategoryId:r.id,categoryName:r.name}));
+        else gaps.push({date:dateStr,shiftId:shift.id,shift,staffed:summary.staffed,minStaff:summary.minStaff,needed:summary.needed});
+      }
     });
   }
   return gaps;
@@ -3185,14 +3254,14 @@ function renderOvertimeSub(){
   const ranked = rankedCallbackList(), isOptedIn=STATE.pm.otCallbackOptIns.includes(CURRENT_USER_ID);
   const eligibleToAdd=STATE.personnel.filter(p=>!STATE.pm.otCallbackOptIns.includes(p.id)&&canManagePersonSchedule(p.id,{},'pm_overtime_manage'));
   const opportunities=(STATE.pm.overtimeOpportunities||[]).filter(o=>o.status!=='closed'&&canViewScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId))).sort((a,b)=>a.date.localeCompare(b.date));
-  const oppRows=opportunities.map(o=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);if(!shift)return '';const mine=(o.requests||[]).find(r=>r.personId===CURRENT_USER_ID);const mgr=canManageOvertimeShift(shift);return `<tr><td>${escapeHtml(o.date)}</td><td>${escapeHtml(scheduleWorkGroupName(shift.workGroupId))}</td><td>${escapeHtml(shift.name)}</td><td>${(o.requests||[]).filter(r=>r.status==='pending').length} pending</td><td>${mine?'<span class="badge">'+escapeHtml(mine.status)+'</span>':canRequest?'<button class="btn btn-sm btn-primary" data-request-ot="'+o.id+'">Request Shift</button>':''}${mgr?' <button class="btn btn-sm btn-outline" data-review-ot="'+o.id+'">Review</button>':''}</td></tr>`;}).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No open overtime opportunities.</td></tr>';
-  const gapRows=gaps.map(g=>{const mgr=canManageOvertimeShift(g.shift);const existing=opportunities.find(o=>o.date===g.date&&o.shiftId===g.shiftId);return `<tr><td>${escapeHtml(g.date)}</td><td>${escapeHtml(scheduleWorkGroupName(g.shift.workGroupId))}</td><td>${escapeHtml(g.shift.name)}</td><td style="color:var(--red);font-weight:700;">${g.staffed}/${g.minStaff}</td><td>${g.needed}</td><td>${mgr&&!existing?'<button class="btn btn-sm btn-primary" data-publish-ot="'+escapeHtml(g.date)+'|'+g.shiftId+'">Publish OT</button>':existing?'<span class="badge">Published</span>':''}</td></tr>`;}).join('')||`<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No coverage gaps in the next ${OT_LOOKAHEAD_DAYS} days.</td></tr>`;
+  const oppRows=opportunities.map(o=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);if(!shift)return '';const mine=(o.requests||[]).find(r=>r.personId===CURRENT_USER_ID);const mgr=canManageOvertimeShift(shift);const qualified=staffingPersonHasSkill(STATE.pm.records,CURRENT_USER_ID,(shift.staffingRequirements||[]).find(c=>c.id===o.staffingCategoryId));return `<tr><td>${escapeHtml(o.date)}</td><td>${escapeHtml(scheduleWorkGroupName(shift.workGroupId))}</td><td>${escapeHtml(shift.name)}${o.staffingCategoryId?' · '+escapeHtml(staffingCategoryName(shift,o.staffingCategoryId)):''}</td><td>${(o.requests||[]).filter(r=>r.status==='pending').length} pending</td><td>${mine?'<span class="badge">'+escapeHtml(mine.status)+'</span>':canRequest&&qualified?'<button class="btn btn-sm btn-primary" data-request-ot="'+o.id+'">Request Shift</button>':''}${mgr?' <button class="btn btn-sm btn-outline" data-review-ot="'+o.id+'">Review</button>':''}</td></tr>`;}).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No open overtime opportunities.</td></tr>';
+  const gapRows=gaps.map(g=>{const mgr=canManageOvertimeShift(g.shift);const existing=opportunities.find(o=>o.date===g.date&&o.shiftId===g.shiftId&&(o.staffingCategoryId||'')===(g.staffingCategoryId||''));return `<tr><td>${escapeHtml(g.date)}</td><td>${escapeHtml(scheduleWorkGroupName(g.shift.workGroupId))}</td><td>${escapeHtml(g.shift.name)}${g.categoryName?' · '+escapeHtml(g.categoryName):''}</td><td style="color:var(--red);font-weight:700;">${g.staffed}/${g.minStaff}</td><td>${g.needed}</td><td>${mgr&&!existing?'<button class="btn btn-sm btn-primary" data-publish-ot="'+escapeHtml(g.date)+'|'+g.shiftId+'|'+(g.staffingCategoryId||'')+'">Publish OT</button>':existing?'<span class="badge">Published</span>':''}</td></tr>`;}).join('')||`<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No coverage gaps in the next ${OT_LOOKAHEAD_DAYS} days.</td></tr>`;
   const rankRows=ranked.map((row,i)=>`<tr><td>${i+1}</td><td>${recordLink(row.personId)}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)} hrs</td>${canManage&&canManagePersonSchedule(row.personId,{},'pm_overtime_manage')?`<td><button class="btn-icon" data-remove-optin="${row.personId}" title="Remove from list">${ICONS.trash}</button></td>`:'<td></td>'}</tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is currently on the callback list.</td></tr>';
   document.getElementById('schedSubBody').innerHTML=`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><div><h2>Open Overtime Opportunities</h2><span class="hint">Published vacancies staff can request</span></div></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Requests</th><th></th></tr></thead><tbody>${oppRows}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Coverage Gaps</h2><span class="hint">Next ${OT_LOOKAHEAD_DAYS} days</span></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Staffing</th><th>Needed</th><th></th></tr></thead><tbody>${gapRows}</tbody></table></div></div>
   <div class="panel"><div class="panel-head"><h2>Overtime Callback List</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${canRequest?`<button class="btn btn-sm ${isOptedIn?'btn-outline':'btn-primary'}" id="btnToggleOptIn">${isOptedIn?'Leave the list':'Join the callback list'}</button>`:''}${canManage?`<select id="fAddOptIn" style="max-width:220px;"><option value="">Add someone…</option>${eligibleToAdd.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>`:''}</div></div><div style="padding:14px 20px 0;font-size:12px;color:var(--text-dim);">Ranked by fewest overtime hours worked in the last 90 days; ties break by seniority.</div><div class="panel-body" style="padding:14px 0 0;overflow-x:auto;"><table><thead><tr><th>#</th><th>Employee</th><th>Phone</th><th>OT Hours (90d)</th><th></th></tr></thead><tbody>${rankRows}</tbody></table></div></div>`;
-  document.querySelectorAll('[data-publish-ot]').forEach(b=>b.onclick=()=>{const [date,shiftId]=b.dataset.publishOt.split('|');STATE.pm.overtimeOpportunities.push({id:'oto'+Date.now(),date,shiftId,status:'open',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Published overtime opportunity for ${STATE.pm.scheduleShifts.find(s=>s.id===shiftId)?.name||'shift'} on ${date}.`,'schedule');persist();renderOvertimeSub();});
-  document.querySelectorAll('[data-request-ot]').forEach(b=>b.onclick=()=>{const o=STATE.pm.overtimeOpportunities.find(x=>x.id===b.dataset.requestOt),shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);const conflict=personScheduledOnDate(CURRENT_USER_ID,o.date);if(conflict){toast('You are already scheduled to work on this date.',true);return;}o.requests.push({personId:CURRENT_USER_ID,status:'pending',requestedAt:new Date().toISOString()});logActivity(`Requested overtime on ${o.date} for ${shift.name}.`,'schedule');persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-publish-ot]').forEach(b=>b.onclick=()=>{const [date,shiftId,staffingCategoryId='']=b.dataset.publishOt.split('|');STATE.pm.overtimeOpportunities.push({id:'oto'+Date.now(),date,shiftId,staffingCategoryId,status:'open',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Published overtime opportunity for ${STATE.pm.scheduleShifts.find(s=>s.id===shiftId)?.name||'shift'} on ${date}.`,'schedule');persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-request-ot]').forEach(b=>b.onclick=()=>{const o=STATE.pm.overtimeOpportunities.find(x=>x.id===b.dataset.requestOt),shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);if(!staffingPersonHasSkill(STATE.pm.records,CURRENT_USER_ID,(shift.staffingRequirements||[]).find(c=>c.id===o.staffingCategoryId))){toast('You do not have the required skill for this overtime slot.',true);return;}const conflict=personScheduledOnDate(CURRENT_USER_ID,o.date);if(conflict){toast('You are already scheduled to work on this date.',true);return;}o.requests.push({personId:CURRENT_USER_ID,status:'pending',requestedAt:new Date().toISOString()});logActivity(`Requested overtime on ${o.date} for ${shift.name}.`,'schedule');persist();renderOvertimeSub();});
   document.querySelectorAll('[data-review-ot]').forEach(b=>b.onclick=()=>openOvertimeOpportunity(b.dataset.reviewOt));
   document.getElementById('btnToggleOptIn')?.addEventListener('click',()=>{if(isOptedIn)STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==CURRENT_USER_ID);else STATE.pm.otCallbackOptIns.push(CURRENT_USER_ID);logActivity(`${isOptedIn?'Left':'Joined'} the overtime callback list.`,'schedule');persist();renderOvertimeSub();});
   document.getElementById('fAddOptIn')?.addEventListener('change',e=>{if(!e.target.value||!canManagePersonSchedule(e.target.value,{},'pm_overtime_manage'))return;STATE.pm.otCallbackOptIns.push(e.target.value);persist();renderOvertimeSub();});
@@ -3202,7 +3271,7 @@ function openOvertimeOpportunity(id){
  const o=STATE.pm.overtimeOpportunities.find(x=>x.id===id),shift=STATE.pm.scheduleShifts.find(s=>s.id===o?.shiftId);if(!o||!shift||!canManageOvertimeShift(shift)||o.status==='closed')return;
  const req=(o.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${otHoursSince(r.personId,fmt(addDays(new Date(),-90))).toFixed(1)}</td><td>${escapeHtml(seniorityDate(r.personId))}</td><td>${escapeHtml(r.status)}</td><td>${r.status==='pending'?'<button class="btn btn-sm btn-primary" data-award-ot="'+r.personId+'">Award</button>':''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-dim);">No requests yet.</td></tr>';
  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Overtime Requests</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(shift.name)} · ${escapeHtml(o.date)}</p><table><thead><tr><th>Employee</th><th>OT Hours (90d)</th><th>Seniority</th><th>Status</th><th></th></tr></thead><tbody>${req}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>`;openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
- document.querySelectorAll('[data-award-ot]').forEach(b=>b.onclick=()=>{if(personScheduledOnDate(b.dataset.awardOt,o.date)){toast('This employee has a schedule conflict.',true);return;}const r=o.requests.find(x=>x.personId===b.dataset.awardOt);r.status='awarded';o.requests.filter(x=>x!==r&&x.status==='pending').forEach(x=>x.status='not_awarded');STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId:r.personId,shiftId:o.shiftId,unit:shift.name,location:'',date:o.date,source:'overtime',hours:shiftHours(shift),overtimeOpportunityId:o.id});o.status='closed';logActivity(`Awarded overtime to ${personName(r.personId)} for ${shift.name} on ${o.date}.`,'schedule');persist();closeModal();renderOvertimeSub();});wireRecordLinks();
+ document.querySelectorAll('[data-award-ot]').forEach(b=>b.onclick=()=>{if(personScheduledOnDate(b.dataset.awardOt,o.date)){toast('This employee has a schedule conflict.',true);return;}const r=o.requests.find(x=>x.personId===b.dataset.awardOt);if(!staffingPersonHasSkill(STATE.pm.records,r.personId,(shift.staffingRequirements||[]).find(c=>c.id===o.staffingCategoryId))){toast('This employee does not have the required skill.',true);return;}r.status='awarded';o.requests.filter(x=>x!==r&&x.status==='pending').forEach(x=>x.status='not_awarded');STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId:r.personId,shiftId:o.shiftId,unit:shift.name,location:'',date:o.date,source:'overtime',hours:shiftHours(shift),staffingCategoryId:o.staffingCategoryId||'',overtimeOpportunityId:o.id});o.status='closed';logActivity(`Awarded overtime to ${personName(r.personId)} for ${shift.name} on ${o.date}.`,'schedule');persist();closeModal();renderOvertimeSub();});wireRecordLinks();
 }
 
 function openFillGapModal(date, shiftId){
@@ -3215,6 +3284,7 @@ function openFillGapModal(date, shiftId){
     <div class="modal-head"><h3>Fill Coverage Gap</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <p style="font-size:13px;color:var(--text-dim);margin-top:0;">${escapeHtml(shift.name)} &middot; ${escapeHtml(date)}</p>
+      <div class="form-row"><label>Staffing Category to Fill</label><select id="fCallbackCategory">${staffingCategoryOptions(shift)}</select></div>
       <table><thead><tr><th>#</th><th>Employee</th><th>Phone</th><th>OT Hours (90d)</th><th></th></tr></thead><tbody>
         ${ranked.map((row,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(personName(row.personId))}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)}</td><td><button class="btn btn-sm btn-primary" data-confirm-fill="${row.personId}">Log as Filled</button></td></tr>`).join('')
         || (STATE.pm.otCallbackOptIns.length ? `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">Everyone on the callback list is already working that day.</td></tr>` : `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is on the callback list yet. Add people from the Overtime &amp; Callback tab first.</td></tr>`)}
@@ -3224,12 +3294,15 @@ function openFillGapModal(date, shiftId){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${StaffNotices.canCompose()?'<button class="btn btn-primary" id="mOfferSms">Notify eligible staff</button>':''}</div>
   `;
   openModal();
+  const syncCallbackSkills=()=>{const category=(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value);document.querySelectorAll('[data-confirm-fill]').forEach(button=>button.closest('tr').style.display=staffingPersonHasSkill(STATE.pm.records,button.dataset.confirmFill,category)?'':'none');};
+  document.getElementById('fCallbackCategory').onchange=syncCallbackSkills;syncCallbackSkills();
   document.getElementById('mOfferSms')?.addEventListener('click',()=>StaffNotices.offer(ranked.map(row=>row.personId),shift,date));
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.querySelectorAll('[data-confirm-fill]').forEach(b=>b.addEventListener('click', ()=>{
     const personId = b.dataset.confirmFill;
-    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId, shiftId, unit:shift.name, location:'', date, source:'overtime', hours:shiftHours(shift)});
+    if(!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value))){toast('This employee does not have the required skill.',true);return;}
+    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId, shiftId, unit:shift.name, location:'', date, source:'overtime', staffingCategoryId:document.getElementById('fCallbackCategory').value, hours:shiftHours(shift)});
     logActivity(`Logged overtime callback: ${personName(personId)} to cover ${shift.name} on ${date}.`, "schedule");
     persist();
     toast("Overtime callback logged.");
@@ -3934,12 +4007,10 @@ function renderDutyCalendar(body){
     const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
     const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&e.endDate>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
     const staffingChecks = displayedShifts.map(shift=>{
-      const minStaff=Number(shift.minStaff)||0;
-      const staffed=onDutyRoster(shift,dateStr).length;
-      return {shift,minStaff,staffed,ok:minStaff<=0 || staffed>=minStaff};
+      return {shift,...shiftStaffingSummary(shift,dateStr)};
     });
-    const eventChecks=dayEvents.map(e=>({event:e,needed:Number(e.staffNeeded)||1,staffed:(e.requests||[]).filter(r=>r.status==='awarded').length})); 
-    const dayCovered = staffingChecks.every(x=>x.ok) && eventChecks.every(x=>x.staffed>=x.needed);
+    const eventChecks=dayEvents.map(e=>({event:e,...eventStaffingSummary(e)}));
+    const dayCovered = staffingChecks.every(x=>x.ok) && eventChecks.every(x=>x.ok);
     let cellClass = 'cal-cell' + (isToday ? ' cal-cell-today' : '') + (dayCovered ? ' cal-cell-covered' : ' cal-cell-short');
     if(SCHED_CAL_SHIFT!=='all'){
       const check=staffingChecks[0];
@@ -3948,7 +4019,8 @@ function renderDutyCalendar(body){
     cells += `<div class="${cellClass}">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
       ${staffingBadge}
-      ${dayEvents.map(e=>{const staffed=(e.requests||[]).filter(r=>r.status==='awarded').length,needed=Number(e.staffNeeded)||1,ok=staffed>=needed;return `<a href="#" data-cal-special-event="${e.id}" class="cal-event" style="background:${ok?'var(--green)':'var(--red)'}22;color:${ok?'var(--green)':'var(--red)'};border-left:3px solid ${ok?'var(--green)':'var(--red)'};" title="${escapeHtml(e.name+' — '+staffed+'/'+needed+' staffed')}">${escapeHtml(e.name)} (${staffed}/${needed})</a>`;}).join('')}
+      ${staffingChecks.filter(x=>x.categories.length).map(x=>`<div class="calendar-staffing-breakdown"><strong>${escapeHtml(x.shift.name)}</strong><br>${staffingBreakdownHtml(x)}</div>`).join('')}
+      ${dayEvents.map(e=>{const summary=eventStaffingSummary(e),staffed=summary.staffed,needed=summary.minStaff,ok=summary.ok;return `<a href="#" data-cal-special-event="${e.id}" class="cal-event" style="background:${ok?'var(--green)':'var(--red)'}22;color:${ok?'var(--green)':'var(--red)'};border-left:3px solid ${ok?'var(--green)':'var(--red)'};" title="${escapeHtml(e.name+' — '+staffed+'/'+needed+' staffed')}">${escapeHtml(e.name)} (${staffed}/${needed})</a>${staffingBreakdownHtml(summary)}`;}).join('')}
       ${working.map(a=>{
         const shift = shifts.find(s=>s.id===a.shiftId);
         const color = shift ? shiftColor(shift) : 'var(--blue)';
@@ -4096,6 +4168,7 @@ function openShiftFormModal(existing){
         <div class="form-row"><label>End Time</label><input type="time" id="fShiftEnd" value="${editing?existing.hoursEnd:'18:00'}"></div>
       </div>
       <div class="form-row"><label>Minimum Staff Required</label><input type="number" min="0" id="fShiftMinStaff" value="${editing?(existing.minStaff||0):1}"></div>
+      ${staffingNeedsEditor('fShiftStaffNeeds',existing)}
       <div class="form-row"><label>Effective Dates <span style="font-weight:400;color:var(--text-dim);">(when this rotation itself is in effect \u2014 not when a specific person is assigned to it)</span></label>
         <div class="form-2col">
           <input type="date" id="fShiftStartDate" value="${editing?(existing.startDate||''):fmt(new Date())}">
@@ -4107,6 +4180,7 @@ function openShiftFormModal(existing){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Create'}</button></div>
   `;
   openModal();
+  wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('fShiftPatternType').addEventListener('change', (e)=>{
@@ -4129,8 +4203,9 @@ function openShiftFormModal(existing){
     if(endDate && endDate < startDate){ toast("End date can't be before the start date.", true); return; }
     const workGroupId=document.getElementById('fShiftWorkGroup').value;
     if(!groups.some(g=>g.id===workGroupId)||(editing&&!canManageScheduleShift(existing)))return;
+    const staffingRequirements=readStaffingNeeds('fShiftStaffNeeds');if(!staffingRequirements)return;
     const data = {
-      name, workGroupId,
+      name, workGroupId, staffingRequirements,
       patternType: selectedType,
       daysOn: Number(document.getElementById('fShiftDaysOn').value)||4,
       daysOff: Number(document.getElementById('fShiftDaysOff').value)||3,
@@ -4167,9 +4242,12 @@ function openOneOffCoverageModal(){
       <div class="form-row"><label>Shift</label><select id="fOneOffShift">${liveShifts.map(s=>`<option value="${s.id}">${escapeHtml(s.name)} (${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)})</option>`).join('')}</select></div>
       <div class="form-row"><label>Date</label><input type="date" id="fOneOffDate" value="${fmt(new Date())}"></div>
       <div class="form-2col"><div class="form-row"><label>Reason</label><select id="fOneOffSource"><option value="overtime">Overtime</option><option value="callback">Callback</option><option value="manual">Other / Manual Coverage</option></select></div><div class="form-row"><label>Notes</label><input type="text" id="fOneOffNotes" placeholder="Optional"></div></div>
+      <div class="form-row"><label>Staffing Category</label><select id="fOneOffCategory"></select></div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Add to Duty Roster</button></div>`;
   openModal();
+  const syncCategory=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===document.getElementById('fOneOffShift').value);document.getElementById('fOneOffCategory').innerHTML=staffingCategoryOptions(shift);};
+  document.getElementById('fOneOffShift').addEventListener('change',syncCategory);syncCategory();wireStaffingPersonPicker('fOneOffShift','fOneOffCategory','fOneOffPerson',null);
   document.getElementById('mClose').onclick=closeModal;
   document.getElementById('mCancel').onclick=closeModal;
   document.getElementById('mSave').onclick=()=>{
@@ -4179,9 +4257,10 @@ function openOneOffCoverageModal(){
     const duplicate=(STATE.pm.scheduleCoverages||[]).some(x=>x.personId===personId&&x.shiftId===shiftId&&x.date===date);
     if(duplicate){toast("That person is already added to this shift on this date.",true);return;}
     const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftId);
+    if(!personId||!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fOneOffCategory').value))){toast('Select personnel with the required skill.',true);return;}
     if(onDutyRoster(shift,date).includes(personId)){toast("That person is already scheduled to work this shift on this date.",true);return;}
     if(activeExceptionFor(personId,date)){toast("That person has time off or another schedule exception on this date. Adjust the exception before adding one-off staffing.",true);return;}
-    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId,shiftId,date,source,hours:shiftHours(shift),notes,createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});
+    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId,shiftId,date,source,staffingCategoryId:document.getElementById('fOneOffCategory').value,hours:shiftHours(shift),notes,createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});
     logActivity(`Added ${personName(personId)} to ${shift?.name||'a shift'} on ${date} as one-off ${source} coverage.`, 'schedule');
     persist(); closeModal(); toast("Person added to the Duty Roster."); renderScheduling();
   };
@@ -4198,6 +4277,7 @@ function openAssignmentFormModal(existing){
     <div class="modal-body">
       <div class="form-row"><label>Employee</label><select id="fAssignPerson">${STATE.personnel.map(p=>`<option value="${p.id}" ${editing&&existing.personId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Shift Pattern</label><select id="fAssignShift">${sortShiftsForSelection(availableShifts).map(s=>`<option value="${s.id}" ${editing&&existing.shiftId===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Staffing Category</label><select id="fAssignCategory"></select></div>
       <div class="form-2col">
         <div class="form-row"><label>Unit</label><select id="fAssignUnit">${STATE.pm.refData.units.map(u=>`<option ${editing&&existing.unit===u?'selected':''}>${escapeHtml(u)}</option>`).join('')}</select></div>
         <div class="form-row"><label>Location</label><input type="text" id="fAssignLocation" value="${editing?escapeHtml(existing.location||''):''}" placeholder="e.g. North Substation"></div>
@@ -4207,18 +4287,22 @@ function openAssignmentFormModal(existing){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Assign'}</button></div>
   `;
   openModal();
+  const syncCategory=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===document.getElementById('fAssignShift').value);document.getElementById('fAssignCategory').innerHTML=staffingCategoryOptions(shift,existing?.staffingCategoryId||'');};
+  document.getElementById('fAssignShift').addEventListener('change',syncCategory);syncCategory();wireStaffingPersonPicker('fAssignShift','fAssignCategory','fAssignPerson',existing);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
     const personId = document.getElementById('fAssignPerson').value;
     const data = {
-      personId,
+      personId, staffingCategoryId:document.getElementById('fAssignCategory').value,
       shiftId: document.getElementById('fAssignShift').value,
       unit: document.getElementById('fAssignUnit').value,
       location: document.getElementById('fAssignLocation').value.trim(),
       startDate: document.getElementById('fAssignStart').value,
     };
-    if(!canManageScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===data.shiftId)))return;
+    const selectedShift=STATE.pm.scheduleShifts.find(s=>s.id===data.shiftId);
+    if(!data.personId||!staffingPersonHasSkill(STATE.pm.records,data.personId,(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId))){toast('Select personnel with the required skill.',true);return;}
+    if(!canManageScheduleShift(selectedShift))return;
     if(editing){
       Object.assign(existing, data);
       logActivity(`Updated shift assignment for ${personName(personId)}.`, "schedule", existing.id);
@@ -4337,9 +4421,11 @@ function approveSwapRequest(id){
   // never become "approved" without putting the covering employee onto the roster.
   const requesterAssignment = STATE.pm.scheduleAssignments.find(a=>a.personId===req.requesterId && isOnDutyOnDate(a, STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId), req.date));
   if(!requesterAssignment){toast("This swap can no longer be approved because the requester's scheduled assignment for that date was not found. Review the schedule and submit a new swap if needed.",true);return;}
+  const swapShift=STATE.pm.scheduleShifts.find(s=>s.id===requesterAssignment.shiftId);
+  if(!staffingPersonHasSkill(STATE.pm.records,req.coveringId,(swapShift?.staffingRequirements||[]).find(c=>c.id===requesterAssignment.staffingCategoryId))){toast('The covering employee does not have the required staffing skill.',true);return;}
   // Mark the requester off that day, same mechanism as any other logged exception.
   STATE.pm.scheduleExceptions.push({id:'exc'+Date.now(), personId:req.requesterId, code:'SWP', startDate:req.date, endDate:req.date, notes:`Covered by ${personName(req.coveringId)}`, swapRequestId:req.id});
-  STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId:req.coveringId, shiftId:requesterAssignment.shiftId, unit:requesterAssignment.unit, location:requesterAssignment.location, date:req.date, swapRequestId:req.id});
+  STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId:req.coveringId, shiftId:requesterAssignment.shiftId, unit:requesterAssignment.unit, location:requesterAssignment.location, date:req.date, staffingCategoryId:requesterAssignment.staffingCategoryId||'', swapRequestId:req.id});
   req.status = 'approved';
   req.decidedAt = fmt(new Date());
   req.decidedBy = CURRENT_USER_ID;
@@ -4591,7 +4677,7 @@ const SIMPLE_LIST_TABS = {
   trainingCategories: {label:'Training Categories', usageCheck:(v)=>STATE.pm.trainingCourses.filter(c=>c.category===v).length},
   trainingProviders: {label:'Training Providers', usageCheck:(v)=>STATE.pm.trainingRecords.filter(t=>t.provider===v).length},
   inquiryCategories: {label:'Inquiry Categories', usageCheck:(v)=>STATE.pm.inquiries.filter(i=>i.category===v).length},
-  skillsCatalog: {label:'Special Skills Catalog', usageCheck:(v)=>STATE.pm.records.filter(r=>r.specialSkills.includes(v)).length},
+  skillsCatalog: {label:'Special Skills Catalog', usageCheck:(v)=>STATE.pm.records.filter(r=>r.specialSkills.includes(v)).length+[...(STATE.pm.scheduleShifts||[]),...(STATE.pm.specialEvents||[])].filter(r=>(r.staffingRequirements||[]).some(c=>c.requiredSkill===v)).length},
 };
 
 function renderAdmin(){

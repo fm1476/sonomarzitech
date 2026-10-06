@@ -160,7 +160,7 @@ async function applyChanges(client, auth, body) {
   await client.query("BEGIN");
 
   try {
-    const needsScheduleScope = validated.some(c => scopedScheduleCollections.has(c.path.join('.')) || ['pm.scheduleWorkGroups','pm.schedulingSettings'].includes(c.path.join('.')));
+    const needsScheduleScope = validated.some(c => scopedScheduleCollections.has(c.path.join('.')) || ['pm.scheduleWorkGroups','pm.schedulingSettings','pm.records','pm.refData'].includes(c.path.join('.')));
     if(needsScheduleScope)await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`${tenantId}:${agencyId}:scheduling`]);
     const scheduleRows = needsScheduleScope ? await client.query(
       `SELECT key, value, deleted FROM suite_records

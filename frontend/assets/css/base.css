@@ -717,3 +717,7 @@
 .access-person-list span{min-width:0;overflow-wrap:anywhere;}
 .access-unit-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;height:auto;max-height:180px;}
 @media(max-width:600px){.access-unit-list{grid-template-columns:1fr;}}
+
+.staffing-need-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 80px auto;gap:10px;align-items:center;margin:10px 0;}
+.calendar-staffing-breakdown{font-size:11px;margin:6px 0;line-height:1.5;}
+@media(max-width:600px){.staffing-need-row{grid-template-columns:minmax(0,1fr) 65px;}.staffing-need-row select{grid-column:1/-1;grid-row:2;}.staffing-need-row button{grid-column:1/-1;justify-self:end;}}
