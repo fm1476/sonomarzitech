@@ -213,6 +213,17 @@ async function staffNoticesApi(client, auth, body) {
     if (!endpoint.startsWith("https://") || !p256dh || !authKey || endpoint.length>4096 || p256dh.length>512 || authKey.length>512) {
       return response(400,{success:false,error:"Invalid push subscription."});
     }
+    // A browser push endpoint belongs to the device/browser subscription. If a different
+    // SonoMarzi account signs into the same device, transfer that endpoint to the current
+    // authenticated user instead of attempting to create a second row for the same endpoint.
+    // This also prevents the prior signed-in account from continuing to receive Staff Notices
+    // on a shared device.
+    await client.query(
+      `DELETE FROM suite_push_subscriptions
+        WHERE endpoint=$1
+          AND (tenant_id<>$2 OR agency_id<>$3 OR user_id<>$4)`,
+      [endpoint,tenantId,agencyId,auth.userId]
+    );
     await client.query(
       `INSERT INTO suite_push_subscriptions
         (tenant_id,agency_id,user_id,endpoint,p256dh,auth,user_agent,updated_at)
