@@ -3720,7 +3720,10 @@ function renderRollCallSub(){
 }
 
 function renderDutyCalendar(body){
-  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false));
+  const allGroups=(STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false);
+  if(!SCHED_CAL_WORKGROUPS.length) SCHED_CAL_WORKGROUPS=allGroups.map(g=>g.id);
+  const groupIds=new Set(selectedCalendarWorkGroups());
+  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && groupIds.has(s.workGroupId)));
   const shiftOrder = new Map(shifts.map((s,i)=>[s.id,i]));
   if(SCHED_CAL_SHIFT!=='all' && !shifts.some(s=>s.id===SCHED_CAL_SHIFT)) SCHED_CAL_SHIFT = 'all';
   const year = SCHED_CAL_YEAR, month = SCHED_CAL_MONTH;
@@ -3792,11 +3795,14 @@ function renderDutyCalendar(body){
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="next">&rarr;</button>
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="today">Today</button>
       </div>
-      <div class="form-row" style="margin:0;min-width:220px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="sched-workgroup-filter">${allGroups.map(g=>`<label class="sched-filter-chip"><input type="checkbox" data-cal-workgroup="${g.id}" ${groupIds.has(g.id)?'checked':''}> ${escapeHtml(g.name)}</label>`).join('')}</div>
+        <div class="form-row" style="margin:0;min-width:220px;">
         <select id="fSchedCalShift">
           <option value="all" ${SCHED_CAL_SHIFT==='all'?'selected':''}>All Shifts</option>
           ${shifts.map(s=>`<option value="${s.id}" ${SCHED_CAL_SHIFT===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
         </select>
+        </div>
       </div>
     </div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
@@ -3814,6 +3820,11 @@ function renderDutyCalendar(body){
     else { y=new Date().getFullYear(); m=new Date().getMonth(); }
     SCHED_CAL_YEAR=y; SCHED_CAL_MONTH=m;
     renderDutyCalendar(body);
+  }));
+  body.querySelectorAll('[data-cal-workgroup]').forEach(cb=>cb.addEventListener('change',()=>{
+    const chosen=[...body.querySelectorAll('[data-cal-workgroup]:checked')].map(x=>x.dataset.calWorkgroup);
+    if(!chosen.length){ cb.checked=true; toast("Keep at least one work group visible.",true); return; }
+    SCHED_CAL_WORKGROUPS=chosen; SCHED_CAL_SHIFT='all'; renderDutyCalendar(body);
   }));
   const shiftSelect = document.getElementById('fSchedCalShift');
   if(shiftSelect) shiftSelect.addEventListener('change', ()=>{ SCHED_CAL_SHIFT = shiftSelect.value; renderDutyCalendar(body); });
