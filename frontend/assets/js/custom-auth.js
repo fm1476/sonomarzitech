@@ -95,25 +95,17 @@
     const subdomain=host.endsWith('.sonomarzi.com') ? host.split('.')[0] : '';
     const headers={Authorization:`Bearer ${token}`};
 
-    perfStart('me');
-    const meRes=await fetch(`${apiBase}/me`,{headers});
-    const me=await meRes.json().catch(()=>({}));
-    perfEnd('me');
-    if(!meRes.ok||!me?.success) throw Error(me?.error||`Unable to load SonoMarzi identity (${meRes.status}).`);
-
+    // /workspace already authenticates the user and resolves a sole membership.
+    // Avoid the former serial /me round trip during sign-in.
     let workspaceUrl=`${apiBase}/workspace`;
     if(subdomain) workspaceUrl += `?subdomain=${encodeURIComponent(subdomain)}`;
-    else if(Array.isArray(me.memberships)&&me.memberships.length===1){
-      const m=me.memberships[0];
-      workspaceUrl += `?tenantId=${encodeURIComponent(m.tenant_id)}&agencyId=${encodeURIComponent(m.agency_id)}`;
-    }
 
     perfStart('workspace');
     const wsRes=await fetch(workspaceUrl,{headers});
     const ws=await wsRes.json().catch(()=>({}));
     perfEnd('workspace');
     if(!wsRes.ok||!ws?.success) throw Error(ws?.error||`Unable to load SonoMarzi workspace (${wsRes.status}).`);
-    const authUser=me?.user?.email||me?.user?.display_name||'user';
+    const authUser='user';
     if(!(await enforceWorkspaceMfa(ws,authUser))) return false;
 
     if(typeof STATE==='undefined') throw Error('SonoMarzi application state is not available.');
@@ -200,7 +192,7 @@
     if(ws.agency?.branding) STATE.agencyBranding={...(STATE.agencyBranding||{}),...ws.agency.branding};
     STATE.enabledModules=Array.isArray(ws?.tenant?.enabled_modules)?[...ws.tenant.enabled_modules]:(Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[]);
 
-    CURRENT_USER_ID=ws.person_id||me.user?.id||null;
+    CURRENT_USER_ID=ws.person_id||null;
     HOME_ROLE_IDS=Array.isArray(ws.role_ids)?[...ws.role_ids]:[];
     STATE.currentRoleIds=[...HOME_ROLE_IDS];
 
