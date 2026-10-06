@@ -2755,15 +2755,6 @@ function renderRosterSub(){
   document.getElementById('schedSubBody').innerHTML = `
     ${!canManage ? lockedNote("You're viewing the schedule in read-only mode.") : ""}
     <div class="panel" style="margin-bottom:16px;">
-      ${collapsibleCardHead('shiftPatterns', '<h2>Shift Patterns</h2>', `
-          ${pastCount ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;font-weight:400;"><input type="checkbox" id="chkShowPastShifts" style="width:auto;" ${SHOW_PAST_SHIFT_PATTERNS?'checked':''}> Show ${pastCount} past pattern${pastCount===1?'':'s'}</label>` : ''}
-          ${canManage?`<button class="btn btn-sm btn-primary" id="btnAddShift">${ICONS.plus} New Pattern</button>`:''}
-        `)}
-      <div data-panel-body="shiftPatterns" style="${schedCardCollapsed('shiftPatterns')?'display:none;':''}">
-        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Pattern</th><th>Rotation</th><th>Hours</th><th>Min Staff</th><th>Dates</th><th></th></tr></thead><tbody>${shiftRows}</tbody></table></div>
-      </div>
-    </div>
-    <div class="panel" style="margin-bottom:16px;">
       ${collapsibleCardHead('dutyRoster', `<div><h2 style="display:inline;">Duty Roster</h2> <span class="hint">${STATE.pm.scheduleAssignments.filter(a=>!a.endDate).length} active assignments</span></div>`, `
           <div class="work-tabs" style="padding:0;border:0;" aria-label="Duty roster view">
             <button class="work-tab ${SCHED_VIEW==='roster'?'active':''}" aria-pressed="${SCHED_VIEW==='roster'}" data-sched-view="roster">List</button>
@@ -2805,6 +2796,15 @@ function renderRosterSub(){
           </div>
         </div>
         <div class="panel-body" style="padding:14px 0 0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Requesting</th><th>Covering</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${swapRows}</tbody></table></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      ${collapsibleCardHead('shiftPatterns', '<h2>Shift Patterns</h2>', `
+          ${pastCount ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;font-weight:400;"><input type="checkbox" id="chkShowPastShifts" style="width:auto;" ${SHOW_PAST_SHIFT_PATTERNS?'checked':''}> Show ${pastCount} past pattern${pastCount===1?'':'s'}</label>` : ''}
+          ${canManage?`<button class="btn btn-sm btn-primary" id="btnAddShift">${ICONS.plus} New Pattern</button>`:''}
+        `)}
+      <div data-panel-body="shiftPatterns" style="${schedCardCollapsed('shiftPatterns')?'display:none;':''}">
+        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Pattern</th><th>Rotation</th><th>Hours</th><th>Min Staff</th><th>Dates</th><th></th></tr></thead><tbody>${shiftRows}</tbody></table></div>
       </div>
     </div>
   `;
