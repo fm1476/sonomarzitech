@@ -3690,13 +3690,19 @@ function renderDutyCalendar(body){
     const dayCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && (SCHED_CAL_SHIFT==='all' || c.shiftId===SCHED_CAL_SHIFT));
     const isToday = dateStr === fmt(new Date());
     let staffingBadge = '';
-    let cellClass = 'cal-cell' + (isToday ? ' cal-cell-today' : '');
+    // A day is operationally covered only when every displayed shift with a configured
+    // minimum meets that minimum. Shifts with no minimum do not create an artificial shortage.
+    const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
+    const staffingChecks = displayedShifts.map(shift=>{
+      const minStaff=Number(shift.minStaff)||0;
+      const staffed=onDutyRoster(shift,dateStr).length;
+      return {shift,minStaff,staffed,ok:minStaff<=0 || staffed>=minStaff};
+    });
+    const dayCovered = staffingChecks.every(x=>x.ok);
+    let cellClass = 'cal-cell' + (isToday ? ' cal-cell-today' : '') + (dayCovered ? ' cal-cell-covered' : ' cal-cell-short');
     if(SCHED_CAL_SHIFT!=='all'){
-      const shift = shifts.find(s=>s.id===SCHED_CAL_SHIFT);
-      const minStaff = shift ? (Number(shift.minStaff)||0) : 0;
-      const staffed = working.length + dayCoverages.length;
-      const ok = staffed >= minStaff;
-      staffingBadge = `<div style="font-size:10px;font-weight:800;color:${ok?'var(--green)':'var(--red)'};">${staffed}/${minStaff} staffed</div>`;
+      const check=staffingChecks[0];
+      if(check?.minStaff>0) staffingBadge = `<div style="font-size:10px;font-weight:800;color:${check.ok?'var(--green)':'var(--red)'};">${check.staffed}/${check.minStaff} staffed</div>`;
     }
     cells += `<div class="${cellClass}">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
