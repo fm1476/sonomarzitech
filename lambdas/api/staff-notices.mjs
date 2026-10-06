@@ -541,6 +541,9 @@ async function staffNoticesApi(client, auth, body) {
       accepted: 0,
       failures: []
     };
+    // Persist a sanitized provider diagnostic with the recipient row during push debugging.
+    // Never store endpoints, subscription keys, VAPID keys, payload bodies, or stack traces.
+    await client.query(`ALTER TABLE suite_staff_notice_recipients ADD COLUMN IF NOT EXISTS push_error text`);
     if (pushConfigured()) {
       const userIds = resolved.map(member => member.user_id);
       const subscriptions = await client.query(
@@ -581,7 +584,7 @@ async function staffNoticesApi(client, auth, body) {
           pushDiagnostics.accepted++;
           console.warn("Staff notice push accepted",{noticeId:id,userId:sub.user_id});
           await client.query(
-            `UPDATE suite_staff_notice_recipients SET push_status='submitted'
+            `UPDATE suite_staff_notice_recipients SET push_status='submitted', push_error=NULL
               WHERE notice_id=$1 AND user_id=$2`,
             [id,sub.user_id]
           );
@@ -590,13 +593,17 @@ async function staffNoticesApi(client, auth, body) {
           if(status===404||status===410) {
             await client.query(`DELETE FROM suite_push_subscriptions WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,[tenantId,agencyId,sub.user_id,sub.endpoint]);
           }
-          const failure = {status,message:String(error?.message || "Push provider error").slice(0,240)};
+          const safeMessage = String(error?.message || error?.name || "Push provider error")
+            .replace(/https:\/\/[^\s]+/gi, "[endpoint]")
+            .replace(/[A-Za-z0-9_-]{80,}/g, "[redacted]")
+            .slice(0,500);
+          const failure = {status,message:safeMessage};
           pushDiagnostics.failures.push(failure);
           await client.query(
             `UPDATE suite_staff_notice_recipients
-                SET push_status=$3
+                SET push_status=$3, push_error=$4
               WHERE notice_id=$1 AND user_id=$2`,
-            [id,sub.user_id,`failed_${status || "provider"}`]
+            [id,sub.user_id,`failed_${status || "provider"}`,safeMessage]
           );
           console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,...failure});
         }
