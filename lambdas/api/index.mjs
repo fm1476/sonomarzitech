@@ -16,6 +16,7 @@ import { workflowApi } from "./workflows.mjs";
 import { staffNoticesApi } from "./staff-notices.mjs";
 import { auditLogApi } from "./audit.mjs";
 import { internalIdentityApi, tenantAdminDbApi } from "./tenant-admin.mjs";
+import { permitsApi } from "./permits.mjs";
 
 /*
  * ---------------------------------------------------------
@@ -64,7 +65,8 @@ export const handler = async event => {
       "/workflow",
       "/staff-notices",
       "/tenant-admin",
-      "/audit-log"
+      "/audit-log",
+      "/permits/geocode"
     ]);
 
     if (!allowedPaths.has(path)) {
@@ -87,7 +89,8 @@ export const handler = async event => {
         path === "/workflow" ||
         path === "/staff-notices" ||
         path === "/tenant-admin" ||
-        path === "/audit-log"
+        path === "/audit-log" ||
+        path === "/permits/geocode"
       ) &&
       method !== "POST"
     ) {
@@ -156,6 +159,10 @@ export const handler = async event => {
 
     if (path === "/tenant-admin") {
       return await tenantAdminDbApi(client, userAuth, body);
+    }
+
+    if (path === "/permits/geocode") {
+      return await permitsApi(client, userAuth, body);
     }
 
     return await applyChanges(client, userAuth, body);
