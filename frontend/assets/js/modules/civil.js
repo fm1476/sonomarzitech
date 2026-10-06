@@ -3835,7 +3835,7 @@ function pmCollectionCanPersist(collection,roles,roleIds){
   const has=ability=>roleIds.some(id=>roles.find(r=>r.id===id)?.abilities?.[ability]===true);
   const schedulingAbilities={
     scheduleWorkGroups:[],schedulingSettings:[],
-    scheduleShifts:['pm_schedule_manage'],scheduleAssignments:['pm_schedule_manage'],
+    scheduleShifts:['pm_schedule_manage'],scheduleAssignments:['pm_schedule_manage','pm_bidding_manage'],
     scheduleCoverages:['pm_schedule_manage','pm_overtime_manage','pm_leave_request_approve'],
     scheduleExceptions:['pm_schedule_manage','pm_leave_request_approve','pm_bidding_manage'],
     leaveRequests:['pm_leave_request_submit','pm_leave_request_approve'],

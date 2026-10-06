@@ -3204,7 +3204,7 @@ function renderBidCycleDetail(cycle, canManage){
     return `<tr><td>${recordLink(s.personId)}</td><td style="font-size:12px;">${escapeHtml(prefsText)}</td><td>${awardText}</td></tr>`;
   }).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No submissions yet.</td></tr>`;
 
-  const shiftSlotsSummary = cycle.type==='shift' ? Object.entries(cycle.shiftSlots||{}).map(([id,cap])=>{
+  const shiftSlotsSummary = cycle.type==='shift' ? `Effective: ${escapeHtml(cycle.effectiveDate || 'Set when awarding')}<br>` + Object.entries(cycle.shiftSlots||{}).map(([id,cap])=>{
     const shift = STATE.pm.scheduleShifts.find(s=>s.id===id);
     const taken = (cycle.awards||[]).filter(a=>a.shiftId===id).length;
     return `<span class="badge" style="margin:2px 4px 2px 0;">${escapeHtml(shift?shift.name:id)}: ${taken}/${cap} awarded</span>`;
@@ -3218,7 +3218,7 @@ function renderBidCycleDetail(cycle, canManage){
         <div style="display:flex;gap:8px;">
           ${canSubmit && windowOpen ? `<button class="btn btn-sm btn-primary" id="btnSubmitPicks">${mySubmission?'Update My Picks':'Submit My Picks'}</button>` : ''}
           ${canManage && cycle.status!=='awarded' ? `<button class="btn btn-sm btn-outline" id="btnRunAward">Run Seniority Award</button>` : ''}
-          ${canManage ? `<button class="btn btn-sm btn-danger" id="btnDeleteCycle">${ICONS.trash}</button>` : ''}
+          ${canManage && !(cycle.type==='shift'&&cycle.status==='awarded') ? `<button class="btn btn-sm btn-danger" id="btnDeleteCycle">${ICONS.trash}</button>` : ''}
         </div>
       </div>
       <div class="panel-body" style="font-size:12.5px;">${shiftSlotsSummary}</div>
@@ -3234,7 +3234,7 @@ function renderBidCycleDetail(cycle, canManage){
   const awardBtn = document.getElementById('btnRunAward');
   if(awardBtn) awardBtn.addEventListener('click', ()=>{
     if(!confirm(`Run the seniority award for "${cycle.name}"? This locks in results based on every submission received so far.`)) return;
-    runBidAward(cycle);
+    if(!runBidAward(cycle))return;
     logActivity(`Ran the seniority award for bid cycle "${cycle.name}".`, "schedule");
     persist();
     toast("Award complete.");
@@ -3267,6 +3267,7 @@ function openBidCycleFormModal(){
         <div class="form-row"><label>Closes</label><input type="date" id="fCycleCloses" value="${fmt(addDays(new Date(),14))}"></div>
       </div>
       <div id="fCycleShiftFields">
+        <div class="form-row"><label>Assignment Effective Date</label><input type="date" id="fCycleEffective" min="${fmt(new Date())}" value="${fmt(addDays(new Date(),15))}"></div>
         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Open shift slots</label>
         ${activeShifts.map(s=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;"><span style="flex:1;">${escapeHtml(s.name)}</span><input type="number" min="0" value="1" data-shift-cap="${s.id}" style="width:80px;"></div>`).join('') || '<p style="font-size:12px;color:var(--text-dim);">No current shift patterns to bid on.</p>'}
       </div>
@@ -3299,6 +3300,8 @@ function openBidCycleFormModal(){
     const type = typeSel.value;
     const cycle = {id:'bid'+Date.now(), workGroupId:groupSel.value, name, type, opensDate, closesDate, status:'open', createdAt:fmt(new Date()), submissions:[], awards:[]};
     if(type==='shift'){
+      cycle.effectiveDate=document.getElementById("fCycleEffective").value;
+      if(!cycle.effectiveDate||cycle.effectiveDate<fmt(new Date())){toast("Choose an effective date today or later.",true);return;}
       cycle.shiftSlots = {};
       document.querySelectorAll('[data-shift-cap]').forEach(inp=>{ const n=Number(inp.value)||0; if(!inp.disabled&&n>0) cycle.shiftSlots[inp.dataset.shiftCap]=n; });
       if(!Object.keys(cycle.shiftSlots).length){ toast("Open at least one shift slot.", true); return; }
@@ -3370,15 +3373,26 @@ function openBidSubmitModal(cycle, existing){
 function runBidAward(cycle){
   if(!canManageScheduleActivity(cycle,'bid','pm_bidding_manage')||cycle.status==='awarded')return;
   const bySeniority = (cycle.submissions||[]).slice().sort((a,b)=>seniorityDate(a.personId).localeCompare(seniorityDate(b.personId)));
-  cycle.awards = [];
   if(cycle.type==='shift'){
-    const remaining = {...(cycle.shiftSlots||{})};
-    bySeniority.forEach(sub=>{
-      const got = sub.prefs.find(id=>(remaining[id]||0)>0);
-      if(got){ remaining[got]--; cycle.awards.push({personId:sub.personId, shiftId:got}); }
-      else cycle.awards.push({personId:sub.personId, shiftId:null});
-    });
+    // Legacy cycles need an explicit date before their first automatic award.
+    if(!cycle.effectiveDate||cycle.effectiveDate<fmt(new Date())){
+      const date=prompt('Enter the assignment effective date (YYYY-MM-DD).',fmt(new Date()));
+      if(!date)return false;
+      cycle={...cycle,effectiveDate:date};
+    }
+    try {
+      const plan=planShiftBidAward(cycle,STATE.pm.records,STATE.pm.scheduleShifts,STATE.pm.scheduleAssignments,fmt(new Date()));
+      for(const row of plan.updates){
+        const shift=STATE.pm.scheduleShifts.find(s=>s.id===row.shiftId);
+        if(!shift||!canManageScheduleActivity({workGroupId:shift.workGroupId || 'wg_patrol'},'bid','pm_bidding_manage'))throw new Error('You must manage both the existing and awarded calendars to move an employee.');
+      }
+      const stored=STATE.pm.bidCycles.find(c=>c.id===cycle.id);
+      plan.updates.forEach(row=>{const i=STATE.pm.scheduleAssignments.findIndex(a=>a.id===row.id);if(i<0)STATE.pm.scheduleAssignments.push(row);else STATE.pm.scheduleAssignments[i]=row;});
+      Object.assign(stored,{effectiveDate:cycle.effectiveDate,awards:plan.awards,status:'awarded'});
+      return true;
+    } catch(error){toast(error.message,true);return false;}
   } else {
+    cycle.awards = [];
     const dailyUsed = {};
     bySeniority.forEach(sub=>{
       let awarded = null;
@@ -3404,6 +3418,7 @@ function runBidAward(cycle){
     });
   }
   cycle.status = 'awarded';
+  return true;
 }
 
 /* =========================================================================

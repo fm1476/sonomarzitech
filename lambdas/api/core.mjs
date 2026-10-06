@@ -1,4 +1,4 @@
-import { filterSchedulingRecords, schedulingSafeTemplate } from "./lib/scheduling-access.mjs";
+import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 import pg from "pg";
@@ -1686,11 +1686,14 @@ async function filterOfficerWorkspaceRecords(
       "pm_schedule_view"
     ) || roleHasAbility(abilityMap,workspaceAuth.roleIds,"pm_reports_view");
 
+  const canManageBids=roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_manage');
+  const bidSeniority=new Map(biddingSeniorityProjection(records,workspaceAuth.personId).map(row=>[row.key,row]));
   records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule, {
     overtime: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_overtime_view'),
     rollcall: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_rollcall_view'),
     leaveApprove: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_leave_request_approve'),
-    bidding: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_view'),
+    bidding: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_view') || canManageBids,
+    biddingManage: canManageBids,
     extraDuty: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_extraduty_view')
   });
 
@@ -1758,7 +1761,7 @@ async function filterOfficerWorkspaceRecords(
     }
 
     if (collection === "pm.scheduleAssignments") {
-      if (canViewSchedule) {
+      if (canViewSchedule || canManageBids) {
         visible.push(record);
       } else if (itemId === "$order" && Array.isArray(record.value)) {
         const ownIds = new Set(
@@ -1781,7 +1784,7 @@ async function filterOfficerWorkspaceRecords(
     }
 
     if (collection === "pm.scheduleShifts") {
-      if (canViewSchedule) {
+      if (canViewSchedule || canManageBids) {
         visible.push(record);
       } else if (itemId === "$order" && Array.isArray(record.value)) {
         visible.push({ ...record, value: record.value.filter(id => ownShiftIds.has(String(id))) });
@@ -2390,6 +2393,12 @@ async function filterOfficerWorkspaceRecords(
       ) {
         visible.push(record);
       }
+      continue;
+    }
+
+    if(collection==='pm.records' && roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_manage') && !roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view')) {
+      const projected=bidSeniority.get(record.key);
+      if(projected)visible.push(projected);
       continue;
     }
 

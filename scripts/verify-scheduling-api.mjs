@@ -54,3 +54,22 @@ assert.equal(result.status,403);assert(!database.get(key('pm.scheduleShifts','p'
 result=await act('admin',[],[change('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',name:'Administrator edit'})],true);
 assert.equal(result.status,200);assert.equal(database.get(key('pm.scheduleShifts','d')).value.name,'Administrator edit');
 console.log('Scheduling API pipeline, order preservation, transaction rollback, and serialized approval checks passed.');
+
+// Actual API save: bidding-only manager applies awards, closes history, preserves hidden order.
+const {planShiftBidAward}=await import('../lambdas/api/lib/shift-bid-planner.mjs');
+const bid={id:'bid',workGroupId:'patrol',type:'shift',status:'open',effectiveDate:'2099-01-01',shiftSlots:{p:1},submissions:[{personId:'officer',prefs:['p']}]};
+database.set(key('pm.bidCycles','bid'),record('pm.bidCycles',bid));
+const state=schedulingSnapshot([...database.values()]);
+const plan=planShiftBidAward(bid,[],state['pm.scheduleShifts'],state['pm.scheduleAssignments'],'2098-01-01');
+const award={...bid,status:'awarded',awards:plan.awards};
+const bidChanges=[change('pm.bidCycles',award),...plan.updates.map(a=>change('pm.scheduleAssignments',a)),{key:key('pm.scheduleAssignments','$order'),value:plan.updates.map(a=>a.id),deleted:false}];
+result=await act('scheduler',['pm_bidding_manage'],bidChanges.filter(c=>JSON.parse(c.key)[1]!=='newAssignment'));
+assert.equal(result.status,403);assert.equal(database.get(key('pm.bidCycles','bid')).value.status,'open');assert.equal(database.get(key('pm.scheduleAssignments','newAssignment')).value.endDate,undefined);
+result=await act('scheduler',['pm_bidding_manage'],bidChanges);
+assert.equal(result.status,200,JSON.stringify(result.body));
+assert.equal(database.get(key('pm.scheduleAssignments','newAssignment')).value.endDate,bid.effectiveDate);
+assert.equal(database.get(key('pm.scheduleAssignments',plan.awards[0].assignmentId)).value.bidCycleId,'bid');
+assert(database.get(key('pm.scheduleAssignments','$order')).value.includes('hiddenAssignment'));
+result=await act('scheduler',['pm_bidding_manage'],[change('pm.bidCycles',{...award,status:'open'})]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.bidCycles','bid')).value.status,'awarded');
+console.log('Bidding-only API award, linked order writes, history, and repeat rejection passed.');
