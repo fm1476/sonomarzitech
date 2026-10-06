@@ -5425,28 +5425,38 @@ async function getWorkspace(client, auth, event) {
     return workspaceAuth.error;
   }
 
-  const tenantResult = await client.query(
-    `SELECT id, slug, name, timezone, plan, status, enabled_modules, metadata
-       FROM suite_tenants WHERE id = $1 LIMIT 1`,
-    [tenantId]
-  );
-  const agencyResult = await client.query(
-    `SELECT id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain
-       FROM suite_agencies WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
-    [tenantId, agencyId]
-  );
+  // These workspace reads are independent. Run them together instead of
+  // paying four sequential database round trips during every sign-in.
+  const [tenantResult, agencyResult, recordsResult, templateResult] = await Promise.all([
+    client.query(
+      `SELECT id, slug, name, timezone, plan, status, enabled_modules, metadata
+         FROM suite_tenants WHERE id = $1 LIMIT 1`,
+      [tenantId]
+    ),
+    client.query(
+      `SELECT id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain
+         FROM suite_agencies WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+      [tenantId, agencyId]
+    ),
+    client.query(
+      `SELECT key, value, version, deleted, updated_at, updated_by
+         FROM suite_records
+        WHERE tenant_id = $1 AND agency_id = $2
+        ORDER BY key`,
+      [tenantId, agencyId]
+    ),
+    client.query(
+      `SELECT empty_state
+         FROM suite_templates
+        WHERE tenant_id = $1 AND agency_id = $2
+        LIMIT 1`,
+      [tenantId, agencyId]
+    )
+  ]);
 
   if (!tenantResult.rows.length || !agencyResult.rows.length) {
     return response(404, { success: false, error: "Workspace not found." });
   }
-
-  const recordsResult = await client.query(
-    `SELECT key, value, version, deleted, updated_at, updated_by
-       FROM suite_records
-      WHERE tenant_id = $1 AND agency_id = $2
-      ORDER BY key`,
-    [tenantId, agencyId]
-  );
 
   const workspaceRecords = workspaceAuth.admin
     ? recordsResult.rows
@@ -5455,14 +5465,6 @@ async function getWorkspace(client, auth, event) {
         workspaceAuth,
         recordsResult.rows
       );
-
-  const templateResult = await client.query(
-    `SELECT empty_state
-       FROM suite_templates
-      WHERE tenant_id = $1 AND agency_id = $2
-      LIMIT 1`,
-    [tenantId, agencyId]
-  );
 
   const personId = workspaceAuth.personId;
   const roleIds = [
