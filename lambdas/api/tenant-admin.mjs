@@ -531,7 +531,7 @@ async function tenantAdminDbApi(client, auth, body) {
       );
       await client.query(
         `INSERT INTO suite_agencies (id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain)
-         VALUES ($1,$2,$3,$4,$5,$6,'setup','{}'::jsonb,$7)`,
+         VALUES ($1,$2,$3,$4,$5,$6,'setup',jsonb_build_object('title','SonoMarzi PS Management Suite','subtitle','Choose a module to begin'),$7)`,
         [newAgencyId, newTenantId, agencyName, abbreviation, agencyType || 'Municipal Police', ori || null, subdomain]
       );
       const templateState = body?.templateState && typeof body.templateState === 'object' ? body.templateState : {};
@@ -601,7 +601,7 @@ async function tenantAdminDbApi(client, auth, body) {
     const agencyId = crypto.randomUUID();
     await client.query(
       `INSERT INTO suite_agencies (id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain)
-       VALUES ($1,$2,$3,$4,$5,$6,'setup','{}'::jsonb,$7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,'setup',jsonb_build_object('title','SonoMarzi PS Management Suite','subtitle','Choose a module to begin'),$7)`,
       [agencyId, tenantId, agencyName, abbreviation, agencyType || 'Municipal Police', ori || null, subdomain]
     );
     const templateState = body?.templateState && typeof body.templateState === 'object' ? body.templateState : {};
