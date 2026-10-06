@@ -1,3 +1,4 @@
+import { filterSchedulingRecords } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 import pg from "pg";
@@ -1684,6 +1685,8 @@ async function filterOfficerWorkspaceRecords(
       workspaceAuth.roleIds,
       "pm_schedule_view"
     );
+
+  records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule);
 
   const ownScheduleAssignments = records.filter(record => {
     try {
@@ -4302,6 +4305,9 @@ const PM_COLLECTION_RULES = {
     update: ["pm_rollcall_manage"],
     delete: ["pm_rollcall_manage"]
   },
+  "pm.scheduleWorkGroups": { read: ["pm_schedule_view"], create: [], update: [], delete: [] },
+  "pm.overtimeOpportunities": { read: ["pm_overtime_view", "pm_schedule_view"], create: [], update: [], delete: [] },
+  "pm.specialEvents": { read: ["pm_schedule_view"], create: [], update: [], delete: [] },
   "pm.scheduleAssignments": {
     read: ["pm_schedule_view"],
     create: ["pm_schedule_manage"],

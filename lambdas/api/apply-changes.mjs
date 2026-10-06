@@ -1,3 +1,4 @@
+import { schedulingSnapshot, scheduleWriteDecision, scopedScheduleCollections } from "./lib/scheduling-access.mjs";
 import {
   DEMO_TENANT_ID,
   DEMO_AGENCY_ID,
@@ -159,6 +160,14 @@ async function applyChanges(client, auth, body) {
   await client.query("BEGIN");
 
   try {
+    const needsScheduleScope = !workspaceAuth.admin && validated.some(c => scopedScheduleCollections.has(c.path.join('.')) || c.path.join('.') === 'pm.scheduleWorkGroups');
+    const scheduleRows = needsScheduleScope ? await client.query(
+      `SELECT key, value, deleted FROM suite_records
+       WHERE tenant_id = $1 AND agency_id = $2 AND deleted = false
+       AND (key::jsonb -> 0 ->> 0) IN ('pm','personnel')`,
+      [tenantId, agencyId]
+    ) : {rows:[]};
+    const scheduleState = schedulingSnapshot(scheduleRows.rows);
     const results = [];
 
     for (const change of validated) {
@@ -268,6 +277,19 @@ async function applyChanges(client, auth, body) {
             decision = permitsDecision;
           }
         }
+
+        const scheduleDecision = scheduleWriteDecision(
+          change.path.map(String).join('.'), change, existing.rows[0]?.deleted ? null : existing.rows[0]?.value,
+          scheduleState, workspaceAuth.personId,
+          ability => workspaceAuth.roleIds.some(id => abilityMap.get(id)?.[ability] === true), validated
+        );
+        if (scheduleDecision) decision = scheduleDecision;
+        if (scheduleDecision?.allowed && change.itemId === '$order') {
+          const removed = new Set(validated.filter(c => c.deleted && c.path.join('.') === change.path.join('.')).map(c => c.itemId));
+          const priorIds = Array.isArray(existing.rows[0]?.value) ? existing.rows[0].value : [];
+          change.value = [...priorIds.filter(id => !removed.has(id)), ...change.value.filter(id => !priorIds.includes(id))];
+        }
+
 
         if (!decision.allowed) {
           const denied = new Error(
