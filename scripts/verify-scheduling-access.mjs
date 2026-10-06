@@ -34,7 +34,7 @@ assert(!own.some(r=>r.value?.id==='dispatchOt'));
 const source=fs.readFileSync('frontend/assets/js/modules/personnel.js','utf8');
 const start=source.indexOf('function currentPerson()');
 const end=source.indexOf('function visibleScheduleWorkGroups()',start);
-const context={STATE:{personnel:snapshot.personnel,pm:{scheduleWorkGroups:snapshot['pm.scheduleWorkGroups']}},CURRENT_USER_ID:'officer',can:()=>false};
+const context={STATE:{personnel:snapshot.personnel,pm:{scheduleWorkGroups:snapshot['pm.scheduleWorkGroups']}},CURRENT_USER_ID:'officer',currentRole:()=>({id:'role_officer'}),can:()=>false};
 vm.createContext(context);vm.runInContext(source.slice(start,end),context);
 assert.equal(context.canViewWorkGroup(patrol),true);
 assert.equal(context.canViewWorkGroup(dispatch),false);
@@ -213,3 +213,22 @@ console.log('Legacy calendar initialization and template data isolation checks p
 const {recordGroupIds}=await import('../lambdas/api/lib/scheduling-access.mjs');
 assert.deepEqual(recordGroupIds('pm.scheduleShifts',{id:'legacy'}, {'pm.scheduleWorkGroups':[{id:'wg_dispatch'},{id:'wg_patrol'}]}),['wg_patrol']);
 console.log('Legacy shift fallback does not depend on calendar ordering.');
+
+// Use the real role merger rather than invented administrative ability names.
+const roleSource=fs.readFileSync('frontend/assets/js/modules/shared.js','utf8');
+const roleStart=roleSource.indexOf('function currentRole()');
+const roleEnd=roleSource.indexOf('/* A single role id',roleStart);
+const adminContext={STATE:{roles:[{id:'role_admin',abilities:{pm_schedule_manage:true}},{id:'role_platform_admin',abilities:{pm_schedule_manage:true}},{id:'role_officer',abilities:{}}],currentRoleIds:['role_admin'],personnel:[{id:'admin',unit:'Logistics',roleIds:['role_admin','role_platform_admin']}],pm:{scheduleWorkGroups:[patrol,dispatch]}},CURRENT_USER_ID:'admin',HOME_ROLE_IDS:['role_admin','role_platform_admin'],SuiteStore:{mode:()=> 'shared'},ALL_ABILITY_IDS:['pm_schedule_manage'],can:()=>false};
+vm.createContext(adminContext);vm.runInContext(roleSource.slice(roleStart,roleEnd),adminContext);vm.runInContext(source.slice(start,end),adminContext);
+for(const ids of [['role_admin'],['role_platform_admin'],['role_admin','role_platform_admin']]){
+  adminContext.STATE.currentRoleIds=ids;
+  assert.equal(adminContext.isGlobalScheduleAdmin(),true);
+  assert.equal(adminContext.canViewWorkGroup(dispatch),true);
+  assert.equal(adminContext.canManageScheduleShift({id:'d',workGroupId:'dispatch'}),true);
+  assert.equal(adminContext.manageableScheduleWorkGroups().length,2);
+}
+adminContext.STATE.currentRoleIds=['role_officer'];
+assert.equal(adminContext.isGlobalScheduleAdmin(),false);
+assert.equal(adminContext.canViewWorkGroup(dispatch),false);
+assert.equal(adminContext.canManageScheduleShift({id:'d',workGroupId:'dispatch'}),false);
+console.log('Real System Admin, Platform Admin, combined roles, old calendar visibility, and restricted View As regression checks passed.');
