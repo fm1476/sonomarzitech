@@ -2490,7 +2490,7 @@ function renderComplianceSub(body){
 /* =========================================================================
    SCHEDULING & DUTY ROSTER
    ========================================================================= */
-let SCHED_VIEW = 'roster';
+let SCHED_VIEW = 'calendar';
 let SCHED_CAL_YEAR = new Date().getFullYear(), SCHED_CAL_MONTH = new Date().getMonth();
 let SCHED_CAL_SHIFT = 'all';
 let SHOW_PAST_SHIFT_PATTERNS = false;
@@ -2770,6 +2770,7 @@ function renderRosterSub(){
             <button class="work-tab ${SCHED_VIEW==='calendar'?'active':''}" aria-pressed="${SCHED_VIEW==='calendar'}" data-sched-view="calendar">Calendar</button>
           </div>
           ${canManage?`<button class="btn btn-sm btn-outline" id="btnAddAssignment">${ICONS.plus} Assign Shift</button>`:''}
+          ${can('staff_notify_send')?`<button class="btn btn-sm btn-outline" id="btnRosterStaffNotice">${ICONS.chat||''} Send Staff Notice</button>`:''}
           <button class="btn btn-sm btn-outline" id="btnPrintRoster">Print / Save as PDF</button>
         `)}
       <div data-panel-body="dutyRoster" style="${schedCardCollapsed('dutyRoster')?'display:none;':''}">
@@ -2809,6 +2810,10 @@ function renderRosterSub(){
   `;
   wireCollapsibleCards(document.getElementById('schedSubBody'));
   document.getElementById('btnPrintRoster').addEventListener('click', ()=>window.print());
+  document.getElementById('btnRosterStaffNotice')?.addEventListener('click', ()=>{
+    sessionStorage.setItem('sonomarzi.staffNotice.return','personnel/scheduling');
+    SuiteUX.navigate('shared/notices');
+  });
   document.getElementById('btnRequestSwap').addEventListener('click', ()=>openSwapRequestModal());
   document.querySelectorAll('[data-sched-view]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_VIEW=b.dataset.schedView; renderScheduling(); }));
   const rosterBody = document.getElementById('dutyRosterBody');
