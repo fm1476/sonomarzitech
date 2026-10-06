@@ -104,6 +104,11 @@
     const wsRes=await fetch(workspaceUrl,{headers});
     const ws=await wsRes.json().catch(()=>({}));
     perfEnd('workspace');
+    if(ws?.performance&&typeof ws.performance==='object'){
+      for(const [name,ms] of Object.entries(ws.performance)){
+        if(typeof ms==='number') LOGIN_PERF[`server.${name}`]={start:null,ms};
+      }
+    }
     if(!wsRes.ok||!ws?.success) throw Error(ws?.error||`Unable to load SonoMarzi workspace (${wsRes.status}).`);
     const authUser='user';
     if(!(await enforceWorkspaceMfa(ws,authUser))) return false;
