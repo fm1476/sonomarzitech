@@ -4,9 +4,21 @@ import {
   loadRoleAbilityMap,
   roleHasAbility
 } from "./core.mjs";
+import webpush from "web-push";
 
 function staffNoticeId() {
   return `notice_${crypto.randomUUID()}`;
+}
+
+const PUSH_VAPID_PUBLIC_KEY = String(process.env.PUSH_VAPID_PUBLIC_KEY || "").trim();
+const PUSH_VAPID_PRIVATE_KEY = String(process.env.PUSH_VAPID_PRIVATE_KEY || "").trim();
+const PUSH_VAPID_SUBJECT = String(process.env.PUSH_VAPID_SUBJECT || "mailto:support@sonomarzi.com").trim();
+
+if (PUSH_VAPID_PUBLIC_KEY && PUSH_VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(PUSH_VAPID_SUBJECT, PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY);
+}
+function pushConfigured() {
+  return Boolean(PUSH_VAPID_PUBLIC_KEY && PUSH_VAPID_PRIVATE_KEY);
 }
 
 /*
@@ -53,6 +65,27 @@ async function ensureStaffNoticeTables(client) {
   await client.query(`
     CREATE INDEX IF NOT EXISTS suite_staff_notice_workspace_idx
       ON suite_staff_notices(tenant_id, agency_id, created_at DESC)
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS suite_push_subscriptions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id uuid NOT NULL,
+      agency_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      endpoint text NOT NULL,
+      p256dh text NOT NULL,
+      auth text NOT NULL,
+      user_agent text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (tenant_id, agency_id, user_id, endpoint)
+    )
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS suite_push_subscription_user_idx
+      ON suite_push_subscriptions(tenant_id, agency_id, user_id)
   `);
 
   await client.query(`
@@ -121,6 +154,53 @@ async function staffNoticesApi(client, auth, body) {
   if (ctx.error) return ctx.error;
 
   await ensureStaffNoticeTables(client);
+
+  if (action === "push_config") {
+    return response(200, {
+      success: true,
+      data: { enabled: pushConfigured(), publicKey: pushConfigured() ? PUSH_VAPID_PUBLIC_KEY : null }
+    });
+  }
+
+  if (action === "push_status") {
+    const endpoint = String(payload.endpoint || "").trim();
+    if (!endpoint) return response(200,{success:true,data:{enabled:false}});
+    const q = await client.query(
+      `SELECT 1 FROM suite_push_subscriptions
+        WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4 LIMIT 1`,
+      [tenantId, agencyId, auth.userId, endpoint]
+    );
+    return response(200,{success:true,data:{enabled:q.rows.length===1}});
+  }
+
+  if (action === "push_subscribe") {
+    if (!pushConfigured()) return response(503,{success:false,error:"Device push is not configured."});
+    const endpoint=String(payload.endpoint||"").trim();
+    const p256dh=String(payload.keys?.p256dh||"").trim();
+    const authKey=String(payload.keys?.auth||"").trim();
+    if (!endpoint.startsWith("https://") || !p256dh || !authKey || endpoint.length>4096 || p256dh.length>512 || authKey.length>512) {
+      return response(400,{success:false,error:"Invalid push subscription."});
+    }
+    await client.query(
+      `INSERT INTO suite_push_subscriptions
+        (tenant_id,agency_id,user_id,endpoint,p256dh,auth,user_agent,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+       ON CONFLICT (tenant_id,agency_id,user_id,endpoint)
+       DO UPDATE SET p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,user_agent=EXCLUDED.user_agent,updated_at=now()`,
+      [tenantId,agencyId,auth.userId,endpoint,p256dh,authKey,String(payload.userAgent||"").slice(0,500)]
+    );
+    return response(200,{success:true,data:{enabled:true}});
+  }
+
+  if (action === "push_unsubscribe") {
+    const endpoint=String(payload.endpoint||"").trim();
+    if(endpoint) await client.query(
+      `DELETE FROM suite_push_subscriptions
+        WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,
+      [tenantId,agencyId,auth.userId,endpoint]
+    );
+    return response(200,{success:true,data:{enabled:false}});
+  }
 
   if (action === "notification_reads_list") {
     const q = await client.query(
@@ -401,12 +481,45 @@ async function staffNoticesApi(client, auth, body) {
       throw error;
     }
 
+    let pushed = 0;
+    if (pushConfigured()) {
+      const userIds = resolved.map(member => member.user_id);
+      const subscriptions = await client.query(
+        `SELECT id,user_id,endpoint,p256dh,auth
+           FROM suite_push_subscriptions
+          WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
+        [tenantId, agencyId, userIds]
+      );
+      for (const sub of subscriptions.rows) {
+        try {
+          await webpush.sendNotification(
+            {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
+            JSON.stringify({title:"New Staff Notice",body:"Open SonoMarzi to view.",url:"/#/shared/notices"}),
+            {TTL:300,urgency:"normal"}
+          );
+          pushed++;
+          await client.query(
+            `UPDATE suite_staff_notice_recipients SET push_status='submitted'
+              WHERE notice_id=$1 AND user_id=$2`,
+            [id,sub.user_id]
+          );
+        } catch (error) {
+          const status=Number(error?.statusCode||0);
+          if(status===404||status===410) {
+            await client.query(`DELETE FROM suite_push_subscriptions WHERE id=$1`,[sub.id]);
+          }
+          console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status});
+        }
+      }
+    }
+
     return response(200, {
       success: true,
       data: {
         id,
         recipients: resolved.length,
-        unmatched: unresolved
+        unmatched: unresolved,
+        pushed
       }
     });
   }
