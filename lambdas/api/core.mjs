@@ -3709,7 +3709,26 @@ async function authorizePermitsChange(
       };
     }
 
-    if (has("permits_edit")) {
+    if (
+      has("permits_edit") &&
+      onlyFieldsChanged(
+        beforeValue,
+        afterValue,
+        [
+          "permitTypeId",
+          "applicationType",
+          "applicantId",
+          "locationId",
+          "submittedOn",
+          "notes",
+          "requirements",
+          "documents",
+          "correspondence",
+          "fieldValues",
+          "weapons"
+        ]
+      )
+    ) {
       return { allowed:true };
     }
 
