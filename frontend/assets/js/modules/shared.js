@@ -3513,3 +3513,59 @@ function renderPlatformAuditLogTab(body){
   });
 }
 
+
+
+/* Suite-wide record-row navigation.
+   Tables that use a single dedicated Open/View button are promoted to a clickable,
+   keyboard-accessible row. Real action buttons remain independent controls. */
+(function initClickableRecordRows(){
+  const interactive='button,a,input,select,textarea,label,[role="button"]';
+
+  function promote(root=document){
+    const scope=root?.querySelectorAll?root:document;
+    scope.querySelectorAll('tr').forEach(row=>{
+      if(row.dataset.rowOpenReady==='1')return;
+      const buttons=[...row.querySelectorAll('button')];
+      const openButtons=buttons.filter(b=>/^(open|view)$/i.test((b.textContent||'').trim()));
+      if(openButtons.length!==1||buttons.length!==1)return;
+
+      const opener=openButtons[0];
+      const cell=opener.closest('td');
+      if(!cell)return;
+
+      row.dataset.rowOpenReady='1';
+      row.classList.add('suite-clickable-row');
+      row.tabIndex=0;
+      row.setAttribute('role','link');
+      row.setAttribute('aria-label','Open record');
+      cell.classList.add('suite-row-open-cell');
+
+      row.addEventListener('click',event=>{
+        if(event.target.closest(interactive))return;
+        opener.click();
+      });
+      row.addEventListener('keydown',event=>{
+        if(event.target!==row)return;
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();
+          opener.click();
+        }
+      });
+    });
+  }
+
+  function start(){
+    promote(document);
+    const observer=new MutationObserver(records=>{
+      for(const record of records){
+        for(const node of record.addedNodes){
+          if(node.nodeType===1)promote(node);
+        }
+      }
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})();
