@@ -534,15 +534,6 @@ async function staffNoticesApi(client, auth, body) {
     }
 
     let pushed = 0;
-    const pushDiagnostics = {
-      configured: pushConfigured(),
-      subscriptions: 0,
-      attempted: 0,
-      accepted: 0,
-      failures: []
-    };
-    // Persist a sanitized provider diagnostic with the recipient row during push debugging.
-    // Never store endpoints, subscription keys, VAPID keys, payload bodies, or stack traces.
     await client.query(`ALTER TABLE suite_staff_notice_recipients ADD COLUMN IF NOT EXISTS push_error text`);
     if (pushConfigured()) {
       const userIds = resolved.map(member => member.user_id);
@@ -552,7 +543,6 @@ async function staffNoticesApi(client, auth, body) {
           WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
         [tenantId, agencyId, userIds]
       );
-      pushDiagnostics.subscriptions = subscriptions.rows.length;
       if (!subscriptions.rows.length) {
         await client.query(
           `UPDATE suite_staff_notice_recipients
@@ -561,19 +551,11 @@ async function staffNoticesApi(client, auth, body) {
           [id,userIds]
         );
       }
-      console.warn("Staff notice push diagnostics",{
-        noticeId:id,
-        recipientCount:resolved.length,
-        subscriptionCount:subscriptions.rows.length,
-        pushConfigured:true
-      });
       // Staff Notice creation must never wait on an external push provider. The durable
       // in-app notice is already committed above; push is a best-effort delivery channel.
       // Bound each provider request so a slow APNs/FCM/WebPush endpoint cannot consume the
       // Lambda/API request timeout.
       for (const sub of subscriptions.rows) {
-        pushDiagnostics.attempted++;
-        console.warn("Staff notice push attempt",{noticeId:id,userId:sub.user_id});
         try {
           await webpush.sendNotification(
             {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
@@ -581,8 +563,6 @@ async function staffNoticesApi(client, auth, body) {
             {TTL:300,urgency:"normal",timeout:10000}
           );
           pushed++;
-          pushDiagnostics.accepted++;
-          console.warn("Staff notice push accepted",{noticeId:id,userId:sub.user_id});
           await client.query(
             `UPDATE suite_staff_notice_recipients SET push_status='submitted', push_error=NULL
               WHERE notice_id=$1 AND user_id=$2`,
@@ -598,7 +578,6 @@ async function staffNoticesApi(client, auth, body) {
             .replace(/[A-Za-z0-9_-]{80,}/g, "[redacted]")
             .slice(0,500);
           const failure = {status,message:safeMessage};
-          pushDiagnostics.failures.push(failure);
           await client.query(
             `UPDATE suite_staff_notice_recipients
                 SET push_status=$3, push_error=$4
@@ -617,12 +596,6 @@ async function staffNoticesApi(client, auth, body) {
           WHERE notice_id=$1`,
         [id]
       );
-      console.warn("Staff notice push diagnostics",{
-        noticeId:id,
-        recipientCount:resolved.length,
-        subscriptionCount:0,
-        pushConfigured:false
-      });
     }
 
     return response(200, {
@@ -631,8 +604,7 @@ async function staffNoticesApi(client, auth, body) {
         id,
         recipients: resolved.length,
         unmatched: unresolved,
-        pushed,
-        pushDiagnostics
+        pushed
       }
     });
   }
