@@ -70,3 +70,22 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .nav-mod-icon{display:inline-flex;width:16px;height:16px;flex-shrink:0}
 .nav-mod-icon svg{width:16px;height:16px}
 #sidebar.sidebar-collapsed .nav-divider{display:none}
+
+.calendar-export{margin-bottom:16px}.calendar-export-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.mobile-calendar-controls,.mobile-day-details,.mobile-day-indicators{display:none}
+@media(max-width:640px){
+ .mobile-calendar-controls{display:flex;gap:8px;margin-bottom:10px}
+ .cal-grid-head{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))}
+ .cal-grid.mobile-month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;min-width:0!important}
+ .mobile-month .cal-cell{display:flex;flex-direction:column;align-items:stretch;min-height:64px;padding:3px;gap:3px;overflow:hidden}
+ .mobile-month .cal-cell-empty{display:block}
+ .mobile-month .cal-daynum{min-width:0;flex:none;font-size:13px;min-height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+ .mobile-month .cal-daynum:before{content:none!important}
+ .mobile-month:not(.mobile-agenda) .cal-cell>*:not(.cal-daynum):not(.mobile-day-indicators){display:none!important}
+ .mobile-month .mobile-day-indicators{display:flex;justify-content:center;align-items:center;gap:3px;flex:none!important}
+ .mobile-day-indicators span{width:5px;height:5px;border-radius:50%}.mobile-day-indicators small{font-size:9px}
+ .mobile-selected{outline:2px solid var(--blue);outline-offset:-2px}
+ .mobile-day-details{display:block;margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:8px}
+ .mobile-day-details[hidden]{display:none}.mobile-day-details h3{margin:0 0 10px}.mobile-day-details .cal-event{display:block;white-space:normal;margin:6px 0;min-height:44px!important}
+ .cal-grid.mobile-agenda{grid-template-columns:1fr}.mobile-agenda .cal-cell-empty{display:none}.mobile-agenda .cal-cell{min-height:0;padding:10px}.mobile-agenda .mobile-day-indicators{display:none}
+}

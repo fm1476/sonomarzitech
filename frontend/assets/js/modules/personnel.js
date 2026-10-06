@@ -2173,6 +2173,7 @@ function openSessionDetailModal(sessionId){
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
   `;
+  SuiteCalendarExports.attach(s,course,instructor);
   openModal();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
