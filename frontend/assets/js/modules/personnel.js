@@ -2707,9 +2707,9 @@ function renderRosterSub(){
     ${canManage?`<td><div class="cell-actions">${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">${SHOW_PAST_SHIFT_PATTERNS ? 'No shift patterns defined yet.' : 'No current or upcoming shift patterns. '+(pastCount?'<button class="btn-sm btn btn-outline" id="btnShowPastShiftsInline">Show past patterns</button>':'')}</td></tr>`;
 
-  const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate && STATE.pm.scheduleShifts.some(s=>s.id===a.shiftId && s.published!==false)).map(a=>{
+  const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate).map(a=>{
     const shift = STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId);
-    return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name):'—'}</td>
+    return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name)+(shift.published===false?' <span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);">Draft</span>':''):'—'}</td>
     <td>${shift?SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd):''}</td><td>${escapeHtml(a.location)}</td>
     ${canManage?`<td><div class="cell-actions"><button class="btn-icon" data-edit-assign="${a.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-assign="${a.id}" title="End assignment">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No active shift assignments.</td></tr>`;
@@ -3886,6 +3886,8 @@ function openOneOffCoverageModal(){
     const duplicate=(STATE.pm.scheduleCoverages||[]).some(x=>x.personId===personId&&x.shiftId===shiftId&&x.date===date);
     if(duplicate){toast("That person is already added to this shift on this date.",true);return;}
     const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftId);
+    if(onDutyRoster(shift,date).includes(personId)){toast("That person is already scheduled to work this shift on this date.",true);return;}
+    if(activeExceptionFor(personId,date)){toast("That person has time off or another schedule exception on this date. Adjust the exception before adding one-off staffing.",true);return;}
     STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId,shiftId,date,source,hours:shiftHours(shift),notes,createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});
     logActivity(`Added ${personName(personId)} to ${shift?.name||'a shift'} on ${date} as one-off ${source} coverage.`, 'schedule');
     persist(); closeModal(); toast("Person added to the Duty Roster."); renderScheduling();
@@ -4029,14 +4031,13 @@ function approveSwapRequest(id){
   if(!confirm(`Approve this swap? ${personName(req.coveringId)} will cover for ${personName(req.requesterId)} on ${req.date}.`)) return;
   if(!STATE.pm.scheduleExceptions) STATE.pm.scheduleExceptions = [];
   if(!STATE.pm.scheduleCoverages) STATE.pm.scheduleCoverages = [];
+  // Resolve the requester's actual assignment before changing anything. A stale request must
+  // never become "approved" without putting the covering employee onto the roster.
+  const requesterAssignment = STATE.pm.scheduleAssignments.find(a=>a.personId===req.requesterId && isOnDutyOnDate(a, STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId), req.date));
+  if(!requesterAssignment){toast("This swap can no longer be approved because the requester's scheduled assignment for that date was not found. Review the schedule and submit a new swap if needed.",true);return;}
   // Mark the requester off that day, same mechanism as any other logged exception.
   STATE.pm.scheduleExceptions.push({id:'exc'+Date.now(), personId:req.requesterId, code:'SWP', startDate:req.date, endDate:req.date, notes:`Covered by ${personName(req.coveringId)}`, swapRequestId:req.id});
-  // Whatever shift/unit/location the requester would have worked, attribute a one-off coverage
-  // to the covering officer for that single date, even if it isn't part of their own rotation.
-  const requesterAssignment = STATE.pm.scheduleAssignments.find(a=>a.personId===req.requesterId && isOnDutyOnDate(a, STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId), req.date));
-  if(requesterAssignment){
-    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId:req.coveringId, shiftId:requesterAssignment.shiftId, unit:requesterAssignment.unit, location:requesterAssignment.location, date:req.date, swapRequestId:req.id});
-  }
+  STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId:req.coveringId, shiftId:requesterAssignment.shiftId, unit:requesterAssignment.unit, location:requesterAssignment.location, date:req.date, swapRequestId:req.id});
   req.status = 'approved';
   req.decidedAt = fmt(new Date());
   req.decidedBy = CURRENT_USER_ID;
