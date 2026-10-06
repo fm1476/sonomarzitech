@@ -20,7 +20,7 @@ Officers can view eligible overtime and Special Events without full department-w
 
 Named managers can modify only the calendars assigned to them. Changes affecting several groups require management of every affected group. Leave decisions follow the employee's assignment group for the requested dates. Swap decisions consider both employees' groups. Roll call follows the shift's group. Callback list edits consider each affected employee's group. Agency-wide scheduling settings and calendar access configuration are restricted to agency/platform administrators.
 
-Shift bidding continues to record seniority award results; assigning awarded shift patterns remains a roster action. Vacation awards create schedule exceptions.
+Shift bids now apply seniority awards directly to the roster on an explicit effective date. Prior assignments end on that date (exclusive), preserving history. Future assignments must be resolved before awarding; unmatched preferences leave the employee unchanged. Award results and all roster changes save atomically. Named bidding managers can apply these linked changes without general roster editing rights. They receive only employee seniority fields when they lack HR record access. Existing cycles ask for an effective date when first awarded. Vacation awards create schedule exceptions.
 
 Special-event awards check the full event date range, with a maximum event span of one year. Regular-duty reassignment uses a schedule exception; conflicting coverage or another awarded event must be resolved separately. Extra-duty conflict and fatigue warnings remain advisory, while job capacity is enforced.
 
@@ -47,5 +47,6 @@ Use actual separate accounts. Administrator **View As** is a UI preview and does
 - As an Officer, request overtime and a special event, submit/cancel leave and swaps, update bid preferences, and sign up for extra duty. Reload after each saved operation.
 - Approve leave, swaps, overtime, and extra duty with the appropriate manager; verify roster changes and persisted statuses.
 - In two sessions, try approving the final extra-duty slot or awarding conflicting overtime. Confirm the later operation fails without partial changes.
+- Award a shift cycle with a future effective date. Reload, verify the winner's new assignment and the prior assignment's exclusive end date, and confirm an unmatched employee remains unchanged. Repeat with a bidding manager lacking general roster editing and HR access.
 - Verify multi-day event reassignment, roll call, custom reports, and CSV exports with each account.
 - Confirm affected staff receive the configured notices. No live AWS, browser, PostgreSQL concurrency, or push-delivery test was performed in the development workspace.

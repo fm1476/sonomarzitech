@@ -1,3 +1,4 @@
+import {planShiftBidAward} from './shift-bid-planner.mjs';
 // Calendar membership is independent of role-wide scheduling abilities.
 export function schedulingSnapshot(records) {
   const result = {};
@@ -11,6 +12,24 @@ export function schedulingSnapshot(records) {
     (result[collection] ||= []).push(...values.filter(v => v && typeof v === 'object'));
   }
   return result;
+}
+// A bidding manager needs seniority, not the rest of an employee's HR record.
+export function biddingSeniorityProjection(records,personId) {
+  const snapshot=schedulingSnapshot(records);
+  const groups=(snapshot['pm.scheduleWorkGroups'] || []).filter(g=>managesGroup(g,personId));
+  const participants=new Set((snapshot['pm.bidCycles'] || []).filter(c=>groups.some(g=>g.id===c.workGroupId)).flatMap(c=>(c.submissions || []).map(sub=>sub.personId)));
+  const eligible=id=>participants.has(id) || personGroupIds(id,{},snapshot).some(id=>groups.some(g=>g.id===id));
+  const limited=v=>({id:v.id,personId:v.personId,hireDate:v.hireDate || ''});
+  const output=[];
+  for(const record of records) {
+    let path,itemId;
+    try {[path,itemId]=JSON.parse(record.key);}catch{continue;}
+    if(path.join('.')!=='pm.records'||record.deleted)continue;
+    if(itemId==='$order')continue;
+    if(itemId==='$value'&&Array.isArray(record.value))output.push({...record,value:record.value.filter(v=>eligible(v.personId)).map(limited)});
+    else if(record.value&&eligible(record.value.personId))output.push({...record,value:limited(record.value)});
+  }
+  return output;
 }
 const normalize = value => String(value || '').trim().toLowerCase();
 export function viewsGroup(group, person, personId) {
@@ -85,19 +104,32 @@ export function scheduleWriteDecision(collection, change, before, snapshot, pers
       const candidate = batch.find(c => c.path.join('.') === collection && c.itemId === id);
       if (!candidate) return false;
       const prior = (snapshot[collection] || []).find(v => v.id === id);
-      return scheduleWriteDecision(collection,candidate,prior,snapshot,personId,hasAbility,[]).allowed;
+      return scheduleWriteDecision(collection,candidate,prior,snapshot,personId,hasAbility,batch).allowed;
     });
     return {allowed:allowed && (touchedIds.size > 0 || groups.some(g => managesGroup(g,personId)))};
   }
   if (change.itemId === '$value' && Array.isArray(before) && before.length === 0 && change.deleted) {
     const candidates=batch.filter(c=>c.path.join('.')===collection && !c.deleted && !c.itemId.startsWith('$'));
-    return {allowed:candidates.length>0 && candidates.every(c=>scheduleWriteDecision(collection,c,null,snapshot,personId,hasAbility).allowed)};
+    return {allowed:candidates.length>0 && candidates.every(c=>scheduleWriteDecision(collection,c,null,snapshot,personId,hasAbility,batch).allowed)};
   }
   const manages = value => {
     const ids = recordGroupIds(collection, value, snapshot);
     // An event with no scope is agency-wide and must be managed by an administrator.
     return ids.length > 0 && ids.every(id => managesGroup(groups.find(g => g.id === id), personId));
   };
+  if(collection==='pm.scheduleAssignments' && hasAbility('pm_bidding_manage') && !change.deleted && (!before || manages(before)) && manages(change.value)) {
+    const allowed=batch.some(c=>{
+      if(c.path.join('.')!=='pm.bidCycles'||c.deleted||c.itemId.startsWith('$')||c.value?.type!=='shift'||c.value.status!=='awarded')return false;
+      const previous=(snapshot['pm.bidCycles'] || []).find(v=>v.id===c.itemId);
+      const scope=recordGroupIds('pm.bidCycles',c.value,snapshot);
+      if(!previous||previous.status!=='open'||!scope.length||!scope.every(id=>managesGroup(groups.find(g=>g.id===id),personId)))return false;
+      try {
+        const plan=planShiftBidAward({...previous,effectiveDate:c.value.effectiveDate},snapshot['pm.records'] || [],snapshot['pm.scheduleShifts'] || [],snapshot['pm.scheduleAssignments'] || [],new Date().toISOString().slice(0,10));
+        return plan.updates.some(row=>row.id===change.itemId && sameExcept(row,change.value,[]));
+      } catch { return false; }
+    });
+    if(allowed)return {allowed:true};
+  }
   const managerAbilities = {
     'pm.scheduleCoverages':['pm_schedule_manage','pm_overtime_manage','pm_leave_request_approve'],
     'pm.overtimeOpportunities':['pm_schedule_manage','pm_overtime_manage'],
@@ -189,6 +221,7 @@ export function filterSchedulingRecords(records, personId, canViewSchedule, abil
   const allowed = (collection, value) => {
     if (collection === 'pm.scheduleWorkGroups') return viewsGroup(value, person, personId);
     if (collection === 'pm.scheduleAssignments' && value.personId === personId) return true;
+    if(['pm.scheduleAssignments','pm.scheduleShifts'].includes(collection) && abilities.biddingManage && recordGroupIds(collection,value,snapshot).some(id=>managesGroup(groups.find(g=>g.id===id),personId)))return true;
     if (collection === 'pm.scheduleShifts' && ownShiftIds.has(value.id)) return true;
     if (collection === 'pm.scheduleCoverages' && value.personId === personId) return true;
     if (['pm.leaveRequests','pm.scheduleExceptions'].includes(collection) && value.personId===personId) return true;
@@ -254,7 +287,28 @@ export function validateSchedulingBatch(snapshot,changes) {
   const uniquePeople=rows=>new Set(rows.map(r=>r.personId)).size===rows.length;
   for(const change of changes) {
     const collection=change.path.join('.'),value=change.value;
+    if(collection==='pm.bidCycles' && !change.itemId.startsWith('$')) {
+      const previous=(snapshot[collection] || []).find(c=>c.id===change.itemId);
+      if(previous?.type==='shift' && previous.status==='awarded' && (change.deleted || !sameExcept(previous,value,[])))fail('Awarded shift cycles cannot be changed or deleted.');
+    }
     if(change.deleted||change.itemId.startsWith('$'))continue;
+    if(collection==='pm.bidCycles' && value.type==='shift' && value.status==='awarded') {
+      const previous=(snapshot[collection] || []).find(c=>c.id===value.id);
+      if(!previous)fail('Save the bid cycle before awarding it.');
+      if(previous.status==='awarded') {
+        if(!sameExcept(previous,value,[]))fail('Awarded shift cycles cannot be changed.');
+      } else {
+        if(!sameExcept(previous,value,['effectiveDate','awards','status']))fail('Save cycle changes before awarding.');
+        let plan;
+        try { plan=planShiftBidAward({...previous,effectiveDate:value.effectiveDate},snapshot['pm.records'] || [],snapshot['pm.scheduleShifts'] || [],snapshot['pm.scheduleAssignments'] || [],new Date().toISOString().slice(0,10)); }
+        catch(error){fail(error.message);}
+        if(JSON.stringify(plan.awards)!==JSON.stringify(value.awards))fail('Shift awards must follow persisted seniority and slot capacity. Reload before awarding.');
+        for(const row of plan.updates) {
+          const saved=(final['pm.scheduleAssignments'] || []).find(a=>a.id===row.id);
+          if(!saved || !sameExcept(row,saved,[]))fail('A shift award requires all matching roster updates in the same save.');
+        }
+      }
+    }
     if(collection==='pm.extraDutyJobs'||collection==='pm.extraDutySignups') {
       const job=collection==='pm.extraDutyJobs'?value:(final['pm.extraDutyJobs'] || []).find(j=>j.id===value.jobId);
       if(!job)fail('The extra-duty job no longer exists.');
