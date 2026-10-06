@@ -3428,6 +3428,7 @@ function renderPlatformAuditLogTab(body){
               <option ${f.module==='Subpoena'?'selected':''}>Subpoena</option>
               <option ${f.module==='Grants'?'selected':''}>Grants</option>
               <option ${f.module==='Civil'?'selected':''}>Civil</option>
+              <option ${f.module==='Licensing & Permits'?'selected':''}>Licensing &amp; Permits</option>
               <option ${f.module==='Shared'?'selected':''}>Shared</option>
             </select>
           </div>
