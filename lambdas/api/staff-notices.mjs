@@ -533,11 +533,18 @@ async function staffNoticesApi(client, auth, body) {
           WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
         [tenantId, agencyId, userIds]
       );
+      console.info("Staff notice push diagnostics",{
+        noticeId:id,
+        recipientCount:resolved.length,
+        subscriptionCount:subscriptions.rows.length,
+        pushConfigured:true
+      });
       // Staff Notice creation must never wait on an external push provider. The durable
       // in-app notice is already committed above; push is a best-effort delivery channel.
       // Bound each provider request so a slow APNs/FCM/WebPush endpoint cannot consume the
       // Lambda/API request timeout.
       for (const sub of subscriptions.rows) {
+        console.info("Staff notice push attempt",{noticeId:id,userId:sub.user_id});
         try {
           await webpush.sendNotification(
             {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
@@ -545,6 +552,7 @@ async function staffNoticesApi(client, auth, body) {
             {TTL:300,urgency:"normal",timeout:2500}
           );
           pushed++;
+          console.info("Staff notice push accepted",{noticeId:id,userId:sub.user_id});
           await client.query(
             `UPDATE suite_staff_notice_recipients SET push_status='submitted'
               WHERE notice_id=$1 AND user_id=$2`,
@@ -558,6 +566,15 @@ async function staffNoticesApi(client, auth, body) {
           console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status,message:error?.message});
         }
       }
+    }
+
+    if (!pushConfigured()) {
+      console.info("Staff notice push diagnostics",{
+        noticeId:id,
+        recipientCount:resolved.length,
+        subscriptionCount:0,
+        pushConfigured:false
+      });
     }
 
     return response(200, {
