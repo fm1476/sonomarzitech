@@ -27,3 +27,11 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .permit-record-chip{appearance:none;display:inline-flex;align-items:center;min-height:30px;padding:5px 10px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--surface) 88%,#718096 12%);color:var(--text);font:inherit;font-size:12.5px;font-weight:700;line-height:1;letter-spacing:.01em;cursor:pointer;transition:border-color .12s ease,background .12s ease,color .12s ease,transform .12s ease}
 .permit-record-chip:hover{border-color:var(--blue);background:var(--row-hover);color:var(--blue);transform:translateY(-1px)}
 .permit-record-chip:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+
+/* Record rows replace redundant standalone Open/View buttons. */
+.suite-clickable-row{cursor:pointer;transition:background .12s ease,box-shadow .12s ease}
+.suite-clickable-row:hover{background:var(--row-hover)!important;box-shadow:inset 3px 0 0 var(--blue)}
+.suite-clickable-row:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;background:var(--row-hover)!important}
+.suite-clickable-row .suite-row-open-cell{width:0;padding-left:0!important;padding-right:0!important;border-left:0!important}
+.suite-clickable-row .suite-row-open-cell>button{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
