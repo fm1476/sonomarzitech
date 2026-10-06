@@ -444,6 +444,24 @@
   .modal.modal-xl{max-width:95vw;}
   .modal.modal-xl .modal-body, .modal.modal-wide .modal-body{max-height:84vh;}
   .modal.modal-xl .detail-grid{grid-template-columns:1fr 1fr 1fr;}
+  /* Keep the personnel editor actions visible while its form scrolls. */
+  .modal:has(#fEmployeeId){
+    display:flex;flex-direction:column;overflow:hidden;
+    max-width:1100px;max-height:calc(100vh - 36px);
+    max-height:calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .modal:has(#fEmployeeId) .modal-head,
+  .modal:has(#fEmployeeId) .modal-foot{flex-shrink:0;}
+  .modal:has(#fEmployeeId) .modal-body{
+    flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;
+  }
+  @media(max-width:600px){
+    .modal:has(#fEmployeeId){max-width:100%;}
+    .modal:has(#fEmployeeId) .modal-head,
+    .modal:has(#fEmployeeId) .modal-body,
+    .modal:has(#fEmployeeId) .modal-foot{padding:12px 14px;}
+    .modal:has(#fEmployeeId) .modal-head h3{font-size:16px;}
+  }
   .photo-drop-zone{
     display:flex; align-items:center; gap:14px; padding:12px 14px; border:2px dashed var(--border);
     border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s;
