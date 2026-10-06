@@ -1,4 +1,4 @@
-import { schedulingSnapshot, scheduleWriteDecision, scopedScheduleCollections } from "./lib/scheduling-access.mjs";
+import { schedulingSnapshot, scheduleWriteDecision, scopedScheduleCollections, validateSchedulingBatch } from "./lib/scheduling-access.mjs";
 import {
   DEMO_TENANT_ID,
   DEMO_AGENCY_ID,
@@ -160,7 +160,8 @@ async function applyChanges(client, auth, body) {
   await client.query("BEGIN");
 
   try {
-    const needsScheduleScope = !workspaceAuth.admin && validated.some(c => scopedScheduleCollections.has(c.path.join('.')) || c.path.join('.') === 'pm.scheduleWorkGroups');
+    const needsScheduleScope = validated.some(c => scopedScheduleCollections.has(c.path.join('.')) || ['pm.scheduleWorkGroups','pm.schedulingSettings'].includes(c.path.join('.')));
+    if(needsScheduleScope)await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`${tenantId}:${agencyId}:scheduling`]);
     const scheduleRows = needsScheduleScope ? await client.query(
       `SELECT key, value, deleted FROM suite_records
        WHERE tenant_id = $1 AND agency_id = $2 AND deleted = false
@@ -168,6 +169,7 @@ async function applyChanges(client, auth, body) {
       [tenantId, agencyId]
     ) : {rows:[]};
     const scheduleState = schedulingSnapshot(scheduleRows.rows);
+    if(needsScheduleScope)validateSchedulingBatch(scheduleState,validated);
     const results = [];
 
     for (const change of validated) {

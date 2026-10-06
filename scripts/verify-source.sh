@@ -46,6 +46,7 @@ node scripts/verify-role-invariants.mjs
 node scripts/verify-attachment-invariants.mjs
 node scripts/verify-mfa-invariants.mjs
 node scripts/verify-scheduling-access.mjs
+node scripts/verify-scheduling-api.mjs
 
 if grep -R -n --include='*.mjs' --include='*.js' 'rejectUnauthorized:[[:space:]]*false' lambdas frontend; then
   echo "ERROR: Database TLS certificate verification must not be disabled."

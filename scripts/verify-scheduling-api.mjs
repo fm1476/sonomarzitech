@@ -1,0 +1,56 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {schedulingSnapshot,scheduleWriteDecision,scopedScheduleCollections,validateSchedulingBatch} from '../lambdas/api/lib/scheduling-access.mjs';
+const key=(collection,id)=>JSON.stringify([collection.split('.'),id]);
+const record=(collection,value,version=1)=>({key:key(collection,value.id),value,version,deleted:false});
+const groups=[{id:'patrol',visibility:'unit',unitNames:['Patrol'],managerIds:['scheduler']},{id:'dispatch',visibility:'unit',unitNames:['Dispatch'],managerIds:['dispatcherScheduler']}];
+const seed=[...groups.map(g=>record('pm.scheduleWorkGroups',g)),record('personnel',{id:'officer',unit:'Patrol'}),record('personnel',{id:'dispatcher',unit:'Dispatch'}),record('pm.scheduleShifts',{id:'p',workGroupId:'patrol',daysOn:4,daysOff:4}),record('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',daysOn:4,daysOff:4}),record('pm.overtimeOpportunities',{id:'ot',shiftId:'p',date:'2026-10-10',status:'open',requests:[]}),record('pm.extraDutyJobs',{id:'job',workGroupId:'patrol',status:'open',slots:1}),record('pm.extraDutySignups',{id:'s1',jobId:'job',personId:'officer',status:'pending'}),record('pm.extraDutySignups',{id:'s2',jobId:'job',personId:'dispatcher',status:'pending'})];
+let database=new Map(seed.map(r=>[r.key,r])),working=null,workspace,abilities,commands=[];
+const clone=rows=>new Map([...rows].map(([k,v])=>[k,structuredClone(v)]));
+const client={query:async(sql,parameters=[])=>{
+  commands.push(sql);
+  if(sql==='BEGIN'){working=clone(database);return {rows:[]};}
+  if(sql==='COMMIT'){database=working;working=null;return {rows:[]};}
+  if(sql==='ROLLBACK'){working=null;return {rows:[]};}
+  if(sql.includes('pg_advisory_xact_lock'))return {rows:[]};
+  if(sql.includes('SELECT key, value, deleted'))return {rows:[...working.values()].filter(r=>!r.deleted)};
+  if(sql.includes('SELECT version, deleted, value'))return {rows:working.has(parameters[2])?[working.get(parameters[2])]:[]};
+  if(sql.includes('INSERT INTO suite_records')||sql.includes('UPDATE suite_records')){
+    working.set(parameters[2],{key:parameters[2],value:JSON.parse(parameters[3]),version:parameters[4],deleted:parameters[5]});return {rows:[]};
+  }
+  throw Error('Unexpected SQL in scheduling API regression: '+sql);
+}};
+const context={schedulingSnapshot,scheduleWriteDecision,scopedScheduleCollections,validateSchedulingBatch,DEMO_TENANT_ID:'unused',DEMO_AGENCY_ID:'unused',response:(status,body)=>({status,body}),resolveWorkspaceMembership:async()=>workspace,loadRoleAbilityMap:async()=>new Map([['assigned',Object.fromEntries(abilities.map(a=>[a,true]))]]),authorizeOfficerSelfServiceChange:async()=>({allowed:false}),authorizeFleetQmChange:async()=>null,authorizeK9SubpoenaCivilChange:async()=>null,authorizeDroneEodGrantsChange:async()=>null,authorizePersonnelSharedChange:async()=>null,authorizePermitsChange:async()=>null};
+vm.createContext(context);
+const apiSource=fs.readFileSync('lambdas/api/apply-changes.mjs','utf8').replace(/import[\s\S]*?from "\.\/[^"\n]+";\n/g,'').replace('export { applyChanges };','globalThis.applySchedulingChanges=applyChanges;');
+vm.runInContext(apiSource,context);
+const act=async(personId,grants,changes,admin=false)=>{
+  workspace={tenantId:'tenant',agencyId:'agency',personId,roleIds:['assigned'],admin};abilities=grants;commands=[];
+  return context.applySchedulingChanges(client,{userId:personId},{tenant_id:'tenant',agency_id:'agency',changes:changes.map(c=>({...c,expected_version:database.get(c.key)?.version||0}))});
+};
+const change=(collection,value)=>({key:key(collection,value.id),value,deleted:false});
+let result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',name:'Unauthorized edit'})]);
+assert.equal(result.status,403);assert(!database.get(key('pm.scheduleShifts','d')).value.name);assert.equal(commands.at(-1),'ROLLBACK');
+const ot=database.get(key('pm.overtimeOpportunities','ot')).value;
+result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportunities',{...ot,requests:[{personId:'officer',status:'pending',requestedAt:'now'}]})]);
+assert.equal(result.status,200);assert.equal(database.get(key('pm.overtimeOpportunities','ot')).value.requests.length,1);
+result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportunities',{...ot,status:'closed'})]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.overtimeOpportunities','ot')).value.status,'open');
+// A restricted manager sees only their collection order; appending must preserve hidden IDs.
+database.set(key('pm.scheduleAssignments','$order'),{key:key('pm.scheduleAssignments','$order'),value:['hiddenAssignment'],version:1,deleted:false});
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',{id:'newAssignment',personId:'officer',shiftId:'p',startDate:'2026-10-01'}),{key:key('pm.scheduleAssignments','$order'),value:['newAssignment'],deleted:false}]);
+assert.equal(result.status,200);assert.deepEqual(Array.from(database.get(key('pm.scheduleAssignments','$order')).value),['hiddenAssignment','newAssignment']);
+// Replay two approvals against refreshed database snapshots. The second cannot overfill the job.
+result=await act('scheduler',['pm_extraduty_manage'],[change('pm.extraDutySignups',{...database.get(key('pm.extraDutySignups','s1')).value,status:'approved'})]);
+assert.equal(result.status,200);
+assert(commands.findIndex(c=>c.includes('pg_advisory_xact_lock'))<commands.findIndex(c=>c.includes('SELECT key, value, deleted')));
+result=await act('scheduler',['pm_extraduty_manage'],[change('pm.extraDutySignups',{...database.get(key('pm.extraDutySignups','s2')).value,status:'approved'})]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.extraDutySignups','s2')).value.status,'pending');assert.equal(commands.at(-1),'ROLLBACK');
+// An otherwise allowed write bundled with a cross-group write rolls back as one transaction.
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleShifts',{id:'p',workGroupId:'patrol',name:'Allowed but rolled back'}),change('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',name:'Denied'})]);
+assert.equal(result.status,403);assert(!database.get(key('pm.scheduleShifts','p')).value.name);
+// Agency administrators retain cross-group management, while capacity validation still applies.
+result=await act('admin',[],[change('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',name:'Administrator edit'})],true);
+assert.equal(result.status,200);assert.equal(database.get(key('pm.scheduleShifts','d')).value.name,'Administrator edit');
+console.log('Scheduling API pipeline, order preservation, transaction rollback, and serialized approval checks passed.');

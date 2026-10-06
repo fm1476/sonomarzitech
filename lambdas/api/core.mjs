@@ -1,4 +1,4 @@
-import { filterSchedulingRecords } from "./lib/scheduling-access.mjs";
+import { filterSchedulingRecords, schedulingSafeTemplate } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
 import pg from "pg";
@@ -1667,14 +1667,14 @@ async function filterOfficerWorkspaceRecords(
       abilityMap,
       workspaceAuth.roleIds,
       "pm_leave_request_approve"
-    );
+    ) || roleHasAbility(abilityMap,workspaceAuth.roleIds,"pm_reports_view");
 
   const canViewAllLeaveRequests =
     roleHasAbility(
       abilityMap,
       workspaceAuth.roleIds,
       "pm_leave_request_approve"
-    );
+    ) || roleHasAbility(abilityMap,workspaceAuth.roleIds,"pm_reports_view");
 
   // My Work must be able to render the signed-in employee's own duty schedule even when
   // their role does not include department-wide roster visibility. Keep this owner-scoped:
@@ -1684,12 +1684,14 @@ async function filterOfficerWorkspaceRecords(
       abilityMap,
       workspaceAuth.roleIds,
       "pm_schedule_view"
-    );
+    ) || roleHasAbility(abilityMap,workspaceAuth.roleIds,"pm_reports_view");
 
   records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule, {
     overtime: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_overtime_view'),
     rollcall: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_rollcall_view'),
-    leaveApprove: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_leave_request_approve')
+    leaveApprove: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_leave_request_approve'),
+    bidding: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_view'),
+    extraDuty: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_extraduty_view')
   });
 
   const ownScheduleAssignments = records.filter(record => {
@@ -1723,6 +1725,15 @@ async function filterOfficerWorkspaceRecords(
       const values=itemId==='$value' && Array.isArray(record.value)?record.value:[record.value];
       values.forEach(value=>{if(value?.shiftId)ownShiftIds.add(String(value.shiftId));});
     } catch { /* Invalid record keys remain excluded by the main reader. */ }
+  }
+
+  if(roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_bidding_view'))for(const record of records) {
+    try {
+      const {collection,itemId}=collectionFromRecordKey(record.key);
+      if(collection!=='pm.bidCycles'||itemId==='$order')continue;
+      const values=itemId==='$value'&&Array.isArray(record.value)?record.value:[record.value];
+      values.forEach(value=>Object.keys(value?.shiftSlots || {}).forEach(id=>ownShiftIds.add(id)));
+    } catch { /* Malformed keys are excluded by the reader. */ }
   }
 
   const visible = [];
@@ -4318,9 +4329,9 @@ const PM_COLLECTION_RULES = {
     update: ["pm_rollcall_manage"],
     delete: ["pm_rollcall_manage"]
   },
-  "pm.scheduleWorkGroups": { read: ["pm_schedule_view"], create: [], update: [], delete: [] },
-  "pm.overtimeOpportunities": { read: ["pm_overtime_view", "pm_schedule_view"], create: [], update: [], delete: [] },
-  "pm.specialEvents": { read: ["pm_schedule_view", "pm_overtime_view"], create: [], update: [], delete: [] },
+  "pm.scheduleWorkGroups": { read: ["pm_schedule_view", "pm_reports_view"], create: [], update: [], delete: [] },
+  "pm.overtimeOpportunities": { read: ["pm_overtime_view", "pm_schedule_view", "pm_reports_view"], create: [], update: [], delete: [] },
+  "pm.specialEvents": { read: ["pm_schedule_view", "pm_overtime_view", "pm_reports_view"], create: [], update: [], delete: [] },
   "pm.scheduleAssignments": {
     read: ["pm_schedule_view"],
     create: ["pm_schedule_manage"],
@@ -5520,7 +5531,7 @@ async function getWorkspace(client, auth, event) {
     role_ids: roleIds,
     mfa_policy: workspaceAuth.mfaPolicy,
     records: workspaceRecords,
-    template: templateResult.rows[0]?.empty_state || {},
+    template: schedulingSafeTemplate(templateResult.rows[0]?.empty_state || {},workspaceAuth.admin),
     tenant: tenantResult.rows[0],
     agency: agencyResult.rows[0]
   });
