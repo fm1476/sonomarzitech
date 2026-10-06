@@ -178,7 +178,7 @@ export const handler = async event => {
     });
   } finally {
     if (client) {
-      await client.end();
+      client.release();
     }
   }
 };
