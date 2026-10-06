@@ -3020,66 +3020,29 @@ function rankedCallbackList(){
 
 function renderOvertimeSub(){
   const canManage = can('pm_overtime_manage');
-  const canOptIn = can('pm_overtime_optin');
-  const gaps = computeCoverageGaps(OT_LOOKAHEAD_DAYS);
-  const ranked = rankedCallbackList();
-  const isOptedIn = STATE.pm.otCallbackOptIns.includes(CURRENT_USER_ID);
-  const eligibleToAdd = STATE.personnel.filter(p=>!STATE.pm.otCallbackOptIns.includes(p.id));
-
-  const gapRows = gaps.map(g=>`<tr>
-    <td>${escapeHtml(g.date)}</td>
-    <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shiftColor(g.shift)};margin-right:8px;"></span>${escapeHtml(g.shift.name)}</td>
-    <td style="color:var(--red);font-weight:700;">${g.staffed}/${g.minStaff} staffed</td>
-    <td>${g.needed} needed</td>
-    ${canManage?`<td><button class="btn btn-sm btn-primary" data-fill-gap="${escapeHtml(g.date)}|${escapeHtml(g.shiftId)}">Fill</button></td>`:'<td></td>'}
-  </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No coverage gaps in the next ${OT_LOOKAHEAD_DAYS} days.</td></tr>`;
-
-  const rankRows = ranked.map((row,i)=>`<tr>
-    <td>${i+1}</td><td>${recordLink(row.personId)}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)} hrs</td>
-    ${canManage?`<td><button class="btn-icon" data-remove-optin="${row.personId}" title="Remove from list">${ICONS.trash}</button></td>`:'<td></td>'}
-  </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is currently on the callback list.</td></tr>`;
-
-  document.getElementById('schedSubBody').innerHTML = `
-    <div class="panel" style="margin-bottom:16px;">
-      <div class="panel-head"><h2>Coverage Gaps</h2><span class="hint">Next ${OT_LOOKAHEAD_DAYS} days &middot; current shift patterns with a minimum staffing requirement</span></div>
-      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Shift</th><th>Staffing</th><th></th><th></th></tr></thead><tbody>${gapRows}</tbody></table></div>
-    </div>
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Overtime Callback List</h2>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          ${canOptIn?`<button class="btn btn-sm ${isOptedIn?'btn-outline':'btn-primary'}" id="btnToggleOptIn">${isOptedIn?'Leave the list':'Join the callback list'}</button>`:''}
-          ${canManage?`<select id="fAddOptIn" style="max-width:220px;"><option value="">Add someone…</option>${eligibleToAdd.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>`:''}
-        </div>
-      </div>
-      <div style="padding:14px 20px 0;font-size:12px;color:var(--text-dim);">Ranked by fewest overtime hours worked in the last 90 days, so the person owed the least overtime gets called first. Ties break by seniority.</div>
-      <div class="panel-body" style="padding:14px 0 0;overflow-x:auto;"><table><thead><tr><th>#</th><th>Employee</th><th>Phone</th><th>OT Hours (90d)</th><th></th></tr></thead><tbody>${rankRows}</tbody></table></div>
-    </div>
-  `;
-  document.querySelectorAll('[data-fill-gap]').forEach(b=>b.addEventListener('click', ()=>{
-    const [date,shiftId] = b.dataset.fillGap.split('|');
-    openFillGapModal(date, shiftId);
-  }));
-  const optInBtn = document.getElementById('btnToggleOptIn');
-  if(optInBtn) optInBtn.addEventListener('click', ()=>{
-    if(isOptedIn) STATE.pm.otCallbackOptIns = STATE.pm.otCallbackOptIns.filter(id=>id!==CURRENT_USER_ID);
-    else STATE.pm.otCallbackOptIns.push(CURRENT_USER_ID);
-    logActivity(`${isOptedIn?'Left':'Joined'} the overtime callback list.`, "schedule");
-    persist(); renderOvertimeSub();
-  });
-  const addSel = document.getElementById('fAddOptIn');
-  if(addSel) addSel.addEventListener('change', ()=>{
-    if(!addSel.value) return;
-    STATE.pm.otCallbackOptIns.push(addSel.value);
-    logActivity(`Added ${personName(addSel.value)} to the overtime callback list.`, "schedule");
-    persist(); renderOvertimeSub();
-  });
-  document.querySelectorAll('[data-remove-optin]').forEach(b=>b.addEventListener('click', ()=>{
-    STATE.pm.otCallbackOptIns = STATE.pm.otCallbackOptIns.filter(id=>id!==b.dataset.removeOptin);
-    logActivity(`Removed ${personName(b.dataset.removeOptin)} from the overtime callback list.`, "schedule");
-    persist(); renderOvertimeSub();
-  }));
-  wireRecordLinks();
+  const canRequest = can('pm_overtime_optin');
+  const gaps = computeCoverageGaps(OT_LOOKAHEAD_DAYS).filter(g=>canViewWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(w=>w.id===g.shift.workGroupId)));
+  const ranked = rankedCallbackList(), isOptedIn=STATE.pm.otCallbackOptIns.includes(CURRENT_USER_ID);
+  const eligibleToAdd=STATE.personnel.filter(p=>!STATE.pm.otCallbackOptIns.includes(p.id));
+  const opportunities=(STATE.pm.overtimeOpportunities||[]).filter(o=>o.status!=='closed').sort((a,b)=>a.date.localeCompare(b.date));
+  const oppRows=opportunities.map(o=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);if(!shift)return '';const mine=(o.requests||[]).find(r=>r.personId===CURRENT_USER_ID);const mgr=canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId));return `<tr><td>${escapeHtml(o.date)}</td><td>${escapeHtml(scheduleWorkGroupName(shift.workGroupId))}</td><td>${escapeHtml(shift.name)}</td><td>${(o.requests||[]).filter(r=>r.status==='pending').length} pending</td><td>${mine?'<span class="badge">'+escapeHtml(mine.status)+'</span>':canRequest?'<button class="btn btn-sm btn-primary" data-request-ot="'+o.id+'">Request Shift</button>':''}${mgr?' <button class="btn btn-sm btn-outline" data-review-ot="'+o.id+'">Review</button>':''}</td></tr>`;}).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No open overtime opportunities.</td></tr>';
+  const gapRows=gaps.map(g=>{const mgr=canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(w=>w.id===g.shift.workGroupId));const existing=opportunities.find(o=>o.date===g.date&&o.shiftId===g.shiftId);return `<tr><td>${escapeHtml(g.date)}</td><td>${escapeHtml(scheduleWorkGroupName(g.shift.workGroupId))}</td><td>${escapeHtml(g.shift.name)}</td><td style="color:var(--red);font-weight:700;">${g.staffed}/${g.minStaff}</td><td>${g.needed}</td><td>${mgr&&!existing?'<button class="btn btn-sm btn-primary" data-publish-ot="'+escapeHtml(g.date)+'|'+g.shiftId+'">Publish OT</button>':existing?'<span class="badge">Published</span>':''}</td></tr>`;}).join('')||`<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No coverage gaps in the next ${OT_LOOKAHEAD_DAYS} days.</td></tr>`;
+  const rankRows=ranked.map((row,i)=>`<tr><td>${i+1}</td><td>${recordLink(row.personId)}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)} hrs</td>${canManage?`<td><button class="btn-icon" data-remove-optin="${row.personId}" title="Remove from list">${ICONS.trash}</button></td>`:'<td></td>'}</tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is currently on the callback list.</td></tr>';
+  document.getElementById('schedSubBody').innerHTML=`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><div><h2>Open Overtime Opportunities</h2><span class="hint">Published vacancies staff can request</span></div></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Requests</th><th></th></tr></thead><tbody>${oppRows}</tbody></table></div></div>
+  <div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Coverage Gaps</h2><span class="hint">Next ${OT_LOOKAHEAD_DAYS} days</span></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Staffing</th><th>Needed</th><th></th></tr></thead><tbody>${gapRows}</tbody></table></div></div>
+  <div class="panel"><div class="panel-head"><h2>Overtime Callback List</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${canRequest?`<button class="btn btn-sm ${isOptedIn?'btn-outline':'btn-primary'}" id="btnToggleOptIn">${isOptedIn?'Leave the list':'Join the callback list'}</button>`:''}${canManage?`<select id="fAddOptIn" style="max-width:220px;"><option value="">Add someone…</option>${eligibleToAdd.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>`:''}</div></div><div style="padding:14px 20px 0;font-size:12px;color:var(--text-dim);">Ranked by fewest overtime hours worked in the last 90 days; ties break by seniority.</div><div class="panel-body" style="padding:14px 0 0;overflow-x:auto;"><table><thead><tr><th>#</th><th>Employee</th><th>Phone</th><th>OT Hours (90d)</th><th></th></tr></thead><tbody>${rankRows}</tbody></table></div></div>`;
+  document.querySelectorAll('[data-publish-ot]').forEach(b=>b.onclick=()=>{const [date,shiftId]=b.dataset.publishOt.split('|');STATE.pm.overtimeOpportunities.push({id:'oto'+Date.now(),date,shiftId,status:'open',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Published overtime opportunity for ${STATE.pm.scheduleShifts.find(s=>s.id===shiftId)?.name||'shift'} on ${date}.`,'schedule');persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-request-ot]').forEach(b=>b.onclick=()=>{const o=STATE.pm.overtimeOpportunities.find(x=>x.id===b.dataset.requestOt),shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);const conflict=personScheduledOnDate(CURRENT_USER_ID,o.date);if(conflict){toast('You are already scheduled to work on this date.',true);return;}o.requests.push({personId:CURRENT_USER_ID,status:'pending',requestedAt:new Date().toISOString()});logActivity(`Requested overtime on ${o.date} for ${shift.name}.`,'schedule');persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-review-ot]').forEach(b=>b.onclick=()=>openOvertimeOpportunity(b.dataset.reviewOt));
+  document.getElementById('btnToggleOptIn')?.addEventListener('click',()=>{if(isOptedIn)STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==CURRENT_USER_ID);else STATE.pm.otCallbackOptIns.push(CURRENT_USER_ID);logActivity(`${isOptedIn?'Left':'Joined'} the overtime callback list.`,'schedule');persist();renderOvertimeSub();});
+  document.getElementById('fAddOptIn')?.addEventListener('change',e=>{if(!e.target.value)return;STATE.pm.otCallbackOptIns.push(e.target.value);persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-remove-optin]').forEach(b=>b.onclick=()=>{STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==b.dataset.removeOptin);persist();renderOvertimeSub();});wireRecordLinks();
+}
+function openOvertimeOpportunity(id){
+ const o=STATE.pm.overtimeOpportunities.find(x=>x.id===id),shift=STATE.pm.scheduleShifts.find(s=>s.id===o?.shiftId);if(!o||!shift)return;
+ const req=(o.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${otHoursSince(r.personId,fmt(addDays(new Date(),-90))).toFixed(1)}</td><td>${escapeHtml(seniorityDate(r.personId))}</td><td>${escapeHtml(r.status)}</td><td>${r.status==='pending'?'<button class="btn btn-sm btn-primary" data-award-ot="'+r.personId+'">Award</button>':''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-dim);">No requests yet.</td></tr>';
+ document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Overtime Requests</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(shift.name)} · ${escapeHtml(o.date)}</p><table><thead><tr><th>Employee</th><th>OT Hours (90d)</th><th>Seniority</th><th>Status</th><th></th></tr></thead><tbody>${req}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>`;openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
+ document.querySelectorAll('[data-award-ot]').forEach(b=>b.onclick=()=>{if(personScheduledOnDate(b.dataset.awardOt,o.date)){toast('This employee has a schedule conflict.',true);return;}const r=o.requests.find(x=>x.personId===b.dataset.awardOt);r.status='awarded';o.requests.filter(x=>x!==r&&x.status==='pending').forEach(x=>x.status='not_awarded');STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId:r.personId,shiftId:o.shiftId,unit:shift.name,location:'',date:o.date,source:'overtime',hours:shiftHours(shift),overtimeOpportunityId:o.id});o.status='closed';logActivity(`Awarded overtime to ${personName(r.personId)} for ${shift.name} on ${o.date}.`,'schedule');persist();closeModal();renderOvertimeSub();});wireRecordLinks();
 }
 
 function openFillGapModal(date, shiftId){
