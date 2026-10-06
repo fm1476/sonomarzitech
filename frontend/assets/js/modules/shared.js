@@ -3048,6 +3048,7 @@ async function resetDemoData(){
    SHARED: ROLES & ABILITIES
    ========================================================================= */
 let SELECTED_ROLE_ID = null;
+let ROLE_ABILITY_SEARCH = '';
 
 function renderRoles(){
   const canManage = can('admin_roles');
@@ -3064,7 +3065,7 @@ function renderRoles(){
   if(!visibleRoles.find(r=>r.id===SELECTED_ROLE_ID)) SELECTED_ROLE_ID = visibleRoles[0].id;
 
   const roleListHtml = visibleRoles.map(r=>`
-    <div class="role-list-item ${r.id===SELECTED_ROLE_ID?'active':''}" data-select-role="${r.id}">
+    <div class="role-list-item ${r.id===SELECTED_ROLE_ID?'active':''}" data-select-role="${r.id}" data-role-search="${escapeHtml([r.name,r.description,r.id,Object.entries(r.abilities||{}).filter(([,on])=>on).map(([id])=>id+' '+abilityLabel(id)).join(' ')].join(' ').toLowerCase())}">
       <div>
         <div class="name">${escapeHtml(r.name)}</div>
         <div class="count">${countAbilities(r)} of ${ALL_ABILITY_IDS.length} abilities</div>
@@ -3082,7 +3083,7 @@ function renderRoles(){
     <div class="ability-group">
       <h3>${group}</h3>
       ${abilities.map(([id,label])=>`
-        <div class="ability-row">
+        <div class="ability-row" data-ability-search="${escapeHtml((group+' '+id+' '+label).toLowerCase())}">
           <div class="lbl">${label}</div>
           <label class="switch">
             <input type="checkbox" data-ability="${id}" ${selRole.abilities[id]?'checked':''} ${(!canManage || (selRole.locked && id!=='chatbot_access'))?'disabled':''}>
@@ -3098,13 +3099,13 @@ function renderRoles(){
   document.getElementById('view-roles').innerHTML = `
     ${!canManage ? lockedNote("You're viewing role definitions in read-only mode. An authorized administrator can edit abilities.") : ""}
     <div class="toolbar">
-      <div></div>
+      <div style="flex:1;max-width:520px;"><input type="search" id="roleAbilitySearch" placeholder="Search roles or abilities…" autocomplete="off" aria-label="Search roles or abilities"></div>
       <div style="display:flex;gap:8px;">
         ${canManage && missingDefaults.length ? `<button class="btn btn-outline" id="btnAddDefaultRoles">${ICONS.plus} Add ${missingDefaults.length} Missing Default Role${missingDefaults.length===1?'':'s'}</button>` : ''}
         ${canManage ? `<button class="btn btn-primary" id="btnAddRole">${ICONS.plus} New Role</button>` : ""}
       </div>
     </div>
-    <div class="role-grid">
+    <div class="role-grid" id="roleAbilityGrid">
       <div><div class="role-list">${roleListHtml}</div></div>
       <div class="panel">
         <div class="panel-head">
@@ -3122,6 +3123,23 @@ function renderRoles(){
       </div>
     </div>
   `;
+
+  const search=document.getElementById('roleAbilitySearch');
+  if(search){
+    search.value=ROLE_ABILITY_SEARCH;
+    const applyRoleAbilitySearch=()=>{
+      ROLE_ABILITY_SEARCH=search.value;
+      const q=ROLE_ABILITY_SEARCH.trim().toLowerCase();
+      document.querySelectorAll('[data-role-search]').forEach(el=>{el.style.display=!q||el.dataset.roleSearch.includes(q)?'':'none';});
+      document.querySelectorAll('.ability-group').forEach(group=>{
+        let shown=0;
+        group.querySelectorAll('[data-ability-search]').forEach(row=>{const hit=!q||row.dataset.abilitySearch.includes(q);row.style.display=hit?'':'none';if(hit)shown++;});
+        group.style.display=shown?'':'none';
+      });
+    };
+    search.addEventListener('input',applyRoleAbilitySearch);
+    applyRoleAbilitySearch();
+  }
 
   document.querySelectorAll('[data-select-role]').forEach(el=>{
     el.addEventListener('click', ()=>{ SELECTED_ROLE_ID = el.dataset.selectRole; renderRoles(); });
