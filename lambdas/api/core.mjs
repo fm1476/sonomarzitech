@@ -1796,6 +1796,11 @@ async function filterOfficerWorkspaceRecords(
       continue;
     }
 
+    if(collection==='pm.specialEvents' && (record.value?.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded')){visible.push(record);continue;}
+    if(collection==='pm.specialEvents' && itemId==='$value' && Array.isArray(record.value) && record.value.some(e=>(e.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded'))){
+      visible.push({...record,value:pmRecordReadable(workspaceAuth,abilityMap,collection,itemId,record.value)?record.value:record.value.filter(e=>(e.requests || []).some(r=>r.personId===workspaceAuth.personId&&r.status==='awarded'))});continue;
+    }
+
     if (OFFICER_UNIVERSAL_READ.has(collection)) {
       visible.push({
         ...record,

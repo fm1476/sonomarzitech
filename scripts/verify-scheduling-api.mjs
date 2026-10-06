@@ -73,3 +73,18 @@ assert(database.get(key('pm.scheduleAssignments','$order')).value.includes('hidd
 result=await act('scheduler',['pm_bidding_manage'],[change('pm.bidCycles',{...award,status:'open'})]);
 assert.equal(result.status,403);assert.equal(database.get(key('pm.bidCycles','bid')).value.status,'awarded');
 console.log('Bidding-only API award, linked order writes, history, and repeat rejection passed.');
+
+// Direct multi-person event assignment persists without staff opt-in requests.
+const directEvent={id:'directEvent',name:'Parade',eligibleWorkGroupIds:['patrol'],status:'published',staffNeeded:2,startDate:'2099-03-01',endDate:'2099-03-02',requests:[]};
+database.set(key('pm.specialEvents',directEvent.id),record('pm.specialEvents',directEvent));
+database.set(key('personnel','partner'),record('personnel',{id:'partner',unit:'Patrol'}));
+const directAward={...directEvent,requests:[{personId:'officer',status:'awarded',source:'manual',awardedBy:'scheduler'},{personId:'partner',status:'awarded',source:'manual',awardedBy:'scheduler'}]};
+const eventException={id:'manualEventException',personId:'officer',code:'EVT',sourceEventId:directEvent.id,startDate:directEvent.startDate,endDate:directEvent.endDate};
+result=await act('officer',['pm_overtime_optin'],[change('pm.specialEvents',directAward),change('pm.scheduleExceptions',eventException)]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,0);
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.specialEvents',directAward),change('pm.scheduleExceptions',eventException)]);
+assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,2);
+assert.equal(database.get(key('pm.scheduleExceptions',eventException.id)).value.sourceEventId,directEvent.id);
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.specialEvents',{...directAward,requests:[...directAward.requests,{personId:'dispatcher',status:'awarded',source:'manual'}]})]);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.specialEvents',directEvent.id)).value.requests.length,2);
+console.log('API direct multi-person special assignments, staff denial, linked exception, and overcapacity rollback passed.');

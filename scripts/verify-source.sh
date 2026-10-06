@@ -59,5 +59,6 @@ if ! grep -q 'us-east-2-bundle.pem' lambdas/api/core.mjs; then
 fi
 
 node scripts/verify-shift-bids.mjs
+node scripts/verify-special-event-assignments.mjs
 
 echo "Source checks passed."

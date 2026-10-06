@@ -220,6 +220,7 @@ export function filterSchedulingRecords(records, personId, canViewSchedule, abil
   const visibleIds = new Map();
   const allowed = (collection, value) => {
     if (collection === 'pm.scheduleWorkGroups') return viewsGroup(value, person, personId);
+    if(collection==='pm.specialEvents'&&(value.requests || []).some(r=>r.personId===personId&&r.status==='awarded'))return true;
     if (collection === 'pm.scheduleAssignments' && value.personId === personId) return true;
     if(['pm.scheduleAssignments','pm.scheduleShifts'].includes(collection) && abilities.biddingManage && recordGroupIds(collection,value,snapshot).some(id=>managesGroup(groups.find(g=>g.id===id),personId)))return true;
     if (collection === 'pm.scheduleShifts' && ownShiftIds.has(value.id)) return true;
@@ -325,8 +326,16 @@ export function validateSchedulingBatch(snapshot,changes) {
       if(requests.filter(r=>r.status==='awarded').length>value.staffNeeded)fail('The special event is already fully staffed.');
       const previous=(snapshot[collection] || []).find(e=>e.id===value.id);
       for(const request of requests.filter(r=>r.status==='awarded'&&!(previous?.requests || []).some(old=>old.personId===r.personId&&old.status==='awarded'))) {
+        const person=(final.personnel || []).find(p=>p.id===request.personId);
+        if(!person)fail('The assigned employee no longer exists.');
+        const groups=final['pm.scheduleWorkGroups'] || [],scope=value.eligibleWorkGroupIds || [];
+        const membership=personGroupIds(request.personId,value,final);
+        if(scope.length&&!scope.some(id=>membership.includes(id)||viewsGroup(groups.find(g=>g.id===id),person,request.personId)))fail("This employee is outside the event's eligible Work Groups.");
+        if(value.status!=='published')fail('Only published events can receive new assignments.');
         for(let offset=0;offset<=dayDifference(value.startDate,value.endDate);offset++) {
           const date=new Date(Date.parse(value.startDate)+offset*86400000).toISOString().slice(0,10);
+          const blocked=(final['pm.scheduleExceptions'] || []).some(e=>e.personId===request.personId&&e.startDate<=date&&e.endDate>=date&&!(e.code==='EVT'&&e.sourceEventId===value.id));
+          if(blocked)fail('This employee has time off or another schedule exception during the event. Resolve it before assigning.');
           const covered=(final['pm.scheduleCoverages'] || []).some(c=>c.personId===request.personId&&c.date===date);
           const otherEvent=(final[collection] || []).some(e=>e.id!==value.id&&e.status!=='cancelled'&&e.startDate<=date&&e.endDate>=date&&(e.requests || []).some(r=>r.personId===request.personId&&r.status==='awarded'));
           if(regularDuty(request.personId,date,final)||covered||otherEvent)fail('This employee has a conflicting assignment during the event. Reassign or resolve the conflict first.');

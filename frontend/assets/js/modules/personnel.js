@@ -1929,6 +1929,7 @@ function renderCalendarSub(body, lockedPersonId){
   // actually on shift per their pattern's rotation -- and any day-off exception (RDO/VDO/CDO/
   // SDO/TDO) that overrides it. Same department-wide-vs-personal split as the subpoena block above.
   const myScheduleAssignments = (!isMaster && STATE.pm.scheduleAssignments) ? STATE.pm.scheduleAssignments.filter(a=>a.personId===lockedPersonId) : [];
+  const mySpecialEvents = !isMaster ? (STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&(e.requests||[]).some(r=>r.personId===lockedPersonId&&r.status==='awarded')) : [];
 
   const firstOfMonth = new Date(year, month, 1);
   const daysInMonth = new Date(year, month+1, 0).getDate();
@@ -1948,6 +1949,7 @@ function renderCalendarSub(body, lockedPersonId){
     const todaysSubpoenas = subByDate[dateStr] || [];
     const isToday = dateStr === fmt(new Date());
     let dutyTag = '', exceptionTag = '', coverageTag = '';
+    const specialTag=mySpecialEvents.filter(e=>e.startDate<=dateStr&&(e.endDate||e.startDate)>=dateStr).map(e=>`<a href="#" data-cal-personal-special-event="${e.id}" class="cal-event" style="background:var(--blue-soft);color:var(--blue);border-left:3px solid var(--blue);">${escapeHtml(e.name)} (${SuiteUX.displayTimeOnly(e.startTime)} - ${SuiteUX.displayTimeOnly(e.endTime)})</a>`).join('');
     if(!isMaster){
       const myException = activeExceptionFor(lockedPersonId, dateStr);
       const myCoverage = (STATE.pm.scheduleCoverages||[]).find(c=>c.personId===lockedPersonId && c.date===dateStr);
@@ -1971,6 +1973,7 @@ function renderCalendarSub(body, lockedPersonId){
     }
     cells += `<div class="cal-cell ${isToday?'cal-cell-today':''}">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
+      ${specialTag}
       ${coverageTag}
       ${dutyTag}
       ${exceptionTag}
@@ -1993,12 +1996,13 @@ function renderCalendarSub(body, lockedPersonId){
       </div>
       ${canSchedule ? `<button class="btn btn-primary btn-sm" id="btnScheduleSession">${ICONS.plus} Schedule Session</button>` : ''}
     </div>
-    ${!isMaster ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Showing your assigned shifts, any day-off exception (RDO/VDO/CDO/SDO/TDO), every training session you're enrolled in, confirmed for, or have attended${mySubpoenas.length ? ', plus any subpoena court dates (\u2696)' : ''}. Click an event for full details.</div>` : `<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Every scheduled training session across the department. Click an event to manage its roster and take roll call.</div>`}
+    ${!isMaster ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Showing your assigned shifts and special assignments, any day-off exception (RDO/VDO/CDO/SDO/TDO), every training session you're enrolled in, confirmed for, or have attended${mySubpoenas.length ? ', plus any subpoena court dates (\u2696)' : ''}. Click an event for full details.</div>` : `<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Every scheduled training session across the department. Click an event to manage its roster and take roll call.</div>`}
     <div class="cal-grid-head">
       ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}
     </div>
     <div class="cal-grid">${cells}</div>
   `;
+  body.querySelectorAll('[data-cal-personal-special-event]').forEach(a=>a.addEventListener('click',ev=>{ev.preventDefault();openSpecialEventDetail(mySpecialEvents.find(e=>e.id===a.dataset.calPersonalSpecialEvent));}));
   body.querySelectorAll('[data-cal-subpoena-event]').forEach(a=>a.addEventListener('click', (ev)=>{
     ev.preventDefault();
     const id = a.dataset.calSubpoenaEvent;
@@ -2799,7 +2803,7 @@ function personScheduledOnDate(personId,dateStr){
 function renderSpecialEventsSub(){
   const canManage=can('pm_schedule_manage');
   const visibleGroupIds=new Set(visibleScheduleWorkGroups().map(g=>g.id));
-  const rows=(STATE.pm.specialEvents||[]).filter(e=>!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>visibleGroupIds.has(id))).slice().sort((a,b)=>a.startDate.localeCompare(b.startDate)).map(e=>{
+  const rows=(STATE.pm.specialEvents||[]).filter(e=>(e.requests||[]).some(r=>r.personId===CURRENT_USER_ID&&r.status==='awarded')||!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>visibleGroupIds.has(id))).slice().sort((a,b)=>a.startDate.localeCompare(b.startDate)).map(e=>{
     const awarded=(e.requests||[]).filter(r=>r.status==='awarded').length, needed=Number(e.staffNeeded)||1;
     return `<tr><td><strong>${escapeHtml(e.name)}</strong></td><td>${escapeHtml(e.startDate)}${e.endDate&&e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''}</td><td>${escapeHtml(e.startTime)} - ${escapeHtml(e.endTime)}</td><td>${escapeHtml(e.location||'—')}</td><td style="color:${awarded>=needed?'var(--green)':'var(--red)'};font-weight:700;">${awarded}/${needed}</td><td><button class="btn btn-sm btn-outline" data-event-open="${e.id}">Open</button></td></tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:18px;">No special events created yet.</td></tr>';
@@ -2822,13 +2826,82 @@ function openSpecialEventModal(){
   openModal(); document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
   document.getElementById('mSave').onclick=()=>{const name=document.getElementById('fEventName').value.trim();if(!name){toast('Event name is required.',true);return;} const startDate=document.getElementById('fEventStart').value,endDate=document.getElementById('fEventEnd').value;if(!startDate||!endDate||endDate<startDate||daysBetween(startDate,endDate)>366){toast('Enter a valid event date range of no more than one year.',true);return;} const eligibleWorkGroupIds=[...document.querySelectorAll('[data-event-wg]:checked')].map(x=>x.dataset.eventWg);if(!eligibleWorkGroupIds.length){toast('Select at least one Work Group.',true);return;}STATE.pm.specialEvents.push({id:'sev'+Date.now(),name,startDate,endDate,startTime:document.getElementById('fEventStartTime').value,endTime:document.getElementById('fEventEndTime').value,location:document.getElementById('fEventLocation').value.trim(),staffNeeded:Math.max(1,Number(document.getElementById('fEventNeeded').value)||1),notes:document.getElementById('fEventNotes').value.trim(),eligibleWorkGroupIds,status:'published',requests:[],createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});logActivity(`Created special event "${name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();};
 }
+function canManageSpecialEvent(event){
+  return !!event&&(isGlobalScheduleAdmin()||((event.eligibleWorkGroupIds||[]).length>0&&(event.eligibleWorkGroupIds||[]).every(id=>canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)))));
+}
+function personEligibleForSpecialEvent(personId,event){
+  const person=STATE.personnel.find(p=>p.id===personId);
+  if(!person)return false;
+  const ids=event.eligibleWorkGroupIds||[];
+  if(!ids.length)return isGlobalScheduleAdmin();
+  const membership=personScheduleGroupIds(personId,event),unit=String(person.unit||person.department||'').trim().toLowerCase();
+  return ids.some(id=>{
+    const group=(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id);
+    return group&&group.active!==false&&(membership.includes(id)||group.visibility==='agency'||(group.viewerIds||[]).includes(personId)||(group.managerIds||[]).includes(personId)||group.visibility==='unit'&&(group.unitNames||[]).some(u=>unit&&String(u).trim().toLowerCase()===unit));
+  });
+}
+function specialEventConflicts(personId,event){
+  const end=event.endDate||event.startDate;
+  let regularDuty=false;
+  for(let day=new Date(event.startDate+'T00:00:00');fmt(day)<=end;day=addDays(day,1)){
+    const date=fmt(day);
+    if((STATE.pm.scheduleExceptions||[]).some(e=>e.personId===personId&&e.startDate<=date&&e.endDate>=date&&!(e.code==='EVT'&&e.sourceEventId===event.id)))return {blocking:'Time off or another schedule exception on '+date,regularDuty:false};
+    if((STATE.pm.scheduleCoverages||[]).some(c=>c.personId===personId&&c.date===date))return {blocking:'Overtime or one-off coverage on '+date,regularDuty:false};
+    if((STATE.pm.specialEvents||[]).some(e=>e.id!==event.id&&e.status!=='cancelled'&&e.startDate<=date&&(e.endDate||e.startDate)>=date&&(e.requests||[]).some(r=>r.personId===personId&&r.status==='awarded')))return {blocking:'Another special assignment on '+date,regularDuty:false};
+    if(!activeExceptionFor(personId,date)&&STATE.pm.scheduleAssignments.some(a=>a.personId===personId&&isOnDutyOnDate(a,STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId),date)))regularDuty=true;
+  }
+  return {blocking:'',regularDuty};
+}
+function planSpecialEventAssignments(event,personIds,reassign=false,manual=true){
+  if(!canManageSpecialEvent(event)||event.status!=='published')throw new Error("Only this calendar's schedulers can assign personnel to a published event.");
+  if(!personIds.length||new Set(personIds).size!==personIds.length)throw new Error('Select one or more employees, once each.');
+  const requests=(event.requests||[]).map(r=>({...r})),exceptions=[];
+  const count=requests.filter(r=>r.status==='awarded').length;
+  if(count+personIds.length>event.staffNeeded)throw new Error("Your selections exceed the event's remaining staffing slots.");
+  const now=new Date().toISOString();
+  for(const personId of personIds){
+    if(!personEligibleForSpecialEvent(personId,event))throw new Error("An employee is outside the event's eligible Work Groups.");
+    const existing=requests.find(r=>r.personId===personId);
+    if(existing?.status==='awarded')throw new Error('An employee is already assigned to this event.');
+    const conflict=specialEventConflicts(personId,event);
+    if(conflict.blocking)throw new Error(personName(personId)+': '+conflict.blocking+'. Resolve it before assigning.');
+    if(conflict.regularDuty){
+      if(!reassign)throw new Error('Selected personnel have regular duty. Select the reassignment option to move them to this event for these dates.');
+      if(!canManagePersonSchedule(personId,event))throw new Error("You must manage the employee's existing calendar to reassign regular duty.");
+      exceptions.push({id:'ex'+Date.now()+Math.random().toString(36).slice(2,8),personId,code:'EVT',startDate:event.startDate,endDate:event.endDate||event.startDate,notes:'Reassigned to special event: '+event.name,sourceEventId:event.id});
+    }
+    const assigned={...(existing||{personId,requestedAt:now}),status:'awarded',conflict:false,awardedAt:now,awardedBy:CURRENT_USER_ID,...(manual?{source:'manual'}:{})};
+    if(existing)Object.assign(existing,assigned);else requests.push(assigned);
+  }
+  return {requests,exceptions};
+}
+function applySpecialEventAssignments(event,personIds,reassign=false,manual=true){
+  try{
+    const plan=planSpecialEventAssignments(event,personIds,reassign,manual);
+    event.requests=plan.requests;STATE.pm.scheduleExceptions.push(...plan.exceptions);
+    logActivity(`Assigned ${personIds.length} employee(s) to special event "${event.name}".`,'schedule');persist();
+    toast('Personnel assigned.');openSpecialEventDetail(event);renderSpecialEventsSub();return true;
+  }catch(error){toast(error.message,true);return false;}
+}
+function openSpecialEventAssignmentModal(event){
+  if(!canManageSpecialEvent(event)||event.status!=='published')return;
+  const assigned=new Set((event.requests||[]).filter(r=>r.status==='awarded').map(r=>r.personId));
+  const people=STATE.personnel.filter(p=>personEligibleForSpecialEvent(p.id,event)&&!assigned.has(p.id)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const remaining=Math.max(0,event.staffNeeded-assigned.size);
+  document.getElementById('modalBox').className='modal modal-lg';
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Assign Personnel: ${escapeHtml(event.name)}</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p class="hint">${remaining} staffing slot(s) remaining. Select one or several people; a volunteer request is not required.</p><div class="form-row"><label>Find Personnel</label><input id="fEventPersonnelSearch" placeholder="Name or Unit"></div><div class="access-person-list">${people.map(p=>{const conflict=specialEventConflicts(p.id,event);return `<label data-event-person-row="${p.id}" data-search="${escapeHtml((p.name+' '+(p.unit||'')).toLowerCase())}"><input type="checkbox" data-event-person="${p.id}" ${conflict.blocking?'disabled':''}><span>${escapeHtml(p.name)} <span class="hint">${escapeHtml(p.unit||'')}</span>${conflict.blocking?`<br><span class="hint" style="color:var(--red);">${escapeHtml(conflict.blocking)}</span>`:conflict.regularDuty?'<br><span class="hint">Regular duty; reassignment required</span>':''}</span></label>`;}).join('')||'<p class="hint">No eligible unassigned personnel.</p>'}</div><div class="form-row" style="margin-top:12px;"><label style="display:flex;gap:10px;align-items:center;"><input type="checkbox" id="fEventReassign" style="width:18px;height:18px;"> Reassign selected personnel from regular duty for these dates</label><div class="hint">Preserves their normal shift pattern and adds an event exception for this date range. Time off, overtime, and other special assignments must be resolved first.</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back</button><button class="btn btn-primary" id="mAssign" ${remaining?'':'disabled'}>Assign Selected Personnel</button></div>`;
+  openModal();document.getElementById('mClose').onclick=()=>openSpecialEventDetail(event);document.getElementById('mCancel').onclick=()=>openSpecialEventDetail(event);
+  document.getElementById('fEventPersonnelSearch').oninput=e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll('[data-event-person-row]').forEach(row=>row.style.display=row.dataset.search.includes(q)?'grid':'none');};
+  document.getElementById('mAssign').onclick=()=>applySpecialEventAssignments(event,[...document.querySelectorAll('[data-event-person]:checked')].map(x=>x.dataset.eventPerson),document.getElementById('fEventReassign').checked);
+}
 function openSpecialEventDetail(e){
-  if(!e)return; const mine=(e.requests||[]).find(r=>r.personId===CURRENT_USER_ID), canManage=isGlobalScheduleAdmin()||((e.eligibleWorkGroupIds||[]).length>0&&(e.eligibleWorkGroupIds||[]).every(id=>canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)))); const conflict=personScheduledDuring(CURRENT_USER_ID,e.startDate,e.endDate||e.startDate);
-  const reqRows=(e.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${r.conflict?'<span style="color:var(--red);font-weight:700;">Schedule conflict</span>':'Clear'}</td><td style="text-transform:capitalize;">${escapeHtml(r.status)}</td>${canManage?`<td>${r.status==='pending'?'<button class="btn btn-sm btn-primary" data-event-award="'+r.personId+'">Award</button>':''}</td>`:''}</tr>`).join('')||`<tr><td colspan="${canManage?4:3}" style="padding:16px;color:var(--text-dim);text-align:center;">No requests yet.</td></tr>`;
-  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${!mine&&e.status==='published'&&can('pm_overtime_optin')?'<button class="btn btn-primary" id="mRequestEvent">Request Assignment</button>':''}</div>`;
+  if(!e)return; const mine=(e.requests||[]).find(r=>r.personId===CURRENT_USER_ID),canManage=canManageSpecialEvent(e);const conflict=personScheduledDuring(CURRENT_USER_ID,e.startDate,e.endDate||e.startDate);
+  const reqRows=(e.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${r.conflict?'<span style="color:var(--red);font-weight:700;">Schedule conflict</span>':'Clear'}</td><td style="text-transform:capitalize;">${escapeHtml(r.status)}${r.source==='manual'?' <span class="badge">Assigned by scheduler</span>':''}</td>${canManage?`<td>${r.status==='pending'&&e.status==='published'?'<button class="btn btn-sm btn-primary" data-event-award="'+r.personId+'">Award</button>':''}</td>`:''}</tr>`).join('')||`<tr><td colspan="${canManage?4:3}" style="padding:16px;color:var(--text-dim);text-align:center;">No requests or assignments yet.</td></tr>`;
+  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${canManage&&e.status==='published'?'<button class="btn btn-primary" id="mAssignEvent">Assign Personnel</button>':''}${!mine&&e.status==='published'&&can('pm_overtime_optin')?'<button class="btn btn-outline" id="mRequestEvent">Request Assignment</button>':''}</div>`;
   openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mAssignEvent')?.addEventListener('click',()=>openSpecialEventAssignmentModal(e));
   document.getElementById('mRequestEvent')?.addEventListener('click',()=>{e.requests.push({personId:CURRENT_USER_ID,status:'pending',conflict,requestedAt:new Date().toISOString()});logActivity(`Requested assignment to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();});
-  document.querySelectorAll('[data-event-award]').forEach(b=>b.addEventListener('click',()=>{const r=e.requests.find(x=>x.personId===b.dataset.eventAward);if(personScheduledDuring(r.personId,e.startDate,e.endDate||e.startDate)){if(!confirm(personName(r.personId)+' is scheduled for regular duty. Reassign them from regular duty to this special event?'))return;const duty=STATE.pm.scheduleAssignments.find(a=>a.personId===r.personId&&(!a.endDate||a.endDate>e.startDate)&&a.startDate<=e.endDate);if(duty){STATE.pm.scheduleExceptions.push({id:'ex'+Date.now(),personId:r.personId,code:'EVT',startDate:e.startDate,endDate:e.endDate||e.startDate,notes:'Reassigned to special event: '+e.name,sourceEventId:e.id});}}r.status='awarded';r.awardedAt=new Date().toISOString();r.awardedBy=CURRENT_USER_ID;logActivity(`Awarded ${personName(r.personId)} to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();}));
+  document.querySelectorAll('[data-event-award]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.eventAward;const regular=specialEventConflicts(id,e).regularDuty;if(regular&&!confirm(personName(id)+' is scheduled for regular duty. Reassign them to this special event for these dates?'))return;applySpecialEventAssignments(e,[id],regular,false);}));
   wireRecordLinks();
 }
 

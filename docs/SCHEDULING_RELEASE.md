@@ -50,3 +50,7 @@ Use actual separate accounts. Administrator **View As** is a UI preview and does
 - Award a shift cycle with a future effective date. Reload, verify the winner's new assignment and the prior assignment's exclusive end date, and confirm an unmatched employee remains unchanged. Repeat with a bidding manager lacking general roster editing and HR access.
 - Verify multi-day event reassignment, roll call, custom reports, and CSV exports with each account.
 - Confirm affected staff receive the configured notices. No live AWS, browser, PostgreSQL concurrency, or push-delivery test was performed in the development workspace.
+
+## Pending review batch: direct event assignments
+
+Special Events now offers **Assign Personnel** to select one or several eligible people without an opt-in request. Existing pending requests are converted to awards; manual assignments are marked as assigned by a scheduler. Remaining capacity is enforced before changing any employee. Regular-duty reassignment requires an explicit selection and adds a date-range event exception, preserving the original shift pattern. Time off, overtime/one-off coverage, other events, and unauthorized source calendars block the operation. Assigned staff see the event across its date range in My Calendar, with a link to event details. API validation repeats eligibility, capacity, and full-range conflict checks. Include both frontend and API in the next deployment.
