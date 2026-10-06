@@ -4224,8 +4224,25 @@ const SuiteStore=(()=>{
   const notificationKey=(module,id)=>(notificationModule[module]||module)+'|'+id;
   function isNotificationRead(module,id){return notificationReads.has(notificationKey(module,id));}
   async function loadNotificationReads(){
-    if(AWS_DEV_MODE){notificationReads=new Set();return;}
-    if(mode!=='shared'||!remoteContext.tenantId)return;
+    if(mode!=='shared'||!remoteContext.tenantId||!remoteContext.agencyId)return;
+    if(AWS_DEV_MODE){
+      try{
+        const result=await awsJson('/staff-notices',{
+          method:'POST',
+          body:JSON.stringify({
+            tenant_id:remoteContext.tenantId,
+            agency_id:remoteContext.agencyId,
+            action:'notification_reads_list',
+            payload:{}
+          })
+        });
+        notificationReads=new Set((Array.isArray(result?.data)?result.data:[]).map(row=>notificationKey(row.module,row.notification_id)));
+        if(document.getElementById('app')?.classList.contains('authenticated'))renderNotifBell();
+      }catch(error){
+        console.error('Could not load AWS notification read status:',error);
+      }
+      return;
+    }
     const {data,error}=await supabaseClient.from('suite_notification_reads').select('module,notification_id').eq('tenant_id',remoteContext.tenantId).eq('agency_id',remoteContext.agencyId).limit(10000);
     if(error){console.error('Could not load notification read status:',error);return;}
     notificationReads=new Set((data||[]).map(row=>notificationKey(row.module,row.notification_id)));
@@ -4233,16 +4250,30 @@ const SuiteStore=(()=>{
   }
   async function markNotificationsRead(items){
     if(!items.length)return true;
-    if(AWS_DEV_MODE){
-      items.forEach(item=>notificationReads.add(notificationKey(item.module,item.id)));
-      return true;
-    }
     if(mode!=='shared'){
       for(const item of items){const key=notificationModule[item.module]||item.module;const found=STATE[key]?.notifications?.find(n=>n.id===item.id);if(found){found.readBy=found.readBy||[];if(!found.readBy.includes(CURRENT_USER_ID))found.readBy.push(CURRENT_USER_ID);}}
       persist();return true;
     }
     const unseen=items.filter(item=>!isNotificationRead(item.module,item.id));
     if(!unseen.length)return true;
+    if(AWS_DEV_MODE){
+      try{
+        await awsJson('/staff-notices',{
+          method:'POST',
+          body:JSON.stringify({
+            tenant_id:remoteContext.tenantId,
+            agency_id:remoteContext.agencyId,
+            action:'notification_reads_mark',
+            payload:{items:unseen}
+          })
+        });
+        unseen.forEach(item=>notificationReads.add(notificationKey(item.module,item.id)));
+        return true;
+      }catch(error){
+        console.error('AWS notification read status failed:',error);
+        return false;
+      }
+    }
     const rows=unseen.map(item=>({tenant_id:remoteContext.tenantId,agency_id:remoteContext.agencyId,module:notificationModule[item.module]||item.module,notification_id:item.id}));
     const {error}=await supabaseClient.from('suite_notification_reads').upsert(rows,{onConflict:'tenant_id,agency_id,user_id,module,notification_id',ignoreDuplicates:true});
     if(error){console.error('Notification read status failed:',error);return false;}
