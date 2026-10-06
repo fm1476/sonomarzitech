@@ -2707,7 +2707,7 @@ function renderRosterSub(){
     ${canManage?`<td><div class="cell-actions">${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">${SHOW_PAST_SHIFT_PATTERNS ? 'No shift patterns defined yet.' : 'No current or upcoming shift patterns. '+(pastCount?'<button class="btn-sm btn btn-outline" id="btnShowPastShiftsInline">Show past patterns</button>':'')}</td></tr>`;
 
-  const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate).map(a=>{
+  const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate && STATE.pm.scheduleShifts.some(s=>s.id===a.shiftId && s.published!==false)).map(a=>{
     const shift = STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId);
     return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name):'—'}</td>
     <td>${shift?SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd):''}</td><td>${escapeHtml(a.location)}</td>
@@ -3594,7 +3594,7 @@ function decideLeaveRequest(id, decision){
 function renderRollCallSub(){
   const canManage = can('pm_rollcall_manage');
   const todayStr = fmt(new Date());
-  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>shiftPatternStatus(s,todayStr)!=='past'), todayStr);
+  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && shiftPatternStatus(s,todayStr)!=='past'), todayStr);
   if(!ROLLCALL_SHIFT && shifts.length) ROLLCALL_SHIFT = shifts[0].id;
   const shift = shifts.find(s=>s.id===ROLLCALL_SHIFT) || null;
   let rc = shift ? rollCallFor(ROLLCALL_DATE, shift.id) : null;
