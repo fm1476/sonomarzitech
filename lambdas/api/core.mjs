@@ -19,7 +19,7 @@ import {
   getSignedUrl
 } from "@aws-sdk/s3-request-presigner";
 
-const { Client } = pg;
+const { Pool } = pg;
 
 const DEMO_TENANT_ID =
   "f15865be-cf46-41e0-9d60-7cd753437501";
@@ -41,6 +41,7 @@ const ATTACHMENTS_BUCKET =
 let cachedDbCredentials = null;
 let cachedDbCredentialsAt = 0;
 const DB_CREDENTIAL_CACHE_MS = 5 * 60 * 1000;
+let dbPool = null;
 
 async function getDbCredentials() {
   const now = Date.now();
@@ -59,50 +60,20 @@ async function getDbCredentials() {
   return cachedDbCredentials;
 }
 
+async function getDatabasePool() {
+  if (dbPool) return dbPool;
 
-function parseBody(event) {
-  if (!event?.body) return {};
-
-  if (typeof event.body === "object") {
-    return event.body;
-  }
-
-  let raw = event.body;
-
-  if (event.isBase64Encoded) {
-    raw = Buffer.from(raw, "base64").toString("utf8");
-  }
-
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const error = new Error("Request body must be valid JSON.");
-    error.statusCode = 400;
-    throw error;
-  }
-}
-
-function response(statusCode, body) {
-  return {
-    statusCode,
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(body)
-  };
-}
-
-async function connectDatabase() {
   const credentials = await getDbCredentials();
-
-  const client = new Client({
+  dbPool = new Pool({
     host: process.env.DB_HOST,
     port: Number(process.env.DB_PORT || 5432),
     database: process.env.DB_NAME,
     user: credentials.username,
     password: credentials.password,
+    max: 4,
+    min: 0,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
     ssl: {
       rejectUnauthorized: true,
       ca: readFileSync(
@@ -112,9 +83,27 @@ async function connectDatabase() {
     }
   });
 
-  await client.connect();
+  dbPool.on("error", error => {
+    console.error("Idle PostgreSQL pool error:", error);
+  });
 
-  return client;
+  return dbPool;
+}
+
+async function connectDatabase() {
+  let pool = await getDatabasePool();
+
+  try {
+    return await pool.connect();
+  } catch (error) {
+    // A frozen Lambda execution environment can occasionally resume with a stale
+    // pool. Recreate it once and retry rather than failing the user's request.
+    console.warn("PostgreSQL pool checkout failed; recreating pool once.", error?.message || error);
+    try { await pool.end(); } catch {}
+    dbPool = null;
+    pool = await getDatabasePool();
+    return await pool.connect();
+  }
 }
 
 /*
@@ -5425,34 +5414,30 @@ async function getWorkspace(client, auth, event) {
     return workspaceAuth.error;
   }
 
-  // These workspace reads are independent. Run them together instead of
-  // paying four sequential database round trips during every sign-in.
-  const [tenantResult, agencyResult, recordsResult, templateResult] = await Promise.all([
-    client.query(
-      `SELECT id, slug, name, timezone, plan, status, enabled_modules, metadata
-         FROM suite_tenants WHERE id = $1 LIMIT 1`,
-      [tenantId]
-    ),
-    client.query(
-      `SELECT id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain
-         FROM suite_agencies WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
-      [tenantId, agencyId]
-    ),
-    client.query(
-      `SELECT key, value, version, deleted, updated_at, updated_by
-         FROM suite_records
-        WHERE tenant_id = $1 AND agency_id = $2
-        ORDER BY key`,
-      [tenantId, agencyId]
-    ),
-    client.query(
-      `SELECT empty_state
-         FROM suite_templates
-        WHERE tenant_id = $1 AND agency_id = $2
-        LIMIT 1`,
-      [tenantId, agencyId]
-    )
-  ]);
+  const tenantResult = await client.query(
+    `SELECT id, slug, name, timezone, plan, status, enabled_modules, metadata
+       FROM suite_tenants WHERE id = $1 LIMIT 1`,
+    [tenantId]
+  );
+  const agencyResult = await client.query(
+    `SELECT id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain
+       FROM suite_agencies WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+    [tenantId, agencyId]
+  );
+  const recordsResult = await client.query(
+    `SELECT key, value, version, deleted, updated_at, updated_by
+       FROM suite_records
+      WHERE tenant_id = $1 AND agency_id = $2
+      ORDER BY key`,
+    [tenantId, agencyId]
+  );
+  const templateResult = await client.query(
+    `SELECT empty_state
+       FROM suite_templates
+      WHERE tenant_id = $1 AND agency_id = $2
+      LIMIT 1`,
+    [tenantId, agencyId]
+  );
 
   if (!tenantResult.rows.length || !agencyResult.rows.length) {
     return response(404, { success: false, error: "Workspace not found." });
