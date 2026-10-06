@@ -3830,6 +3830,16 @@ const SuiteUX = (()=>{
 
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
    No writes are made to the legacy all-in-one app_state row. */
+function schedulingSaveBatches(patches,batchSize=60){
+  const collections=new Set(['scheduleShifts','scheduleAssignments','scheduleCoverages','overtimeOpportunities','specialEvents','leaveRequests','scheduleExceptions','shiftSwapRequests','rollCalls','otCallbackOptIns','bidCycles','extraDutyJobs','extraDutySignups','scheduleWorkGroups','schedulingSettings']);
+  const scheduling=[],other=[];
+  for(const patch of patches){const [path]=JSON.parse(patch.key);(path[0]==='pm'&&collections.has(path[1])?scheduling:other).push(patch);}
+  if(scheduling.length>5000)throw Error('Too many scheduling changes for one atomic save. Download pending changes before reloading.');
+  const batches=scheduling.length?[scheduling]:[];
+  for(let i=0;i<other.length;i+=batchSize)batches.push(other.slice(i,i+batchSize));
+  return batches;
+}
+
 function pmCollectionCanPersist(collection,roles,roleIds){
   if(roleIds.some(id=>id==='role_admin'||id==='role_platform_admin'))return true;
   const has=ability=>roleIds.some(id=>roles.find(r=>r.id===id)?.abilities?.[ability]===true);
@@ -4114,8 +4124,8 @@ const SuiteStore=(()=>{
         // that if a later batch fails, everything already confirmed saved stays confirmed --
         // a retry only has to redo what's actually still outstanding, not start over from zero.
         const BATCH_SIZE = 60;
-        const batches = [];
-        for(let i=0;i<patches.length;i+=BATCH_SIZE) batches.push(patches.slice(i,i+BATCH_SIZE));
+        // Keep linked scheduling awards/approvals atomic even above the usual batch size.
+        const batches = schedulingSaveBatches(patches,BATCH_SIZE);
         if(patches.length>20) debugLog(`[save] ${patches.length} record(s) to save in ${batches.length} batch(es):`, patches.map(p=>p.key));
         for(let i=0;i<batches.length;i++){
           if(staleSession()) return false; // the session moved on; abandon the rest of this save quietly

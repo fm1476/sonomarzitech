@@ -63,3 +63,12 @@ ui.STATE.pm.bidCycles=[structuredClone(cycle)];ui.STATE.pm.scheduleAssignments=s
 const before=JSON.stringify(ui.STATE.pm);
 assert.equal(ui.runBidAward(ui.STATE.pm.bidCycles[0]),false);assert.equal(JSON.stringify(ui.STATE.pm),before);
 console.log('Actual browser award action: linked roster application, no duplicate rerun, and unchanged state on scope failure passed.');
+
+const civil=fs.readFileSync('frontend/assets/js/modules/civil.js','utf8');
+const save={};vm.createContext(save);vm.runInContext(civil.slice(civil.indexOf('function schedulingSaveBatches('),civil.indexOf('function pmCollectionCanPersist(')),save);
+const large=Array.from({length:150},(_,i)=>({key:key('pm.scheduleAssignments','a'+i)}));
+const mixed=[...Array.from({length:70},(_,i)=>({key:key('fleet.vehicles','v'+i)})),...large,{key:key('pm.bidCycles','cycle')}];
+const batches=save.schedulingSaveBatches(mixed);
+assert.equal(batches.length,3);assert.equal(batches[0].length,151);assert.equal(batches[1].length,60);assert.equal(batches[2].length,10);
+assert.throws(()=>save.schedulingSaveBatches(Array.from({length:5001},(_,i)=>({key:key('pm.scheduleAssignments','a'+i)}))),/atomic save/);
+console.log('Large scheduling saves remain one atomic batch; unrelated saves retain normal batching.');
