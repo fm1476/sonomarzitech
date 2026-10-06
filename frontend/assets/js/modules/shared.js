@@ -1860,6 +1860,7 @@ const ABILITY_CATALOG = {
   "Personnel Mgmt: Scheduling": [
     ["pm_schedule_view","View shift patterns & duty roster"],
     ["pm_schedule_manage","Manage shift patterns & assignments"],
+    ["pm_schedule_publish","Publish or hide shift patterns on the live duty roster"],
   ],
   "Personnel Mgmt: Time-Off Requests": [
     ["pm_leave_request_submit","Submit their own request for a comp day, vacation day, or other time off"],
@@ -2067,10 +2068,11 @@ const QM_AUDITOR_ABILITIES = ["qm_equip_view","qm_assign_history","qm_reports_vi
 const FLEET_SUPERVISOR_ABILITIES = ["fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_inspection_conduct","fleet_inspection_view_all","fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export"];
 const FLEET_OFFICER_ABILITIES = ["fleet_vehicle_view","fleet_inspection_conduct"];
 const FLEET_AUDITOR_ABILITIES = ["fleet_vehicle_view","fleet_inspection_view_all","fleet_reports_view"];
+const PM_SCHEDULE_ADMIN_ABILITIES = ["pm_schedule_view","pm_schedule_manage","pm_schedule_publish","pm_leave_request_submit","pm_leave_request_approve","pm_overtime_view","pm_overtime_optin","pm_overtime_manage","pm_bidding_view","pm_bidding_submit","pm_bidding_manage","pm_rollcall_view","pm_rollcall_manage","pm_reports_view","pm_reports_export"];
 const PM_ADMIN_ABILITIES = ["personnel_bulk_import","pm_training_bulk_import","pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
   "pm_discipline_view","pm_discipline_manage","pm_medical_view","pm_medical_manage",
   "pm_inquiries_view","pm_inquiries_manage","pm_lodd_view","pm_lodd_manage",
-  "pm_schedule_view","pm_schedule_manage","pm_leave_request_submit","pm_leave_request_approve","pm_training_view_own","pm_training_manage","pm_training_request","pm_training_checkin_submit","pm_instructor_manage",
+  "pm_schedule_view","pm_schedule_manage","pm_schedule_publish","pm_leave_request_submit","pm_leave_request_approve","pm_training_view_own","pm_training_manage","pm_training_request","pm_training_checkin_submit","pm_instructor_manage",
   "pm_overtime_view","pm_overtime_optin","pm_overtime_manage","pm_bidding_view","pm_bidding_submit","pm_bidding_manage",
   "pm_extraduty_view","pm_extraduty_signup","pm_extraduty_manage","pm_rollcall_view","pm_rollcall_manage",
   "pm_reports_view","pm_reports_export","pm_admin_categories","pm_admin_audit"];
@@ -2149,6 +2151,8 @@ const DEFAULT_ROLES = [
       "fleet_bulk_import","fleet_admin_categories","fleet_admin_audit"])},
   {id:"role_pm_admin", name:"Personnel Admin", locked:false, description:"Full control over the Personnel Management module only \u2014 cannot see or access Quartermaster or Fleet Management.",
     agencyScope: [], abilities: abilitiesFor(["module_personnel","personnel_view","personnel_manage",...PM_ADMIN_ABILITIES])},
+  {id:"role_schedule_admin", name:"Schedule Admin", locked:false, description:"Manages agency scheduling, duty rosters, one-off staffing, shift publication, swaps, time off, overtime, bidding, and roll call without access to sensitive personnel HR records.",
+    agencyScope: [], abilities: abilitiesFor(["module_personnel","personnel_view",...PM_SCHEDULE_ADMIN_ABILITIES])},
   {id:"role_training_coordinator", name:"Training Coordinator", locked:false, description:"Manages training records, instructors, and course requests within Personnel Management only.",
     agencyScope: [], abilities: abilitiesFor(["module_personnel","personnel_view",...PM_TRAINING_COORDINATOR_ABILITIES])},
   {id:"role_fto", name:"Field Training Officer", locked:false, description:"Trains assigned recruits and documents field training or temporary coverage. Access is limited to assigned trainee files.", agencyScope:[], abilities: abilitiesFor(["ft_participate","ft_train"])},
