@@ -225,10 +225,10 @@ function buildData(){
     trainingCheckins: [], // {id, sessionId, personId, checkedInAt, applied} -- self-owned QR check-in receipts, reviewed and applied to a session's roster by a training coordinator rather than writing to the shared roster directly
     instructors: seedInstructors(),
     scheduleWorkGroups: [
-      {id:"wg_patrol",name:"Patrol",active:true},
-      {id:"wg_dispatch",name:"Dispatch",active:true},
-      {id:"wg_records",name:"Records",active:true},
-      {id:"wg_investigations",name:"Investigations",active:true}
+      {id:"wg_patrol",name:"Patrol",active:true,visibility:"unit",unitNames:["Patrol"],viewerIds:[],managerIds:[]},
+      {id:"wg_dispatch",name:"Dispatch",active:true,visibility:"unit",unitNames:["Dispatch"],viewerIds:[],managerIds:[]},
+      {id:"wg_records",name:"Records",active:true,visibility:"unit",unitNames:["Records"],viewerIds:[],managerIds:[]},
+      {id:"wg_investigations",name:"Investigations",active:true,visibility:"unit",unitNames:["Investigations","Detectives"],viewerIds:[],managerIds:[]}
     ],
     scheduleShifts: seedScheduleShifts().map(s=>({...s,workGroupId:"wg_patrol"})),
     scheduleAssignments: seedScheduleAssignments(),
@@ -307,7 +307,8 @@ function migrateData(){
     STATE.pm.refData.trainingLocations = STATE.pm.refData.trainingLocations.map(l=>typeof l==='string' ? {name:l, address:''} : l);
   }
   if(!STATE.pm.instructors) STATE.pm.instructors = [];
-  if(!STATE.pm.scheduleWorkGroups) STATE.pm.scheduleWorkGroups = [{id:"wg_patrol",name:"Patrol",active:true}];
+  if(!STATE.pm.scheduleWorkGroups) STATE.pm.scheduleWorkGroups = [{id:"wg_patrol",name:"Patrol",active:true,visibility:"unit",unitNames:["Patrol"],viewerIds:[],managerIds:[]}];
+  STATE.pm.scheduleWorkGroups.forEach(g=>{if(!g.visibility)g.visibility='unit';if(!Array.isArray(g.unitNames))g.unitNames=[g.name];if(!Array.isArray(g.viewerIds))g.viewerIds=[];if(!Array.isArray(g.managerIds))g.managerIds=[];});
   if(!STATE.pm.scheduleShifts) STATE.pm.scheduleShifts = [];
   STATE.pm.scheduleShifts.forEach(s=>{ if(!s.workGroupId) s.workGroupId=STATE.pm.scheduleWorkGroups[0]?.id||"wg_patrol"; });
   if(!STATE.pm.scheduleAssignments) STATE.pm.scheduleAssignments = [];
@@ -2704,8 +2705,29 @@ function renderScheduling(){
   else if(SCHED_SUBTAB==='rollcall') renderRollCallSub();
 }
 function scheduleWorkGroupName(id){ return (STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)?.name || 'Unassigned'; }
+function currentPerson(){return STATE.personnel.find(p=>p.id===CURRENT_USER_ID)||{};}
+function isGlobalScheduleAdmin(){return can('system_admin')||can('platform_admin');}
+function canViewWorkGroup(group){
+  if(!group)return false;if(isGlobalScheduleAdmin())return true;if(group.visibility==='agency')return true;
+  if((group.viewerIds||[]).includes(CURRENT_USER_ID)||(group.managerIds||[]).includes(CURRENT_USER_ID))return true;
+  const p=currentPerson(), unit=String(p.unit||p.department||'').toLowerCase();
+  return group.visibility==='unit'&&(group.unitNames||[]).some(u=>unit.includes(String(u).toLowerCase()));
+}
+function canManageWorkGroup(group){return !!group&&(isGlobalScheduleAdmin()||((group.managerIds||[]).includes(CURRENT_USER_ID)&&can('pm_schedule_manage')));}
+function visibleScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canViewWorkGroup(g));}
+function openWorkGroupAccessModal(group){
+  if(!group)return;document.getElementById('modalBox').className='modal modal-lg';
+  const people=STATE.personnel.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>${escapeHtml(group.name)} Calendar Access</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body">
+  <div class="form-row"><label>Default Calendar Visibility</label><select id="fWgVisibility"><option value="unit" ${group.visibility==='unit'?'selected':''}>Mapped Unit Members + Selected People</option><option value="agency" ${group.visibility==='agency'?'selected':''}>All Agency Personnel</option><option value="selected" ${group.visibility==='selected'?'selected':''}>Selected People Only</option></select></div>
+  <div class="form-row"><label>Mapped Units <span class="hint">Comma-separated; members automatically receive view access</span></label><input id="fWgUnits" value="${escapeHtml((group.unitNames||[]).join(', '))}"></div>
+  <div class="form-2col"><div class="form-row"><label>Additional Viewers</label><div class="access-person-list">${people.map(p=>`<label><input type="checkbox" data-wg-viewer="${p.id}" ${(group.viewerIds||[]).includes(p.id)?'checked':''}> ${escapeHtml(p.name)}</label>`).join('')}</div></div>
+  <div class="form-row"><label>Scheduling Managers</label><div class="access-person-list">${people.map(p=>`<label><input type="checkbox" data-wg-manager="${p.id}" ${(group.managerIds||[]).includes(p.id)?'checked':''}> ${escapeHtml(p.name)}</label>`).join('')}</div><div class="hint">Managers may modify only this Work Group's schedule, subject to their scheduling abilities.</div></div></div></div>
+  <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Save Access</button></div>`;
+  openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;document.getElementById('mSave').onclick=()=>{group.visibility=document.getElementById('fWgVisibility').value;group.unitNames=document.getElementById('fWgUnits').value.split(',').map(x=>x.trim()).filter(Boolean);group.viewerIds=[...document.querySelectorAll('[data-wg-viewer]:checked')].map(x=>x.dataset.wgViewer);group.managerIds=[...document.querySelectorAll('[data-wg-manager]:checked')].map(x=>x.dataset.wgManager);logActivity(`Updated calendar access for ${group.name}.`,'schedule');persist();closeModal();renderScheduling();};
+}
 function selectedCalendarWorkGroups(){
-  const active=(STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false);
+  const active=visibleScheduleWorkGroups();
   if(!SCHED_CAL_WORKGROUPS.length) return active.map(g=>g.id);
   return SCHED_CAL_WORKGROUPS.filter(id=>active.some(g=>g.id===id));
 }
@@ -3720,7 +3742,7 @@ function renderRollCallSub(){
 }
 
 function renderDutyCalendar(body){
-  const allGroups=(STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false);
+  const allGroups=visibleScheduleWorkGroups();
   if(!SCHED_CAL_WORKGROUPS.length) SCHED_CAL_WORKGROUPS=allGroups.map(g=>g.id);
   const groupIds=new Set(selectedCalendarWorkGroups());
   const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && groupIds.has(s.workGroupId)));
