@@ -381,7 +381,7 @@ const NAV_ITEMS = [
   {id:"pm-records", label:"Personnel Records", icon:"idcard", title:"Personnel Records", sub:"Complete HR record for every employee", requiredAbility:"pm_records_view"},
   {id:"pm-disciplinary", label:"Disciplinary", icon:"alert", title:"Disciplinary Actions", sub:"Track disciplinary actions and pending expirations", requiredAbility:"pm_discipline_view"},
   {id:"pm-training", label:"Training", icon:"award", title:"Training & Certifications", sub:"Courses, records, requests, and instructors", requiredAbility:["pm_training_view_own","pm_training_manage","pm_training_request","pm_instructor_manage"]},
-  {id:"pm-scheduling", label:"Scheduling", icon:"calendar", title:"Scheduling & Duty Roster", sub:"Shift patterns, coverage, bidding, extra duty, and roll call", requiredAbility:["pm_schedule_view","pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view"]},
+  {id:"pm-scheduling", label:"Scheduling", icon:"calendar", title:"Scheduling & Duty Roster", sub:"Shift patterns, coverage, bidding, extra duty, and roll call", requiredAbility:["pm_schedule_view","pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view","pm_leave_request_submit","pm_leave_request_approve"]},
   {id:"pm-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Configurable reporting across the personnel record", requiredAbility:"pm_reports_view"},
   {id:"pm-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data and the system audit log", requiredAbility:["pm_admin_categories","pm_admin_audit"]},
 ];
@@ -2666,7 +2666,8 @@ function shiftColor(shift){
 
 const SCHED_TABS = [
   {key:'roster', label:'Roster & Patterns', ability:'pm_schedule_view'},
-  {key:'events', label:'Special Events', ability:'pm_schedule_view'},
+  {key:'events', label:'Special Events', ability:['pm_schedule_view','pm_overtime_view']},
+  {key:'swaps', label:'Shift Swaps', ability:['pm_schedule_view','pm_leave_request_submit']},
   {key:'timeoff', label:'Time Off Requests', ability:['pm_leave_request_submit','pm_leave_request_approve']},
   {key:'overtime', label:'Overtime & Callback', ability:'pm_overtime_view'},
   {key:'bidding', label:'Bidding & Vacation Picks', ability:'pm_bidding_view'},
@@ -2698,6 +2699,7 @@ function renderScheduling(){
   document.querySelectorAll('[data-sched-tab]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_SUBTAB=b.dataset.schedTab; renderScheduling(); }));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
   else if(SCHED_SUBTAB==='events') renderSpecialEventsSub();
+  else if(SCHED_SUBTAB==='swaps') renderShiftSwapsSub();
   else if(SCHED_SUBTAB==='timeoff') renderTimeOffSub();
   else if(SCHED_SUBTAB==='overtime') renderOvertimeSub();
   else if(SCHED_SUBTAB==='bidding') renderBiddingSub();
@@ -2717,6 +2719,23 @@ function canManageWorkGroup(group){return !!group&&(isGlobalScheduleAdmin()||((g
 function canViewScheduleShift(shift){return !!shift&&canViewWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId));}
 function canManageScheduleShift(shift){return !!shift&&canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId));}
 function manageableScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canManageWorkGroup(g));}
+function personScheduleGroupIds(personId,record={}){
+  const start=record.startDate||record.date||'0000-00-00',end=record.endDate||record.date||'9999-99-99';
+  const ids=(STATE.pm.scheduleAssignments||[]).filter(a=>a.personId===personId&&(!a.startDate||a.startDate<=end)&&(!a.endDate||a.endDate>=start)).map(a=>STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId)?.workGroupId).filter(Boolean);
+  if(ids.length)return [...new Set(ids)];
+  const p=STATE.personnel.find(p=>p.id===personId),unit=String(p?.unit||p?.department||'').trim().toLowerCase();
+  return (STATE.pm.scheduleWorkGroups||[]).filter(g=>unit&&(g.unitNames||[]).some(u=>String(u).trim().toLowerCase()===unit)).map(g=>g.id);
+}
+function canManagePersonSchedule(personId,record={},ability='pm_schedule_manage'){
+  if(isGlobalScheduleAdmin())return true;
+  const ids=personScheduleGroupIds(personId,record);
+  return can(ability)&&ids.length>0&&ids.every(id=>(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)?.managerIds?.includes(CURRENT_USER_ID));
+}
+function canViewPersonSchedule(personId,record={}){
+  return personId===CURRENT_USER_ID||isGlobalScheduleAdmin()||personScheduleGroupIds(personId,record).some(id=>canViewWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)));
+}
+function canManageSwapRequest(req){return !!req&&canManagePersonSchedule(req.requesterId,req)&&canManagePersonSchedule(req.coveringId,req);}
+function canManageRollCallShift(shift){return !!shift&&(isGlobalScheduleAdmin()||(can('pm_rollcall_manage')&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.managerIds?.includes(CURRENT_USER_ID)));}
 function visibleScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canViewWorkGroup(g));}
 function openWorkGroupAccessModal(group){
   if(!group||!isGlobalScheduleAdmin())return;document.getElementById('modalBox').className='modal modal-lg';
@@ -2767,10 +2786,24 @@ function openSpecialEventModal(){
 function openSpecialEventDetail(e){
   if(!e)return; const mine=(e.requests||[]).find(r=>r.personId===CURRENT_USER_ID), canManage=isGlobalScheduleAdmin()||((e.eligibleWorkGroupIds||[]).length>0&&(e.eligibleWorkGroupIds||[]).every(id=>canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)))); const conflict=personScheduledOnDate(CURRENT_USER_ID,e.startDate);
   const reqRows=(e.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${r.conflict?'<span style="color:var(--red);font-weight:700;">Schedule conflict</span>':'Clear'}</td><td style="text-transform:capitalize;">${escapeHtml(r.status)}</td>${canManage?`<td>${r.status==='pending'?'<button class="btn btn-sm btn-primary" data-event-award="'+r.personId+'">Award</button>':''}</td>`:''}</tr>`).join('')||`<tr><td colspan="${canManage?4:3}" style="padding:16px;color:var(--text-dim);text-align:center;">No requests yet.</td></tr>`;
-  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${!mine?'<button class="btn btn-primary" id="mRequestEvent">Request Assignment</button>':''}</div>`;
+  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><h3>${escapeHtml(e.name)}</h3><div class="hint">${escapeHtml(e.startDate)}${e.endDate!==e.startDate?' to '+escapeHtml(e.endDate):''} · ${escapeHtml(e.startTime)}-${escapeHtml(e.endTime)} · ${escapeHtml(e.location||'')}</div></div><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(e.notes||'No additional instructions.')}</p>${conflict&&!mine?'<div class="callout" style="margin-bottom:12px;color:var(--red);">You are already scheduled to work on this date. A Schedule Admin must reassign you before you can be awarded this event.</div>':''}<table><thead><tr><th>Employee</th><th>Availability</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${reqRows}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${!mine&&e.status==='published'&&can('pm_overtime_optin')?'<button class="btn btn-primary" id="mRequestEvent">Request Assignment</button>':''}</div>`;
   openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
   document.getElementById('mRequestEvent')?.addEventListener('click',()=>{e.requests.push({personId:CURRENT_USER_ID,status:'pending',conflict,requestedAt:new Date().toISOString()});logActivity(`Requested assignment to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();});
   document.querySelectorAll('[data-event-award]').forEach(b=>b.addEventListener('click',()=>{const r=e.requests.find(x=>x.personId===b.dataset.eventAward);if(personScheduledOnDate(r.personId,e.startDate)){if(!confirm(personName(r.personId)+' is scheduled for regular duty. Reassign them from regular duty to this special event?'))return;const duty=STATE.pm.scheduleAssignments.find(a=>a.personId===r.personId&&isOnDutyOnDate(a,STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId),e.startDate)&&!activeExceptionFor(r.personId,e.startDate));if(duty){STATE.pm.scheduleExceptions.push({id:'ex'+Date.now(),personId:r.personId,code:'EVT',startDate:e.startDate,endDate:e.endDate||e.startDate,notes:'Reassigned to special event: '+e.name,sourceEventId:e.id});}}r.status='awarded';r.awardedAt=new Date().toISOString();r.awardedBy=CURRENT_USER_ID;logActivity(`Awarded ${personName(r.personId)} to special event "${e.name}".`,'schedule');persist();closeModal();renderSpecialEventsSub();}));
+  wireRecordLinks();
+}
+
+function renderShiftSwapsSub(){
+  const requests=(STATE.pm.shiftSwapRequests||[]).filter(r=>[r.requesterId,r.coveringId].includes(CURRENT_USER_ID)||canViewPersonSchedule(r.requesterId,r)).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const rows=requests.map(r=>{
+    const manages=canManageSwapRequest(r),pending=r.status==='pending';
+    return `<tr><td>${escapeHtml(r.date)}</td><td>${recordLink(r.requesterId)}</td><td>${recordLink(r.coveringId)}</td><td>${escapeHtml(r.reason||'')}</td><td>${escapeHtml(r.status)}</td><td>${pending&&manages?`<button class="btn btn-sm btn-primary" data-swap-approve="${r.id}">Approve</button> <button class="btn btn-sm btn-outline" data-swap-deny="${r.id}">Deny</button>`:''}${pending&&r.requesterId===CURRENT_USER_ID?`<button class="btn btn-sm btn-outline" data-swap-cancel="${r.id}">Cancel Request</button>`:''}</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="padding:16px;text-align:center;">No shift swap requests.</td></tr>';
+  document.getElementById('schedSubBody').innerHTML=`<div class="panel"><div class="panel-head"><h2>Shift Swap Requests</h2>${can('pm_leave_request_submit')||can('pm_schedule_manage')?'<button class="btn btn-primary btn-sm" id="btnNewSwap">Request Swap</button>':''}</div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Requesting</th><th>Covering</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  document.getElementById('btnNewSwap')?.addEventListener('click',()=>openSwapRequestModal());
+  document.querySelectorAll('[data-swap-approve]').forEach(b=>b.onclick=()=>approveSwapRequest(b.dataset.swapApprove));
+  document.querySelectorAll('[data-swap-deny]').forEach(b=>b.onclick=()=>denySwapRequest(b.dataset.swapDeny));
+  document.querySelectorAll('[data-swap-cancel]').forEach(b=>b.onclick=()=>cancelSwapRequest(b.dataset.swapCancel));
   wireRecordLinks();
 }
 
@@ -2804,6 +2837,7 @@ function renderRosterSub(){
 
   const exceptionRows = (STATE.pm.scheduleExceptions||[]).slice()
     .filter(e=>{
+      if(!canViewPersonSchedule(e.personId,e))return false;
       if(!EXCEPTIONS_FILTER.showPast && e.endDate < todayStr) return false;
       const q = EXCEPTIONS_FILTER.q.trim().toLowerCase();
       if(q && !personName(e.personId).toLowerCase().includes(q) && !(e.notes||'').toLowerCase().includes(q) && !e.code.toLowerCase().includes(q)) return false;
@@ -2812,6 +2846,7 @@ function renderRosterSub(){
       return true;
     })
     .sort((a,b)=>b.startDate.localeCompare(a.startDate)).map(e=>{
+    const canManage=canManagePersonSchedule(e.personId,e);
     const code = exceptionCodeInfo(e.code);
     const dateRange = e.startDate===e.endDate ? e.startDate : `${e.startDate} to ${e.endDate}`;
     return `<tr><td>${recordLink(e.personId)}</td><td><span class="badge" style="background:${code.color}22;color:${code.color};border:1px solid ${code.color}55;">${escapeHtml(e.code)}</span> <span style="color:var(--text-dim);font-size:11px;">${escapeHtml(code.name)}</span></td><td>${escapeHtml(dateRange)}</td><td>${escapeHtml(e.notes||'')}</td>
@@ -2822,6 +2857,7 @@ function renderRosterSub(){
   const swapStatusColors = {pending:'var(--gold)', approved:'var(--green)', denied:'var(--red)', cancelled:'var(--text-dim)'};
   const swapRows = (STATE.pm.shiftSwapRequests||[]).slice()
     .filter(r=>{
+      if(![r.requesterId,r.coveringId].includes(CURRENT_USER_ID)&&!canViewPersonSchedule(r.requesterId,r))return false;
       if(!SWAP_FILTER.showPast && r.date < todayStr) return false;
       const q = SWAP_FILTER.q.trim().toLowerCase();
       if(q && !personName(r.requesterId).toLowerCase().includes(q) && !personName(r.coveringId).toLowerCase().includes(q) && !(r.reason||'').toLowerCase().includes(q)) return false;
@@ -2830,6 +2866,7 @@ function renderRosterSub(){
       return true;
     })
     .sort((a,b)=>b.date.localeCompare(a.date)).map(r=>{
+    const canManage=canManageSwapRequest(r);
     const isOwn = r.requesterId===CURRENT_USER_ID;
     const actions = [];
     if(r.status==='pending' && canManage) actions.push(`<button class="btn-icon" data-approve-swap="${r.id}" title="Approve" style="color:var(--green);">${ICONS.check||'&check;'}</button><button class="btn-icon" data-deny-swap="${r.id}" title="Deny" style="color:var(--red);">${ICONS.x||'&times;'}</button>`);
@@ -2961,6 +2998,7 @@ function renderRosterSub(){
     document.querySelectorAll('[data-edit-exception]').forEach(b=>b.addEventListener('click', ()=>openExceptionFormModal(STATE.pm.scheduleExceptions.find(e=>e.id===b.dataset.editException))));
     document.querySelectorAll('[data-del-exception]').forEach(b=>b.addEventListener('click', ()=>{
       const e = STATE.pm.scheduleExceptions.find(x=>x.id===b.dataset.delException);
+      if(!e||!canManagePersonSchedule(e.personId,e))return;
       if(!confirm(`Delete this ${e.code} entry for ${personName(e.personId)}?`)) return;
       STATE.pm.scheduleExceptions = STATE.pm.scheduleExceptions.filter(x=>x.id!==e.id);
       logActivity(`Deleted a ${e.code} exception for ${personName(e.personId)}.`, "schedule");
@@ -3033,11 +3071,11 @@ function renderOvertimeSub(){
   const canRequest = can('pm_overtime_optin');
   const gaps = computeCoverageGaps(OT_LOOKAHEAD_DAYS).filter(g=>canViewWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(w=>w.id===g.shift.workGroupId)));
   const ranked = rankedCallbackList(), isOptedIn=STATE.pm.otCallbackOptIns.includes(CURRENT_USER_ID);
-  const eligibleToAdd=STATE.personnel.filter(p=>!STATE.pm.otCallbackOptIns.includes(p.id));
+  const eligibleToAdd=STATE.personnel.filter(p=>!STATE.pm.otCallbackOptIns.includes(p.id)&&canManagePersonSchedule(p.id,{},'pm_overtime_manage'));
   const opportunities=(STATE.pm.overtimeOpportunities||[]).filter(o=>o.status!=='closed'&&canViewScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId))).sort((a,b)=>a.date.localeCompare(b.date));
   const oppRows=opportunities.map(o=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);if(!shift)return '';const mine=(o.requests||[]).find(r=>r.personId===CURRENT_USER_ID);const mgr=canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId));return `<tr><td>${escapeHtml(o.date)}</td><td>${escapeHtml(scheduleWorkGroupName(shift.workGroupId))}</td><td>${escapeHtml(shift.name)}</td><td>${(o.requests||[]).filter(r=>r.status==='pending').length} pending</td><td>${mine?'<span class="badge">'+escapeHtml(mine.status)+'</span>':canRequest?'<button class="btn btn-sm btn-primary" data-request-ot="'+o.id+'">Request Shift</button>':''}${mgr?' <button class="btn btn-sm btn-outline" data-review-ot="'+o.id+'">Review</button>':''}</td></tr>`;}).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No open overtime opportunities.</td></tr>';
   const gapRows=gaps.map(g=>{const mgr=canManageWorkGroup((STATE.pm.scheduleWorkGroups||[]).find(w=>w.id===g.shift.workGroupId));const existing=opportunities.find(o=>o.date===g.date&&o.shiftId===g.shiftId);return `<tr><td>${escapeHtml(g.date)}</td><td>${escapeHtml(scheduleWorkGroupName(g.shift.workGroupId))}</td><td>${escapeHtml(g.shift.name)}</td><td style="color:var(--red);font-weight:700;">${g.staffed}/${g.minStaff}</td><td>${g.needed}</td><td>${mgr&&!existing?'<button class="btn btn-sm btn-primary" data-publish-ot="'+escapeHtml(g.date)+'|'+g.shiftId+'">Publish OT</button>':existing?'<span class="badge">Published</span>':''}</td></tr>`;}).join('')||`<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No coverage gaps in the next ${OT_LOOKAHEAD_DAYS} days.</td></tr>`;
-  const rankRows=ranked.map((row,i)=>`<tr><td>${i+1}</td><td>${recordLink(row.personId)}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)} hrs</td>${canManage?`<td><button class="btn-icon" data-remove-optin="${row.personId}" title="Remove from list">${ICONS.trash}</button></td>`:'<td></td>'}</tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is currently on the callback list.</td></tr>';
+  const rankRows=ranked.map((row,i)=>`<tr><td>${i+1}</td><td>${recordLink(row.personId)}</td><td>${escapeHtml(personPhone(row.personId)||'—')}</td><td>${row.hours.toFixed(1)} hrs</td>${canManage&&canManagePersonSchedule(row.personId,{},'pm_overtime_manage')?`<td><button class="btn-icon" data-remove-optin="${row.personId}" title="Remove from list">${ICONS.trash}</button></td>`:'<td></td>'}</tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No one is currently on the callback list.</td></tr>';
   document.getElementById('schedSubBody').innerHTML=`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><div><h2>Open Overtime Opportunities</h2><span class="hint">Published vacancies staff can request</span></div></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Requests</th><th></th></tr></thead><tbody>${oppRows}</tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Coverage Gaps</h2><span class="hint">Next ${OT_LOOKAHEAD_DAYS} days</span></div><div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Date</th><th>Work Group</th><th>Shift</th><th>Staffing</th><th>Needed</th><th></th></tr></thead><tbody>${gapRows}</tbody></table></div></div>
   <div class="panel"><div class="panel-head"><h2>Overtime Callback List</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${canRequest?`<button class="btn btn-sm ${isOptedIn?'btn-outline':'btn-primary'}" id="btnToggleOptIn">${isOptedIn?'Leave the list':'Join the callback list'}</button>`:''}${canManage?`<select id="fAddOptIn" style="max-width:220px;"><option value="">Add someone…</option>${eligibleToAdd.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>`:''}</div></div><div style="padding:14px 20px 0;font-size:12px;color:var(--text-dim);">Ranked by fewest overtime hours worked in the last 90 days; ties break by seniority.</div><div class="panel-body" style="padding:14px 0 0;overflow-x:auto;"><table><thead><tr><th>#</th><th>Employee</th><th>Phone</th><th>OT Hours (90d)</th><th></th></tr></thead><tbody>${rankRows}</tbody></table></div></div>`;
@@ -3045,8 +3083,8 @@ function renderOvertimeSub(){
   document.querySelectorAll('[data-request-ot]').forEach(b=>b.onclick=()=>{const o=STATE.pm.overtimeOpportunities.find(x=>x.id===b.dataset.requestOt),shift=STATE.pm.scheduleShifts.find(s=>s.id===o.shiftId);const conflict=personScheduledOnDate(CURRENT_USER_ID,o.date);if(conflict){toast('You are already scheduled to work on this date.',true);return;}o.requests.push({personId:CURRENT_USER_ID,status:'pending',requestedAt:new Date().toISOString()});logActivity(`Requested overtime on ${o.date} for ${shift.name}.`,'schedule');persist();renderOvertimeSub();});
   document.querySelectorAll('[data-review-ot]').forEach(b=>b.onclick=()=>openOvertimeOpportunity(b.dataset.reviewOt));
   document.getElementById('btnToggleOptIn')?.addEventListener('click',()=>{if(isOptedIn)STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==CURRENT_USER_ID);else STATE.pm.otCallbackOptIns.push(CURRENT_USER_ID);logActivity(`${isOptedIn?'Left':'Joined'} the overtime callback list.`,'schedule');persist();renderOvertimeSub();});
-  document.getElementById('fAddOptIn')?.addEventListener('change',e=>{if(!e.target.value)return;STATE.pm.otCallbackOptIns.push(e.target.value);persist();renderOvertimeSub();});
-  document.querySelectorAll('[data-remove-optin]').forEach(b=>b.onclick=()=>{STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==b.dataset.removeOptin);persist();renderOvertimeSub();});wireRecordLinks();
+  document.getElementById('fAddOptIn')?.addEventListener('change',e=>{if(!e.target.value||!canManagePersonSchedule(e.target.value,{},'pm_overtime_manage'))return;STATE.pm.otCallbackOptIns.push(e.target.value);persist();renderOvertimeSub();});
+  document.querySelectorAll('[data-remove-optin]').forEach(b=>b.onclick=()=>{if(!canManagePersonSchedule(b.dataset.removeOptin,{},'pm_overtime_manage'))return;STATE.pm.otCallbackOptIns=STATE.pm.otCallbackOptIns.filter(id=>id!==b.dataset.removeOptin);persist();renderOvertimeSub();});wireRecordLinks();
 }
 function openOvertimeOpportunity(id){
  const o=STATE.pm.overtimeOpportunities.find(x=>x.id===id),shift=STATE.pm.scheduleShifts.find(s=>s.id===o?.shiftId);if(!o||!shift||!canManageScheduleShift(shift)||o.status==='closed')return;
@@ -3057,7 +3095,7 @@ function openOvertimeOpportunity(id){
 
 function openFillGapModal(date, shiftId){
   const shift = STATE.pm.scheduleShifts.find(s=>s.id===shiftId);
-  if(!shift) return;
+  if(!shift||!canManageScheduleShift(shift)) return;
   const onDuty = new Set(onDutyRoster(shift, date));
   const ranked = rankedCallbackList().filter(row=>!onDuty.has(row.personId));
   document.getElementById('modalBox').className = 'modal';
@@ -3503,7 +3541,7 @@ function renderTimeOffSub(){
   const me = STATE.personnel.find(p=>p.id===CURRENT_USER_ID);
   const requestableCodes = (STATE.pm.refData.exceptionCodes||[]).filter(c=>c.active!==false && c.requestable);
 
-  const pending = STATE.pm.leaveRequests.filter(r=>r.status==='pending').slice().sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
+  const pending = STATE.pm.leaveRequests.filter(r=>r.status==='pending'&&canManagePersonSchedule(r.personId,r,'pm_leave_request_approve')).slice().sort((a,b)=>(a.submittedAt||'').localeCompare(b.submittedAt||''));
   const mine = (canSubmit && me) ? STATE.pm.leaveRequests.filter(r=>r.personId===me.id).slice().sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||'')) : [];
 
   const codeBadge = code=>{
@@ -3556,7 +3594,7 @@ function renderTimeOffSub(){
   document.querySelectorAll('[data-deny-leave]').forEach(b=>b.addEventListener('click', ()=>decideLeaveRequest(b.dataset.denyLeave, 'denied')));
   document.querySelectorAll('[data-cancel-leave]').forEach(b=>b.addEventListener('click', ()=>{
     const req = STATE.pm.leaveRequests.find(r=>r.id===b.dataset.cancelLeave);
-    if(!req || req.status!=='pending') return;
+    if(!req || req.status!=='pending'||req.personId!==CURRENT_USER_ID||!can('pm_leave_request_submit')) return;
     if(!confirm('Rescind this pending time-off request?')) return;
     req.status = 'cancelled';
     req.rescindedAt = new Date().toISOString();
@@ -3612,7 +3650,7 @@ function openRequestTimeOffModal(requestableCodes, me){
 function dateRangeText(startDate,endDate){ return startDate===endDate ? startDate : `${startDate} to ${endDate}`; }
 function decideLeaveRequest(id, decision){
   const req = STATE.pm.leaveRequests.find(r=>r.id===id);
-  if(!req || req.status!=='pending') return;
+  if(!req || req.status!=='pending'||!canManagePersonSchedule(req.personId,req,'pm_leave_request_approve')||!['approved','denied'].includes(decision)) return;
   if(decision==='denied'){
     const note = (prompt('Optional note for the employee (visible on their request):','') || '').trim();
     req.status = 'denied';
@@ -3645,11 +3683,12 @@ function decideLeaveRequest(id, decision){
   renderTimeOffSub();
 }
 function renderRollCallSub(){
-  const canManage = can('pm_rollcall_manage');
   const todayStr = fmt(new Date());
-  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && shiftPatternStatus(s,todayStr)!=='past'), todayStr);
+  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && canViewScheduleShift(s) && shiftPatternStatus(s,todayStr)!=='past'), todayStr);
+  if(!shifts.some(s=>s.id===ROLLCALL_SHIFT))ROLLCALL_SHIFT='';
   if(!ROLLCALL_SHIFT && shifts.length) ROLLCALL_SHIFT = shifts[0].id;
   const shift = shifts.find(s=>s.id===ROLLCALL_SHIFT) || null;
+  const canManage=canManageRollCallShift(shift);
   let rc = shift ? rollCallFor(ROLLCALL_DATE, shift.id) : null;
 
   const rosterIds = shift ? onDutyRoster(shift, ROLLCALL_DATE) : [];
@@ -3692,6 +3731,7 @@ function renderRollCallSub(){
   if(canManage){
     const saveBtn = document.getElementById('btnSaveRollCall');
     saveBtn.addEventListener('click', ()=>{
+      if(!canManageRollCallShift(shift))return;
       const updated = entries.map((e,i)=>({
         personId: e.personId,
         beat: document.querySelector(`[data-rc-field="beat"][data-rc-idx="${i}"]`).value.trim(),
@@ -4052,13 +4092,16 @@ function openAssignmentFormModal(existing){
 }
 
 function openExceptionFormModal(existing){
+  if(existing&&!canManagePersonSchedule(existing.personId,existing))return;
+  const people=STATE.personnel.filter(p=>canManagePersonSchedule(p.id));
+  if(!people.length)return;
   const editing = !!existing;
   const codes = selectableExceptionCodes(editing ? existing.code : null);
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>${editing?'Edit Time Off / Exception':'Log Time Off / Exception'}</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Employee</label><select id="fExPerson">${STATE.personnel.map(p=>`<option value="${p.id}" ${editing&&existing.personId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Employee</label><select id="fExPerson">${people.map(p=>`<option value="${p.id}" ${editing&&existing.personId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Code</label>
         <select id="fExCode">${codes.map(c=>`<option value="${c.code}" ${editing&&existing.code===c.code?'selected':''}>${c.code} — ${escapeHtml(c.name)}</option>`).join('')}</select>
       </div>
@@ -4086,6 +4129,7 @@ function openExceptionFormModal(existing){
       notes: document.getElementById('fExNotes').value.trim(),
     };
     if(!STATE.pm.scheduleExceptions) STATE.pm.scheduleExceptions = [];
+    if(!canManagePersonSchedule(data.personId,data)||!data.startDate||!data.endDate||data.endDate<data.startDate){toast("Choose a valid date range in a calendar you manage.",true);return;}
     if(editing){
       Object.assign(existing, data);
       logActivity(`Updated a ${data.code} entry for ${personName(personId)}.`, "schedule");
@@ -4109,7 +4153,7 @@ function openSwapRequestModal(){
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>Request Shift Swap</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Requesting (wants the day off)</label><select id="fSwapRequester">${STATE.personnel.map(p=>`<option value="${p.id}" ${defaultRequester===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Requesting (wants the day off)</label><select id="fSwapRequester">${STATE.personnel.filter(p=>p.id===CURRENT_USER_ID||canManagePersonSchedule(p.id)).map(p=>`<option value="${p.id}" ${defaultRequester===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Covering (will work the shift instead)</label><select id="fSwapCovering">${STATE.personnel.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Date</label><input type="date" id="fSwapDate" value="${fmt(new Date())}"></div>
       <div class="form-row"><label>Reason</label><input type="text" id="fSwapReason" placeholder="Optional"></div>
@@ -4124,6 +4168,7 @@ function openSwapRequestModal(){
     const coveringId = document.getElementById('fSwapCovering').value;
     const date = document.getElementById('fSwapDate').value;
     if(!date){ toast("Choose a date.", true); return; }
+    if(requesterId!==CURRENT_USER_ID&&!(canManagePersonSchedule(requesterId,{date})&&canManagePersonSchedule(coveringId,{date})))return;
     if(requesterId===coveringId){ toast("Pick two different people.", true); return; }
     if(!STATE.pm.shiftSwapRequests) STATE.pm.shiftSwapRequests = [];
     STATE.pm.shiftSwapRequests.push({
@@ -4141,7 +4186,7 @@ function openSwapRequestModal(){
 
 function approveSwapRequest(id){
   const req = (STATE.pm.shiftSwapRequests||[]).find(r=>r.id===id);
-  if(!req || req.status!=='pending') return;
+  if(!req || req.status!=='pending'||!canManageSwapRequest(req)) return;
   if(!confirm(`Approve this swap? ${personName(req.coveringId)} will cover for ${personName(req.requesterId)} on ${req.date}.`)) return;
   if(!STATE.pm.scheduleExceptions) STATE.pm.scheduleExceptions = [];
   if(!STATE.pm.scheduleCoverages) STATE.pm.scheduleCoverages = [];
@@ -4163,7 +4208,7 @@ function approveSwapRequest(id){
 
 function denySwapRequest(id){
   const req = (STATE.pm.shiftSwapRequests||[]).find(r=>r.id===id);
-  if(!req || req.status!=='pending') return;
+  if(!req || req.status!=='pending'||!canManageSwapRequest(req)) return;
   if(!confirm(`Deny the swap request from ${personName(req.requesterId)}?`)) return;
   req.status = 'denied';
   req.decidedAt = fmt(new Date());
@@ -4176,7 +4221,7 @@ function denySwapRequest(id){
 
 function cancelSwapRequest(id){
   const req = (STATE.pm.shiftSwapRequests||[]).find(r=>r.id===id);
-  if(!req || req.status!=='pending') return;
+  if(!req || req.status!=='pending'||req.requesterId!==CURRENT_USER_ID) return;
   if(!confirm("Cancel this swap request?")) return;
   req.status = 'cancelled';
   req.decidedAt = fmt(new Date());
@@ -4188,7 +4233,7 @@ function cancelSwapRequest(id){
 
 function deleteSwapRequest(id){
   const req = (STATE.pm.shiftSwapRequests||[]).find(r=>r.id===id);
-  if(!req) return;
+  if(!req||!canManageSwapRequest(req)) return;
   if(!confirm("Delete this swap request record? This also removes any coverage or day-off entry it created.")) return;
   STATE.pm.scheduleExceptions = (STATE.pm.scheduleExceptions||[]).filter(e=>e.swapRequestId!==id);
   STATE.pm.scheduleCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.swapRequestId!==id);

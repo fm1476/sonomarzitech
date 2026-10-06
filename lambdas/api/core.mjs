@@ -1686,7 +1686,11 @@ async function filterOfficerWorkspaceRecords(
       "pm_schedule_view"
     );
 
-  records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule);
+  records = filterSchedulingRecords(records, workspaceAuth.personId, canViewSchedule, {
+    overtime: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_overtime_view'),
+    rollcall: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_rollcall_view'),
+    leaveApprove: roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_leave_request_approve')
+  });
 
   const ownScheduleAssignments = records.filter(record => {
     try {
@@ -1710,6 +1714,15 @@ async function filterOfficerWorkspaceRecords(
     } else if (record.value?.shiftId) {
       ownShiftIds.add(String(record.value.shiftId));
     }
+  }
+
+  for (const record of records) {
+    try {
+      const {collection,itemId}=collectionFromRecordKey(record.key);
+      if(itemId==='$order' || !['pm.overtimeOpportunities','pm.rollCalls','pm.scheduleCoverages'].includes(collection))continue;
+      const values=itemId==='$value' && Array.isArray(record.value)?record.value:[record.value];
+      values.forEach(value=>{if(value?.shiftId)ownShiftIds.add(String(value.shiftId));});
+    } catch { /* Invalid record keys remain excluded by the main reader. */ }
   }
 
   const visible = [];
@@ -4307,7 +4320,7 @@ const PM_COLLECTION_RULES = {
   },
   "pm.scheduleWorkGroups": { read: ["pm_schedule_view"], create: [], update: [], delete: [] },
   "pm.overtimeOpportunities": { read: ["pm_overtime_view", "pm_schedule_view"], create: [], update: [], delete: [] },
-  "pm.specialEvents": { read: ["pm_schedule_view"], create: [], update: [], delete: [] },
+  "pm.specialEvents": { read: ["pm_schedule_view", "pm_overtime_view"], create: [], update: [], delete: [] },
   "pm.scheduleAssignments": {
     read: ["pm_schedule_view"],
     create: ["pm_schedule_manage"],
