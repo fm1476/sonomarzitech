@@ -550,6 +550,14 @@ async function staffNoticesApi(client, auth, body) {
         [tenantId, agencyId, userIds]
       );
       pushDiagnostics.subscriptions = subscriptions.rows.length;
+      if (!subscriptions.rows.length) {
+        await client.query(
+          `UPDATE suite_staff_notice_recipients
+              SET push_status='no_subscription'
+            WHERE notice_id=$1 AND user_id = ANY($2::uuid[])`,
+          [id,userIds]
+        );
+      }
       console.warn("Staff notice push diagnostics",{
         noticeId:id,
         recipientCount:resolved.length,
@@ -584,12 +592,24 @@ async function staffNoticesApi(client, auth, body) {
           }
           const failure = {status,message:String(error?.message || "Push provider error").slice(0,240)};
           pushDiagnostics.failures.push(failure);
+          await client.query(
+            `UPDATE suite_staff_notice_recipients
+                SET push_status=$3
+              WHERE notice_id=$1 AND user_id=$2`,
+            [id,sub.user_id,`failed_${status || "provider"}`]
+          );
           console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,...failure});
         }
       }
     }
 
     if (!pushConfigured()) {
+      await client.query(
+        `UPDATE suite_staff_notice_recipients
+            SET push_status='push_not_configured'
+          WHERE notice_id=$1`,
+        [id]
+      );
       console.warn("Staff notice push diagnostics",{
         noticeId:id,
         recipientCount:resolved.length,
