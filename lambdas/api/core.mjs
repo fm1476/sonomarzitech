@@ -38,14 +38,25 @@ const s3 = new S3Client({
 const ATTACHMENTS_BUCKET =
   process.env.ATTACHMENTS_BUCKET || "";
 
+let cachedDbCredentials = null;
+let cachedDbCredentialsAt = 0;
+const DB_CREDENTIAL_CACHE_MS = 5 * 60 * 1000;
+
 async function getDbCredentials() {
+  const now = Date.now();
+  if (cachedDbCredentials && (now - cachedDbCredentialsAt) < DB_CREDENTIAL_CACHE_MS) {
+    return cachedDbCredentials;
+  }
+
   const result = await secrets.send(
     new GetSecretValueCommand({
       SecretId: process.env.DB_SECRET_ARN
     })
   );
 
-  return JSON.parse(result.SecretString);
+  cachedDbCredentials = JSON.parse(result.SecretString);
+  cachedDbCredentialsAt = now;
+  return cachedDbCredentials;
 }
 
 
@@ -5270,7 +5281,6 @@ async function attachmentSmokeTest(
 }
 
 async function getMe(client, auth) {
-  await ensureAgencySubdomainSchema(client);
   const memberships = await client.query(
     `SELECT m.tenant_id, m.agency_id, m.person_id, m.role_ids, m.status,
             t.slug AS tenant_slug, t.name AS tenant_name, t.timezone, t.plan, t.status AS tenant_status, t.enabled_modules,
@@ -5336,7 +5346,6 @@ async function getWorkspaceRevision(client, auth, event) {
 }
 
 async function getWorkspace(client, auth, event) {
-  await ensureAgencySubdomainSchema(client);
   const params = event?.queryStringParameters || {};
   let tenantId = params.tenantId || params.tenant_id || null;
   let agencyId = params.agencyId || params.agency_id || null;
