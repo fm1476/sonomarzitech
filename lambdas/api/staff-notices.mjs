@@ -224,14 +224,23 @@ async function staffNoticesApi(client, auth, body) {
           AND (tenant_id<>$2 OR agency_id<>$3 OR user_id<>$4)`,
       [endpoint,tenantId,agencyId,auth.userId]
     );
-    await client.query(
-      `INSERT INTO suite_push_subscriptions
-        (tenant_id,agency_id,user_id,endpoint,p256dh,auth,user_agent,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,now())
-       ON CONFLICT (tenant_id,agency_id,user_id,endpoint)
-       DO UPDATE SET p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,user_agent=EXCLUDED.user_agent,updated_at=now()`,
+    // Avoid INSERT ... ON CONFLICT against the legacy push table. Older deployments
+    // used different key column names/constraints, so update the normalized row first and
+    // insert only when no current-user endpoint exists.
+    const updated = await client.query(
+      `UPDATE suite_push_subscriptions
+          SET p256dh=$5, auth=$6, user_agent=$7, updated_at=now()
+        WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,
       [tenantId,agencyId,auth.userId,endpoint,p256dh,authKey,String(payload.userAgent||"").slice(0,500)]
     );
+    if (!updated.rowCount) {
+      await client.query(
+        `INSERT INTO suite_push_subscriptions
+          (tenant_id,agency_id,user_id,endpoint,p256dh,auth,user_agent,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
+        [tenantId,agencyId,auth.userId,endpoint,p256dh,authKey,String(payload.userAgent||"").slice(0,500)]
+      );
+    }
     return response(200,{success:true,data:{enabled:true}});
   }
 
