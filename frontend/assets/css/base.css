@@ -59,7 +59,7 @@
     -webkit-font-smoothing:antialiased;
     transition:background 0.15s ease, color 0.15s ease;
   }
-  #app{display:none;height:100vh;overflow:hidden;}
+  #app{display:none;height:100vh;height:100dvh;overflow:hidden;}
   #app.authenticated{display:flex;}
 
   /* ---------- Login ---------- */
@@ -495,6 +495,14 @@
   }
 
   @media (max-width: 720px){
+    .role-grid{ grid-template-columns:1fr; }
+    .role-list{ max-height:220px; overflow-y:auto; }
+    .btn, button, .role-list-item{ min-height:44px; }
+    input, select, textarea{ font-size:16px; }
+    .modal-overlay{ padding-top:max(10px,env(safe-area-inset-top)); padding-bottom:max(10px,env(safe-area-inset-bottom)); }
+    .modal-body{ max-height:calc(100dvh - 150px); }
+    #content{ padding-bottom:max(32px,env(safe-area-inset-bottom)); }
+    #sidebar{ padding-top:max(20px,env(safe-area-inset-top)); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
     .stat-grid{ grid-template-columns:repeat(2,1fr); }
     .form-2col, .form-3col, .modal.modal-xl .detail-grid, .detail-grid{ grid-template-columns:1fr !important; }
     .k9-card-grid{ grid-template-columns:1fr; }
