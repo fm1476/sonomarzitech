@@ -533,12 +533,16 @@ async function staffNoticesApi(client, auth, body) {
           WHERE tenant_id=$1 AND agency_id=$2 AND user_id = ANY($3::uuid[])`,
         [tenantId, agencyId, userIds]
       );
+      // Staff Notice creation must never wait on an external push provider. The durable
+      // in-app notice is already committed above; push is a best-effort delivery channel.
+      // Bound each provider request so a slow APNs/FCM/WebPush endpoint cannot consume the
+      // Lambda/API request timeout.
       for (const sub of subscriptions.rows) {
         try {
           await webpush.sendNotification(
             {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
             JSON.stringify({title:"New Staff Notice",body:"Open SonoMarzi to view.",url:"/#/shared/notices"}),
-            {TTL:300,urgency:"normal"}
+            {TTL:300,urgency:"normal",timeout:2500}
           );
           pushed++;
           await client.query(
@@ -551,7 +555,7 @@ async function staffNoticesApi(client, auth, body) {
           if(status===404||status===410) {
             await client.query(`DELETE FROM suite_push_subscriptions WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND endpoint=$4`,[tenantId,agencyId,sub.user_id,sub.endpoint]);
           }
-          console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status});
+          console.warn("Staff notice push failed",{noticeId:id,userId:sub.user_id,status,message:error?.message});
         }
       }
     }
