@@ -3863,6 +3863,35 @@ function openShiftFormModal(existing){
   };
 }
 
+function openOneOffCoverageModal(){
+  const liveShifts=sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false));
+  if(!liveShifts.length){ toast("Publish at least one shift pattern before adding one-off staffing.", true); return; }
+  document.getElementById('modalBox').className='modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>Add Person to a Single Shift</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Employee</label><select id="fOneOffPerson">${STATE.personnel.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Shift</label><select id="fOneOffShift">${liveShifts.map(s=>`<option value="${s.id}">${escapeHtml(s.name)} (${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)})</option>`).join('')}</select></div>
+      <div class="form-row"><label>Date</label><input type="date" id="fOneOffDate" value="${fmt(new Date())}"></div>
+      <div class="form-2col"><div class="form-row"><label>Reason</label><select id="fOneOffSource"><option value="overtime">Overtime</option><option value="callback">Callback</option><option value="manual">Other / Manual Coverage</option></select></div><div class="form-row"><label>Notes</label><input type="text" id="fOneOffNotes" placeholder="Optional"></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Add to Duty Roster</button></div>`;
+  openModal();
+  document.getElementById('mClose').onclick=closeModal;
+  document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mSave').onclick=()=>{
+    const personId=document.getElementById('fOneOffPerson').value, shiftId=document.getElementById('fOneOffShift').value, date=document.getElementById('fOneOffDate').value;
+    const source=document.getElementById('fOneOffSource').value, notes=document.getElementById('fOneOffNotes').value.trim();
+    if(!date){toast("Choose a date.",true);return;}
+    const duplicate=(STATE.pm.scheduleCoverages||[]).some(x=>x.personId===personId&&x.shiftId===shiftId&&x.date===date);
+    if(duplicate){toast("That person is already added to this shift on this date.",true);return;}
+    const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftId);
+    STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId,shiftId,date,source,hours:shiftHours(shift),notes,createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});
+    logActivity(`Added ${personName(personId)} to ${shift?.name||'a shift'} on ${date} as one-off ${source} coverage.`, 'schedule');
+    persist(); closeModal(); toast("Person added to the Duty Roster."); renderScheduling();
+  };
+}
+
 function openAssignmentFormModal(existing){
   const editing = !!existing;
   document.getElementById('modalBox').className = 'modal';
