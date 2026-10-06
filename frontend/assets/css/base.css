@@ -701,3 +701,11 @@
   display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 8px;
   border-radius:999px;background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red);font-weight:800;
 }
+
+
+/* Scheduling work-group calendar filters */
+.sched-workgroup-filter{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.sched-filter-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 11px;border:1px solid var(--border);border-radius:999px;background:var(--panel);font-size:12px;font-weight:700;cursor:pointer;user-select:none;}
+.sched-filter-chip:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 10%,transparent);}
+.sched-filter-chip input{margin:0;}
+@media(max-width:720px){.sched-workgroup-filter{width:100%;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.sched-filter-chip{flex:0 0 auto;}}
