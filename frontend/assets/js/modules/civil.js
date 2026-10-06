@@ -3830,6 +3830,48 @@ const SuiteUX = (()=>{
 
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
    No writes are made to the legacy all-in-one app_state row. */
+function pmCollectionCanPersist(collection,roles,roleIds){
+  if(roleIds.some(id=>id==='role_admin'||id==='role_platform_admin'))return true;
+  const has=ability=>roleIds.some(id=>roles.find(r=>r.id===id)?.abilities?.[ability]===true);
+  const schedulingAbilities={
+    scheduleWorkGroups:[],schedulingSettings:[],
+    scheduleShifts:['pm_schedule_manage'],scheduleAssignments:['pm_schedule_manage'],
+    scheduleCoverages:['pm_schedule_manage','pm_overtime_manage','pm_leave_request_approve'],
+    scheduleExceptions:['pm_schedule_manage','pm_leave_request_approve','pm_bidding_manage'],
+    leaveRequests:['pm_leave_request_submit','pm_leave_request_approve'],
+    shiftSwapRequests:['pm_leave_request_submit','pm_schedule_manage'],
+    overtimeOpportunities:['pm_overtime_optin','pm_overtime_manage','pm_schedule_manage'],
+    otCallbackOptIns:['pm_overtime_optin','pm_overtime_manage'],
+    rollCalls:['pm_rollcall_manage'],bidCycles:['pm_bidding_submit','pm_bidding_manage'],
+    extraDutyJobs:['pm_extraduty_manage'],extraDutySignups:['pm_extraduty_signup','pm_extraduty_manage']
+  };
+  if(Object.hasOwn(schedulingAbilities,collection))return schedulingAbilities[collection].some(has);
+  return collection==='trainingCheckins'||has('personnel_manage');
+}
+
+function ensureSchedulingWorkGroupDefinitions(state,roleIds){
+  if(!roleIds.some(id=>id==='role_admin'||id==='role_platform_admin')||!state.pm)return;
+  state.pm.scheduleWorkGroups ||= [];
+  const known={wg_patrol:'Patrol',wg_dispatch:'Dispatch',wg_records:'Records',wg_investigations:'Investigations'};
+  for(const shift of state.pm.scheduleShifts||[]){
+    shift.workGroupId ||= 'wg_patrol';
+    if(!state.pm.scheduleWorkGroups.some(g=>g.id===shift.workGroupId)){
+      const name=known[shift.workGroupId]||'Recovered Calendar '+shift.workGroupId;
+      state.pm.scheduleWorkGroups.push({id:shift.workGroupId,name,active:true,visibility:known[shift.workGroupId]?'unit':'selected',unitNames:known[shift.workGroupId]?[name]:[],viewerIds:[],managerIds:[]});
+    }
+  }
+}
+function prepareSchedulingMigrationBaseline(baseline,records,roleIds){
+  if(!roleIds.some(id=>id==='role_admin'||id==='role_platform_admin'))return;
+  const collection=key=>JSON.parse(key)[0].join('.');
+  for(const key of [...baseline.keys()])if(collection(key)==='pm.scheduleWorkGroups')baseline.delete(key);
+  for(const record of records){
+    if(record.deleted)continue;
+    const name=collection(record.key);
+    if(name==='pm.scheduleWorkGroups'||name==='pm.scheduleShifts'&&record.value&&!record.value.workGroupId&&JSON.parse(record.key)[1]!=='$order')baseline.set(record.key,JSON.parse(JSON.stringify(record.value)));
+  }
+}
+
 const SuiteStore=(()=>{
   const AWS_DEV_MODE=true;
   window.SONOMARZI_AWS_DEV=true;
@@ -4046,21 +4088,9 @@ const SuiteStore=(()=>{
           const assigned=(HOME_ROLE_IDS||[]).some(id=>STATE.roles.find(role=>role.id===id)?.abilities?.[moduleAbility]);
           if(!assigned){rejected.push(p);return false;}
         }
-        // Same problem one level deeper: a role can have write access to a module overall
-        // (module_personnel) while suite_access_rules still denies write on most collections
-        // inside it -- only pm_training_checkins and pm_leaveRequests are self-service (own
-        // record only, checked server-side by personId), everything else in pm (refData,
-        // rollCalls, bidCycles, extraDutyJobs, extraDutySignups, schedulingSettings, etc.) has
-        // no suite_access_rules row at all for Officer or Training Coordinator, only for
-        // Admin. STATE still carries default/placeholder values for all of it locally, so
-        // without this it rides along in every save and the server's rejection of that one
-        // untouched collection fails the entire all-or-nothing batch, including a check-in or
-        // leave request that would otherwise have gone through fine.
-        if(path[0]==='pm'){
-          const collection = path[1];
-          const selfService = collection==='trainingCheckins' || collection==='leaveRequests';
-          if(!selfService && !(HOME_ROLE_IDS||[]).some(id=>STATE.roles.find(role=>role.id===id)?.abilities?.personnel_manage)){rejected.push(p);return false;}
-        }
+        // Permit scheduling writes by their specific abilities. The API validates named
+        // calendar management and ownership against the authenticated workspace membership.
+        if(path[0]==='pm'&&!pmCollectionCanPersist(path[1],STATE.roles,HOME_ROLE_IDS||[])){rejected.push(p);return false;}
         return true;
       });
       if(mode==='local'&&!db)throw Error('Session only · Durable local storage is unavailable. Download a backup before leaving.');
@@ -4260,7 +4290,7 @@ const SuiteStore=(()=>{
     orphanedWaiters.forEach(resolve=>resolve(false));
     const rows=new Map(data.records.filter(r=>!r.deleted).map(r=>[r.key,r.value]));STATE=mergeTemplate(data.template||{},inflate(rows));STATE.accounts=STATE.accounts||[];STATE.personnel=STATE.personnel||[];STATE.roles=(STATE.roles&&STATE.roles.length)?STATE.roles:[{id:'role_platform_admin',name:'SonoMarzi Platform Admin',locked:true,hidden:true,agencyScope:[],abilities:Object.fromEntries(ALL_ABILITY_IDS.map(id=>[id,id!=='chatbot_access']))}];
     debugLog('[access] RAW roles exactly as received from the server, before any client-side healing:', (STATE.roles||[]).map(r=>({id:r.id, name:r.name})));
-    serverVersions={};serverOrders=new Map();for(const r of data.records){serverVersions[r.key]=r.version;if(JSON.parse(r.key)[1]==='$order'&&!r.deleted)serverOrders.set(r.key,clone(r.value));}lastRecordRevision=(data.records||[]).reduce((max,r)=>r.updated_at&&r.updated_at>max?r.updated_at:max,'')||lastRecordRevision;remoteUpdatePending=false;updateNoticeShown=false;try{runCoreMigrations();}catch(e){console.error('Core migrations failed (continuing anyway):',e);}baseline=flatten(STATE);CURRENT_USER_ID=data.person_id;HOME_ROLE_IDS=data.role_ids;STATE.currentRoleIds=[...(data.role_ids||[])];remoteContext={tenantId:data.tenant_id,agencyId:data.agency_id};window.SonoMarziCurrentTenantSecurity={mfaPolicy:(data?.tenant?.metadata?.security?.mfaPolicy||'off'),tenantName:data?.tenant?.name||'',agencyName:data?.agency?.name||''};serverReady=true;mode='shared';pendingWrites=false;notificationReads=new Set();status('ok','Saved to agency workspace');}
+    serverVersions={};serverOrders=new Map();for(const r of data.records){serverVersions[r.key]=r.version;if(JSON.parse(r.key)[1]==='$order'&&!r.deleted)serverOrders.set(r.key,clone(r.value));}lastRecordRevision=(data.records||[]).reduce((max,r)=>r.updated_at&&r.updated_at>max?r.updated_at:max,'')||lastRecordRevision;remoteUpdatePending=false;updateNoticeShown=false;try{runCoreMigrations();}catch(e){console.error('Core migrations failed (continuing anyway):',e);}ensureSchedulingWorkGroupDefinitions(STATE,data.role_ids||[]);baseline=flatten(STATE);prepareSchedulingMigrationBaseline(baseline,data.records,data.role_ids||[]);CURRENT_USER_ID=data.person_id;HOME_ROLE_IDS=data.role_ids;STATE.currentRoleIds=[...(data.role_ids||[])];remoteContext={tenantId:data.tenant_id,agencyId:data.agency_id};window.SonoMarziCurrentTenantSecurity={mfaPolicy:(data?.tenant?.metadata?.security?.mfaPolicy||'off'),tenantName:data?.tenant?.name||'',agencyName:data?.agency?.name||''};serverReady=true;mode='shared';pendingWrites=false;notificationReads=new Set();status('ok','Saved to agency workspace');}
   const notificationModule={Quartermaster:'qm',Fleet:'fleet',Personnel:'pm',K9:'k9',Drone:'drone',EOD:'eod',Subpoena:'subpoena',Grants:'grants',Civil:'civil'};
   const notificationKey=(module,id)=>(notificationModule[module]||module)+'|'+id;
   function isNotificationRead(module,id){return notificationReads.has(notificationKey(module,id));}

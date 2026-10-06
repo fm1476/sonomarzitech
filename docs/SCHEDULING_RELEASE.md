@@ -1,0 +1,51 @@
+# Scheduling release: Work Group calendars
+
+Deploy the frontend and the API Lambda together. This release adds `lambdas/api/lib/scheduling-access.mjs`; package the complete `lambdas/api` directory, including `lib/`, rather than uploading only `index.mjs`. The existing deployment workflow already packages that directory. There is no database schema migration. Deployment remains manual.
+
+## Administrator setup
+
+1. Sign in with an actual agency System Admin or Platform Admin account.
+2. Open Personnel > Scheduling. Use **Work Group Calendars** to create calendars or open **Access & Settings** for an existing one.
+3. Give each calendar a unique name, choose Active or Inactive, and select its visibility: mapped Unit members, all agency personnel, or selected people.
+4. Map Units using their exact names. Matching ignores case and surrounding spaces, but does not use partial matching.
+5. Select additional viewers and named Scheduling Managers. A manager needs the applicable action ability as well as assignment to the calendar. Role-wide scheduling abilities alone do not grant cross-calendar editing.
+6. Save calendar settings before testing staff access. Older shift definitions without group membership are assigned to the legacy Patrol calendar. Missing definitions are repaired in the administrator workspace and persisted on the next administrator save. Unknown group IDs are recovered with selected-person visibility and require administrator configuration.
+7. Create or edit shift patterns and select their Work Group. New bid cycles and extra-duty jobs also select a Work Group. Existing unscoped vacation cycles and extra-duty jobs remain agency-wide activities; only agency/platform administrators can manage them.
+
+Inactive calendars retain their stored history. Administrators can reactivate them from Work Group Calendars. Staff retain their own assigned shifts and coverage in My Work even if department-wide calendar visibility is unavailable.
+
+## Staff and scheduler behavior
+
+Officers can view eligible overtime and Special Events without full department-wide roster permission. Shift Swaps has its own tab. Staff can submit their own pending requests, cancel their own pending leave or swap request, submit their own bid preferences during the open window, and sign up for an accessible open extra-duty job. They cannot alter another employee's request or approve their own request through the staff workflow.
+
+Named managers can modify only the calendars assigned to them. Changes affecting several groups require management of every affected group. Leave decisions follow the employee's assignment group for the requested dates. Swap decisions consider both employees' groups. Roll call follows the shift's group. Callback list edits consider each affected employee's group. Agency-wide scheduling settings and calendar access configuration are restricted to agency/platform administrators.
+
+Shift bidding continues to record seniority award results; assigning awarded shift patterns remains a roster action. Vacation awards create schedule exceptions.
+
+Special-event awards check the full event date range, with a maximum event span of one year. Regular-duty reassignment uses a schedule exception; conflicting coverage or another awarded event must be resolved separately. Extra-duty conflict and fatigue warnings remain advisory, while job capacity is enforced.
+
+## Reports
+
+The configurable Personnel report builder includes Shift Assignments, Overtime Coverage, Time Off Requests, Special Events, Roll Call, and Extra Duty Signups. Work Group and status/shift grouping options vary by dataset. Existing date and personnel filters still apply. Displayed and exported scheduling rows respect calendar visibility. CSV exports use actual line breaks.
+
+## Consistency and authorization
+
+API reads filter records before they are returned to staff. Template scaffolding cannot reintroduce hidden scheduling records. Writes check persisted calendar managers and the authenticated person's abilities, not browser role-preview settings. Hidden collection-order and callback entries are preserved during scoped writes.
+
+Scheduling writes take a workspace-specific transaction lock before loading their validation snapshot. Award/approval validation checks the proposed batch as a whole. Capacity violations, duplicate assignments, conflicting overtime, or leave approvals missing their matching exception reject the batch. Existing record versions still reject stale updates.
+
+## Verification completed
+
+Run `bash scripts/verify-source.sh`. It checks source syntax and existing role, attachment, and MFA invariants, plus scheduling access, browser save abilities, report visibility, CSV output, legacy initialization, template isolation, and the actual API save function against a simulated database. Tests replay competing approvals, verify rollback, preserve hidden order entries, and compare browser/server rotation calculations.
+
+## After-deployment acceptance checks
+
+Use actual separate accounts. Administrator **View As** is a UI preview and does not test a staff account's server authorization.
+
+- Create Patrol and Dispatch calendars with different named managers; save, reload, and confirm their settings and assignments persist.
+- As the Patrol manager, modify a Patrol pattern and assignment. Confirm Dispatch mutations fail. Repeat with the Dispatch manager.
+- As an Officer, request overtime and a special event, submit/cancel leave and swaps, update bid preferences, and sign up for extra duty. Reload after each saved operation.
+- Approve leave, swaps, overtime, and extra duty with the appropriate manager; verify roster changes and persisted statuses.
+- In two sessions, try approving the final extra-duty slot or awarding conflicting overtime. Confirm the later operation fails without partial changes.
+- Verify multi-day event reassignment, roll call, custom reports, and CSV exports with each account.
+- Confirm affected staff receive the configured notices. No live AWS, browser, PostgreSQL concurrency, or push-delivery test was performed in the development workspace.
