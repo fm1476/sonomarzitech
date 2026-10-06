@@ -838,6 +838,37 @@ document.addEventListener('click', (e)=>{
 /* =========================================================================
    SHARED NOTIFICATION BELL (aggregates both modules)
    ========================================================================= */
+const DURABLE_NOTIFICATION_READS = new Set();
+function notificationReadKey(module,id){ return String(module||'')+'|'+String(id||''); }
+async function loadDurableNotificationReads(){
+  try{
+    if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') return false;
+    const ctx=SuiteStore.remoteContext?.()||{};
+    if(!ctx.tenantId||!ctx.agencyId) return false;
+    const result=await SuiteStore.api('/staff-notices',{method:'POST',body:JSON.stringify({tenant_id:ctx.tenantId,agency_id:ctx.agencyId,action:'notification_reads_list',payload:{}})});
+    DURABLE_NOTIFICATION_READS.clear();
+    for(const row of (Array.isArray(result?.data)?result.data:[])) DURABLE_NOTIFICATION_READS.add(notificationReadKey(row.module,row.notification_id));
+    return true;
+  }catch(error){ console.error('Could not load durable notification read state:',error); return false; }
+}
+function isSuiteNotificationRead(n){
+  if((n.readBy||[]).includes(CURRENT_USER_ID)) return true;
+  if(DURABLE_NOTIFICATION_READS.has(notificationReadKey(n.module,n.id))) return true;
+  return typeof SuiteStore!=='undefined' && typeof SuiteStore.isNotificationRead==='function' && SuiteStore.isNotificationRead(n.module,n.id);
+}
+async function markSuiteNotificationsRead(items){
+  const cleaned=(Array.isArray(items)?items:[]).filter(x=>x?.module&&x?.id);
+  if(!cleaned.length) return true;
+  try{
+    if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') return false;
+    const ctx=SuiteStore.remoteContext?.()||{};
+    if(!ctx.tenantId||!ctx.agencyId) return false;
+    await SuiteStore.api('/staff-notices',{method:'POST',body:JSON.stringify({tenant_id:ctx.tenantId,agency_id:ctx.agencyId,action:'notification_reads_mark',payload:{items:cleaned}})});
+    cleaned.forEach(item=>DURABLE_NOTIFICATION_READS.add(notificationReadKey(item.module,item.id)));
+    return true;
+  }catch(error){ console.error('Could not persist notification read state:',error); return false; }
+}
+
 function renderNotifBell(){
   function safely(label, fn){ try{ return fn(); }catch(e){ console.error(`renderNotifBell: "${label}" failed (skipping):`, e); return []; } }
   safely('QM.recalcNotifications', ()=>QM.recalcNotifications());
@@ -860,8 +891,7 @@ function renderNotifBell(){
     ...safely('grants notifications', ()=>STATE.grants.notifications.filter(n=>STATE.currentRoleIds.includes(n.recipientRoleId)).map(n=>({...n, module:'Grants'}))),
     ...safely('civil notifications', ()=>STATE.civil.notifications.filter(n=>STATE.currentRoleIds.includes(n.recipientRoleId)).map(n=>({...n, module:'Civil'}))),
   ];
-  const isRead = n=>(n.readBy||[]).includes(CURRENT_USER_ID) || (typeof SuiteStore!=='undefined' && SuiteStore.isNotificationRead(n.module,n.id));
-  const unread = mine.filter(n=>!isRead(n)).length;
+  const unread = mine.filter(n=>!isSuiteNotificationRead(n)).length;
   const badge = document.getElementById('notifBadge');
   badge.style.display = unread ? '' : 'none';
   badge.textContent = unread>9 ? '9+' : String(unread);
@@ -879,7 +909,7 @@ function toggleNotifPanel(){
 function renderNotifPanel(){
   const panel = document.getElementById('notifPanel');
   const all = window.__SUITE_NOTIFS||[];
-  const mine = all.filter(n=>!(n.readBy||[]).includes(CURRENT_USER_ID) && !SuiteStore.isNotificationRead(n.module,n.id));
+  const mine = all.filter(n=>!isSuiteNotificationRead(n));
   const rows = mine.map(n=>`
     <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">
       <span class="badge badge-role" style="flex-shrink:0;">${n.module}</span>
@@ -903,14 +933,14 @@ function renderNotifPanel(){
   document.querySelectorAll('[data-mark-read]').forEach(b=>b.addEventListener('click', async ()=>{
     const [mod, id] = b.dataset.markRead.split('|');
     b.disabled=true;
-    if(!await SuiteStore.markNotificationsRead([{module:mod,id}])){toast('Could not save the read status. Try again when connected.',true);b.disabled=false;return;}
+    if(!await markSuiteNotificationsRead([{module:mod,id}])){toast('Could not save the read status. Try again when connected.',true);b.disabled=false;return;}
     renderNotifBell();
     renderNotifPanel();
   }));
   const markAll = document.getElementById('btnMarkAllRead');
   if(markAll) markAll.addEventListener('click', async ()=>{
     markAll.disabled=true;
-    if(!await SuiteStore.markNotificationsRead(mine.map(n=>({module:n.module,id:n.id})))){toast('Some read statuses could not be saved. Try again when connected.',true);markAll.disabled=false;return;}
+    if(!await markSuiteNotificationsRead(mine.map(n=>({module:n.module,id:n.id})))){toast('Some read statuses could not be saved. Try again when connected.',true);markAll.disabled=false;return;}
     renderNotifBell();
     renderNotifPanel();
   });
@@ -939,5 +969,12 @@ function startShell(){
     }
   });
   renderNotifBell();
+  loadDurableNotificationReads().then(loaded=>{
+    if(loaded){
+      renderNotifBell();
+      const panel=document.getElementById('notifPanel');
+      if(panel && panel.style.display!=='none') renderNotifPanel();
+    }
+  });
 }
 
