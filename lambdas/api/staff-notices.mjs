@@ -83,6 +83,18 @@ async function ensureStaffNoticeTables(client) {
     )
   `);
 
+  // Upgrade any earlier push-subscription table shape in place. CREATE TABLE IF NOT EXISTS
+  // does not add columns when the table already exists.
+  await client.query(`
+    ALTER TABLE suite_push_subscriptions
+      ADD COLUMN IF NOT EXISTS endpoint text,
+      ADD COLUMN IF NOT EXISTS p256dh text,
+      ADD COLUMN IF NOT EXISTS auth text,
+      ADD COLUMN IF NOT EXISTS user_agent text,
+      ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
+  `);
+
   await client.query(`
     CREATE INDEX IF NOT EXISTS suite_push_subscription_user_idx
       ON suite_push_subscriptions(tenant_id, agency_id, user_id)
