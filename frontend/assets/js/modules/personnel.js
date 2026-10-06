@@ -2711,7 +2711,11 @@ function renderScheduling(){
 }
 function scheduleWorkGroupName(id){ return (STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id)?.name || 'Unassigned'; }
 function currentPerson(){return STATE.personnel.find(p=>p.id===CURRENT_USER_ID)||{};}
-function isGlobalScheduleAdmin(){return can('system_admin')||can('platform_admin');}
+function isGlobalScheduleAdmin(){
+  const id=currentRole()?.id || '';
+  const ids=id.startsWith('merged:')?id.slice(7).split(','):[id];
+  return ids.some(roleId=>roleId==='role_admin'||roleId==='role_platform_admin');
+}
 function canViewWorkGroup(group){
   if(!group||group.active===false)return false;if(isGlobalScheduleAdmin())return true;if(group.visibility==='agency')return true;
   if((group.viewerIds||[]).includes(CURRENT_USER_ID)||(group.managerIds||[]).includes(CURRENT_USER_ID))return true;
@@ -3968,7 +3972,8 @@ function openCoverageDetailModal(coverage){
 
 function openShiftFormModal(existing){
   const groups=manageableScheduleWorkGroups();
-  if(!groups.length||(existing&&!canManageScheduleShift(existing)))return;
+  if(!groups.length){toast(isGlobalScheduleAdmin()?'Create or activate a Work Group Calendar before adding a shift pattern.':'An administrator must give you access to an active Work Group Calendar before you can add a shift pattern.',true);return;}
+  if(existing&&!canManageScheduleShift(existing))return;
   const editing = !!existing;
   const patternType = existing?.patternType === 'weekly' ? 'weekly' : 'rotation';
   document.getElementById('modalBox').className = 'modal';
