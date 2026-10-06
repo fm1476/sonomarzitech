@@ -96,6 +96,11 @@ async function ensureStaffNoticeTables(client) {
   `);
 
   await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS suite_push_subscription_identity_uidx
+      ON suite_push_subscriptions(tenant_id, agency_id, user_id, endpoint)
+  `);
+
+  await client.query(`
     CREATE INDEX IF NOT EXISTS suite_push_subscription_user_idx
       ON suite_push_subscriptions(tenant_id, agency_id, user_id)
   `);
