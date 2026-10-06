@@ -598,7 +598,7 @@ const StaffNotices=(()=>{
         <fieldset><legend>Units</legend><div style="max-height:220px;overflow:auto">${units.map(u=>`<label style="display:block"><input type="checkbox" data-notice-unit value="${escapeHtml(u)}"> ${escapeHtml(u)}</label>`).join('')}</div></fieldset>
         <fieldset><legend>Shift patterns</legend><div style="max-height:220px;overflow:auto">${shifts.map(s=>`<label style="display:block"><input type="checkbox" data-notice-shift value="${escapeHtml(s.id)}"> ${escapeHtml(s.name)}</label>`).join('')}</div></fieldset>
        </div><p id="noticePreview" role="status"></p>
-       <button type="button" id="noticeSend" class="btn btn-primary">Send notice</button>
+       <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="noticeSend" class="btn btn-primary">Send notice</button><button type="button" id="noticeClear" class="btn btn-outline">Clear</button></div>
        <p id="noticeResult" role="status"></p>
       </div></section><section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Recent notices</h2><button type="button" id="noticeHistoryRefresh" class="btn btn-outline btn-sm">Refresh</button></div><div id="noticeHistory" class="panel-body">Loading…</div></section>`:''}`;
     root.querySelector('#noticeRefresh').onclick=()=>loadInbox().catch(e=>toast(e.message,true));
@@ -609,6 +609,7 @@ const StaffNotices=(()=>{
       root.querySelector('#noticeSearch').oninput=e=>{const q=e.target.value.toLowerCase();root.querySelectorAll('#noticePeople label').forEach(l=>l.hidden=!l.textContent.toLowerCase().includes(q));};
       root.querySelector('#noticeBody').oninput=e=>root.querySelector('#noticeCount').textContent=`${e.target.value.length} / 1000 characters`;
       root.querySelector('#noticeSend').onclick=send;
+      root.querySelector('#noticeClear').onclick=clearCompose;
       root.querySelector('#noticeHistoryRefresh').onclick=()=>loadHistory().catch(e=>{const box=document.getElementById('noticeHistory');if(box)box.textContent=e.message;});
       if(queuedOffer){
         const {people,shift,date}=queuedOffer;queuedOffer=null;
@@ -623,6 +624,23 @@ const StaffNotices=(()=>{
       console.error('Staff notices could not render',error);
       root.innerHTML=`<section class="panel"><div class="panel-body" role="alert">Staff notices could not open: ${escapeHtml(error.message||'Unknown error')}</div></section>`;
     }
+  }
+  function clearCompose(){
+    const root=document.getElementById('view-notices');
+    if(!root)return;
+    const body=root.querySelector('#noticeBody');
+    const date=root.querySelector('#noticeDate');
+    const search=root.querySelector('#noticeSearch');
+    if(body)body.value='';
+    if(date)date.value=fmt(new Date());
+    if(search)search.value='';
+    root.querySelectorAll('[data-notice-person],[data-notice-unit],[data-notice-shift]').forEach(box=>{box.checked=false;});
+    root.querySelectorAll('#noticePeople label').forEach(label=>{label.hidden=false;});
+    const count=root.querySelector('#noticeCount');if(count)count.textContent='0 / 1000 characters';
+    const result=root.querySelector('#noticeResult');if(result)result.textContent='';
+    attemptId=null;attemptSpec=null;
+    preview();
+    body?.focus();
   }
   async function send(){
     const body=document.getElementById('noticeBody').value.trim(),s=selection(),out=document.getElementById('noticeResult');
