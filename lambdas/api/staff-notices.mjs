@@ -578,7 +578,7 @@ async function staffNoticesApi(client, auth, body) {
           await webpush.sendNotification(
             {endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},
             JSON.stringify({title:"New Staff Notice",body:"Open SonoMarzi to view.",url:"/#/shared/notices"}),
-            {TTL:300,urgency:"normal",timeout:2500}
+            {TTL:300,urgency:"normal",timeout:10000}
           );
           pushed++;
           pushDiagnostics.accepted++;
