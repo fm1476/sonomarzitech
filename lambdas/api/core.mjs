@@ -896,15 +896,8 @@ async function inspectAccessRules(client) {
       count.rows[0]?.count ?? 0;
   }
 
-  perf.workspaceHandlerMs = performance.now() - workspaceStartedAt;
-  perf.apiBeforeResponseMs = performance.now() - (perf.startedAt || workspaceStartedAt);
-
   return response(200, {
     success: true,
-    performance: Object.fromEntries(
-      Object.entries(perf).filter(([key, value]) => key !== "startedAt" && typeof value === "number")
-        .map(([key, value]) => [key, Math.round(value * 10) / 10])
-    ),
     readOnly: true,
     table: "suite_access_rules",
     demoPdExistingRuleCount,
@@ -5376,8 +5369,6 @@ async function getWorkspaceRevision(client, auth, event) {
 }
 
 async function getWorkspace(client, auth, event) {
-  const perf = event?.sonomarziPerf || {};
-  const workspaceStartedAt = performance.now();
   const params = event?.queryStringParameters || {};
   let tenantId = params.tenantId || params.tenant_id || null;
   let agencyId = params.agencyId || params.agency_id || null;
@@ -5402,7 +5393,6 @@ async function getWorkspace(client, auth, event) {
     agencyId = target.rows[0].agency_id;
   }
 
-  const membershipsStartedAt = performance.now();
   const memberships = await client.query(
     `SELECT tenant_id, agency_id, person_id, role_ids, status
        FROM suite_memberships
@@ -5410,7 +5400,6 @@ async function getWorkspace(client, auth, event) {
       ORDER BY created_at`,
     [auth.userId]
   );
-  perf.membershipsMs = performance.now() - membershipsStartedAt;
 
   let membership = null;
 
@@ -5448,34 +5437,27 @@ async function getWorkspace(client, auth, event) {
     }
   }
 
-  const workspaceAuthStartedAt = performance.now();
   const workspaceAuth = await resolveWorkspaceMembership(
     client,
     auth,
     tenantId,
     agencyId
   );
-  perf.workspaceAuthMs = performance.now() - workspaceAuthStartedAt;
 
   if (workspaceAuth.error) {
     return workspaceAuth.error;
   }
 
-  const tenantStartedAt = performance.now();
   const tenantResult = await client.query(
     `SELECT id, slug, name, timezone, plan, status, enabled_modules, metadata
        FROM suite_tenants WHERE id = $1 LIMIT 1`,
     [tenantId]
   );
-  perf.tenantMs = performance.now() - tenantStartedAt;
-  const agencyStartedAt = performance.now();
   const agencyResult = await client.query(
     `SELECT id, tenant_id, name, abbreviation, agency_type, ori, status, branding, subdomain
        FROM suite_agencies WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
     [tenantId, agencyId]
   );
-  perf.agencyMs = performance.now() - agencyStartedAt;
-  const recordsStartedAt = performance.now();
   const recordsResult = await client.query(
     `SELECT key, value, version, deleted, updated_at, updated_by
        FROM suite_records
@@ -5483,9 +5465,6 @@ async function getWorkspace(client, auth, event) {
       ORDER BY key`,
     [tenantId, agencyId]
   );
-  perf.recordsMs = performance.now() - recordsStartedAt;
-  perf.recordCount = recordsResult.rows.length;
-  const templateStartedAt = performance.now();
   const templateResult = await client.query(
     `SELECT empty_state
        FROM suite_templates
@@ -5493,13 +5472,11 @@ async function getWorkspace(client, auth, event) {
       LIMIT 1`,
     [tenantId, agencyId]
   );
-  perf.templateMs = performance.now() - templateStartedAt;
 
   if (!tenantResult.rows.length || !agencyResult.rows.length) {
     return response(404, { success: false, error: "Workspace not found." });
   }
 
-  const filterStartedAt = performance.now();
   const workspaceRecords = workspaceAuth.admin
     ? recordsResult.rows
     : await filterOfficerWorkspaceRecords(
@@ -5507,7 +5484,6 @@ async function getWorkspace(client, auth, event) {
         workspaceAuth,
         recordsResult.rows
       );
-  perf.filterMs = performance.now() - filterStartedAt;
 
   const personId = workspaceAuth.personId;
   const roleIds = [
