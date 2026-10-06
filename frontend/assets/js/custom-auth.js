@@ -5,6 +5,18 @@
   window.SONOMARZI_AWS_DEV=true;
   const CLIENT_ID='no3ovb8d8qda221qnh1qomf1e', API_BASE='https://7debzkoq7k.execute-api.us-east-2.amazonaws.com';
   const ID='sonomarzi.aws.id_token', ACCESS='sonomarzi.aws.access_token', REFRESH='sonomarzi.aws.refresh_token';
+  const LOGIN_PERF={};
+  function perfStart(name){LOGIN_PERF[name]={start:performance.now(),ms:null}}
+  function perfEnd(name){const x=LOGIN_PERF[name];if(x&&x.start!=null)x.ms=Math.round((performance.now()-x.start)*10)/10}
+  function perfReport(){
+    const rows={};
+    for(const [name,value] of Object.entries(LOGIN_PERF)) if(value?.ms!=null) rows[name]={milliseconds:value.ms};
+    console.groupCollapsed('%cSonoMarzi login performance','color:#2563eb;font-weight:700');
+    console.table(rows);
+    console.log('Total login:',rows.total?.milliseconds!=null?rows.total.milliseconds+' ms':'n/a');
+    console.groupEnd();
+    window.SONOMARZI_LOGIN_PERF=Object.fromEntries(Object.entries(rows).map(([k,v])=>[k,v.milliseconds]));
+  }
   async function cognito(action,payload){
     const r=await fetch(`${API_BASE}/activation`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'public_auth',operation:action,payload})});
     const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{}}catch{}
@@ -83,8 +95,10 @@
     const subdomain=host.endsWith('.sonomarzi.com') ? host.split('.')[0] : '';
     const headers={Authorization:`Bearer ${token}`};
 
+    perfStart('me');
     const meRes=await fetch(`${apiBase}/me`,{headers});
     const me=await meRes.json().catch(()=>({}));
+    perfEnd('me');
     if(!meRes.ok||!me?.success) throw Error(me?.error||`Unable to load SonoMarzi identity (${meRes.status}).`);
 
     let workspaceUrl=`${apiBase}/workspace`;
@@ -94,8 +108,10 @@
       workspaceUrl += `?tenantId=${encodeURIComponent(m.tenant_id)}&agencyId=${encodeURIComponent(m.agency_id)}`;
     }
 
+    perfStart('workspace');
     const wsRes=await fetch(workspaceUrl,{headers});
     const ws=await wsRes.json().catch(()=>({}));
+    perfEnd('workspace');
     if(!wsRes.ok||!ws?.success) throw Error(ws?.error||`Unable to load SonoMarzi workspace (${wsRes.status}).`);
     const authUser=me?.user?.email||me?.user?.display_name||'user';
     if(!(await enforceWorkspaceMfa(ws,authUser))) return false;
@@ -109,6 +125,7 @@
     //   [[path...],"record-id"] = an individual collection member
     // This mirrors the record model stored in RDS instead of treating the
     // JSON record key as a slash-delimited object path.
+    perfStart('stateRebuild');
     STATE=JSON.parse(JSON.stringify(template));
 
     const getAtPath=(root,path)=>{
@@ -178,6 +195,7 @@
       }
     }
 
+    perfEnd('stateRebuild');
     if(typeof runCoreMigrations==='function') runCoreMigrations();
     if(ws.agency?.branding) STATE.agencyBranding={...(STATE.agencyBranding||{}),...ws.agency.branding};
     STATE.enabledModules=Array.isArray(ws?.tenant?.enabled_modules)?[...ws.tenant.enabled_modules]:(Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[]);
@@ -191,18 +209,24 @@
     // SuiteStore in local mode until the browser is hard-refreshed, which suppresses
     // durable audit writes and makes module/navigation state initialize incorrectly.
     if(typeof SuiteStore!=='undefined' && typeof SuiteStore.useWorkspace==='function'){
+      perfStart('suiteStore');
       await SuiteStore.useWorkspace(ws);
+      perfEnd('suiteStore');
       STATE.enabledModules=Array.isArray(ws?.tenant?.enabled_modules)?[...ws.tenant.enabled_modules]:(Array.isArray(ws.enabled_modules)?[...ws.enabled_modules]:[]);
     }
 
     document.getElementById('loginScreen')?.classList.add('hidden');
     document.getElementById('app')?.classList.add('authenticated');
+    perfStart('shellRender');
     if(typeof startShell==='function') startShell();
+    perfEnd('shellRender');
+    perfEnd('total');
+    perfReport();
     return true;
   }
 
   async function finish(r,username){for(let i=0;i<4&&!r?.AuthenticationResult;i++){if(r?.ChallengeName==='NEW_PASSWORD_REQUIRED')r=await newPassword(username,r.Session);else if(r?.ChallengeName==='SOFTWARE_TOKEN_MFA')r=await mfa(username,r.Session);else throw Error(`Additional sign-in step "${r?.ChallengeName||'unknown'}" is not supported yet.`)}if(!r?.AuthenticationResult)throw Error('Sign-in could not be completed.');save(r.AuthenticationResult);await bootstrapAwsSession()}
-  async function signIn(){const username=document.getElementById('loginUsername')?.value.trim().toLowerCase()||'',password=document.getElementById('loginPassword')?.value||'',b=document.getElementById('btnLogin');error('');if(!username||!password){error('Enter your email address and password.');return}if(b){b.disabled=true;b.textContent='Signing in…'}try{const r=await cognito('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:CLIENT_ID,AuthParameters:{USERNAME:username,PASSWORD:password}});await finish(r,username)}catch(e){const msg=/USER_PASSWORD_AUTH flow not enabled|Auth flow not enabled/i.test(e.message)?'SonoMarzi custom sign-in is not enabled yet. A Platform Admin must send one access email from User Administration, then retry.':(e.name==='NotAuthorizedException'?'Email or password is incorrect.':e.message);error(msg);if(b){b.disabled=false;b.textContent='Sign In'}}}
+  async function signIn(){const username=document.getElementById('loginUsername')?.value.trim().toLowerCase()||'',password=document.getElementById('loginPassword')?.value||'',b=document.getElementById('btnLogin');error('');if(!username||!password){error('Enter your email address and password.');return}for(const k of Object.keys(LOGIN_PERF))delete LOGIN_PERF[k];perfStart('total');if(b){b.disabled=true;b.textContent='Signing in…'}try{perfStart('cognitoAuth');const r=await cognito('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:CLIENT_ID,AuthParameters:{USERNAME:username,PASSWORD:password}});perfEnd('cognitoAuth');await finish(r,username)}catch(e){const msg=/USER_PASSWORD_AUTH flow not enabled|Auth flow not enabled/i.test(e.message)?'SonoMarzi custom sign-in is not enabled yet. A Platform Admin must send one access email from User Administration, then retry.':(e.name==='NotAuthorizedException'?'Email or password is incorrect.':e.message);error(msg);if(b){b.disabled=false;b.textContent='Sign In'}}}
   function forgot(){const preset=document.getElementById('loginUsername')?.value.trim().toLowerCase()||'',o=overlay('Reset your password',`<p style="font-size:13px;color:var(--text-dim)">Enter your SonoMarzi email address. We'll send a verification code.</p><div class="form-row"><label>Email address</label><input id="recoveryEmail" type="email" autocomplete="email" value="${preset.replace(/"/g,'&quot;')}"></div><p id="recoveryError" class="field-error"></p><button id="recoverySend" class="btn btn-primary" style="width:100%;justify-content:center">Send verification code</button><button id="recoveryCancel" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:8px">Cancel</button>`);o.querySelector('#recoveryCancel').onclick=()=>o.remove();o.querySelector('#recoverySend').onclick=async()=>{const email=o.querySelector('#recoveryEmail').value.trim().toLowerCase(),e=o.querySelector('#recoveryError');e.textContent='';try{await cognito('ForgotPassword',{ClientId:CLIENT_ID,Username:email});o.firstElementChild.innerHTML=`<h3 style="margin:0 0 14px;color:var(--heading)">Check your email</h3><p style="font-size:13px;color:var(--text-dim)">Enter the verification code sent to <strong>${email.replace(/[&<>]/g,'')}</strong>, then choose a new password.</p><div class="form-row"><label>Verification code</label><input id="recoveryCode" inputmode="numeric" autocomplete="one-time-code"></div><div class="form-row"><label>New password</label><input id="recoveryPassword" type="password" autocomplete="new-password"></div><div class="form-row"><label>Confirm password</label><input id="recoveryPassword2" type="password" autocomplete="new-password"></div><p id="recoveryError" class="field-error"></p><button id="recoveryConfirm" class="btn btn-primary" style="width:100%;justify-content:center">Set new password</button><button id="recoveryCancel" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:8px">Cancel</button>`;o.querySelector('#recoveryCancel').onclick=()=>o.remove();o.querySelector('#recoveryConfirm').onclick=async()=>{const code=o.querySelector('#recoveryCode').value.trim(),p=o.querySelector('#recoveryPassword').value,p2=o.querySelector('#recoveryPassword2').value,ee=o.querySelector('#recoveryError');ee.textContent=policy(p);if(ee.textContent)return;if(p!==p2){ee.textContent='The passwords do not match.';return}try{await cognito('ConfirmForgotPassword',{ClientId:CLIENT_ID,Username:email,ConfirmationCode:code,Password:p});o.remove();document.getElementById('loginUsername').value=email;document.getElementById('loginPassword').focus();window.toast?.('Password updated. Sign in with your new password.')}catch(x){ee.textContent=x.message}}}catch(x){e.textContent=x.message}}}
   async function logout(){const a=sessionStorage.getItem(ACCESS);if(a){try{await cognito('GlobalSignOut',{AccessToken:a})}catch{}}[ID,ACCESS,REFRESH,'sonomarzi.aws.pkce.verifier','sonomarzi.aws.pkce.state'].forEach(k=>sessionStorage.removeItem(k));location.replace(location.origin)}
   function configure(){const fields=document.getElementById('loginFormFields');if(!fields)return;const loading=document.getElementById('loginLoading');if(loading)loading.style.display='none';document.getElementById('awsCognitoLoginButton')?.remove();document.getElementById('awsCognitoLoginNote')?.remove();fields.style.display='';for(const id of ['loginUsername','loginPassword','btnLogin','btnForgotPassword']){const old=document.getElementById(id);if(old){const c=old.cloneNode(true);old.replaceWith(c)}}const u=document.getElementById('loginUsername'),p=document.getElementById('loginPassword'),b=document.getElementById('btnLogin'),fp=document.getElementById('btnForgotPassword');if(u){u.closest('.form-row').style.display='';u.type='email';u.placeholder='you@agency.gov'}if(p)p.closest('.form-row').style.display='';if(b){b.style.display='';b.textContent='Sign In';b.onclick=signIn}if(fp){if(fp.parentElement)fp.parentElement.style.display='';fp.onclick=forgot}u?.addEventListener('keydown',e=>{if(e.key==='Enter')p?.focus()});p?.addEventListener('keydown',e=>{if(e.key==='Enter')signIn()});const s=document.querySelector('#loginScreen .brand-text .t2');if(s)s.textContent='Secure agency sign in'}
