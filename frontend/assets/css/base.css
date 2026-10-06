@@ -709,3 +709,8 @@
 .sched-filter-chip:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 10%,transparent);}
 .sched-filter-chip input{margin:0;}
 @media(max-width:720px){.sched-workgroup-filter{width:100%;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.sched-filter-chip{flex:0 0 auto;}}
+
+.access-person-list{border:1px solid var(--border);border-radius:12px;padding:8px;max-height:240px;overflow:auto;background:var(--panel);}
+.access-person-list label{display:flex;align-items:center;gap:8px;min-height:38px;padding:5px 7px;border-radius:8px;font-size:13px;cursor:pointer;}
+.access-person-list label:hover{background:color-mix(in srgb,var(--accent) 6%,transparent);}
+.access-person-list input{margin:0;}
