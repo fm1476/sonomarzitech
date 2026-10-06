@@ -110,15 +110,9 @@ export const handler = async event => {
       });
     }
 
-    const requestPerf = { startedAt: performance.now() };
-    const dbStartedAt = performance.now();
     client = await connectDatabase();
-    requestPerf.dbConnectMs = performance.now() - dbStartedAt;
 
-    const authStartedAt = performance.now();
     const userAuth = await authenticateUser(client, event);
-    requestPerf.authenticateMs = performance.now() - authStartedAt;
-    event.sonomarziPerf = requestPerf;
     if (userAuth.error) return userAuth.error;
 
     if (path === "/me") {
