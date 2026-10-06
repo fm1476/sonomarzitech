@@ -3724,7 +3724,7 @@ function renderDutyCalendar(body){
   for(let i=0;i<startWeekday;i++) cells += `<div class="cal-cell cal-cell-empty"></div>`;
   for(let d=1; d<=daysInMonth; d++){
     const dateStr = `${year}-${monthStr}-${String(d).padStart(2,'0')}`;
-    const onDutyAll = relevantAssignments.filter(a=>isOnDutyOnDate(a, shifts.find(s=>s.id===a.shiftId), dateStr));
+    const onDutyAll = relevantAssignments.filter(a=>{const sh=shifts.find(s=>s.id===a.shiftId);return !!sh&&isOnDutyOnDate(a,sh,dateStr);});
     const working = [], excepted = [];
     onDutyAll.forEach(a=>{
       const ex = activeExceptionFor(a.personId, dateStr);
