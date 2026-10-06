@@ -586,7 +586,7 @@ const StaffNotices=(()=>{
     const personnel=STATE.personnel.filter(p=>p.status!=='Inactive').sort((a,b)=>a.name.localeCompare(b.name));
     const units=[...new Set(personnel.map(p=>p.unit).filter(Boolean))].sort();
     const today=fmt(new Date());
-    const shifts=STATE.pm.scheduleShifts.filter(s=>!s.endDate||s.endDate>=today);
+    const shifts=STATE.pm.scheduleShifts.filter(s=>s.published!==false&&(!s.endDate||s.endDate>=today));
     root.innerHTML=`<section class="panel"><div class="panel-head"><h2>My notices</h2><div style="display:flex;gap:8px;flex-wrap:wrap">${canSend?'<button type="button" id="noticeComposeJump" class="btn btn-primary btn-sm">Send staff notice</button>':''}<button type="button" id="noticeRefresh" class="btn btn-outline btn-sm">Refresh</button></div></div>
       <div id="noticeInbox" aria-live="polite" class="panel-body">Loading…</div></section>
       ${canSend?`<section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Send staff notice</h2>${sessionStorage.getItem('sonomarzi.staffNotice.return')?'<button type="button" id="noticeReturn" class="btn btn-outline btn-sm">← Back to Duty Roster</button>':''}</div><div class="panel-body">
