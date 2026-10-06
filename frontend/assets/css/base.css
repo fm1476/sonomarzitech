@@ -688,3 +688,16 @@
   .role-search-wrap{max-width:none;min-width:100%;}
   .role-search-hint{display:none;}
 }
+
+
+/* Duty Roster staffing status */
+.cal-cell.cal-cell-covered{border-color:color-mix(in srgb,var(--green) 58%,var(--border));}
+.cal-cell.cal-cell-short{border-color:color-mix(in srgb,var(--red) 65%,var(--border));}
+.cal-cell.cal-cell-covered .cal-daynum{
+  display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 8px;
+  border-radius:999px;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green);font-weight:800;
+}
+.cal-cell.cal-cell-short .cal-daynum{
+  display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 8px;
+  border-radius:999px;background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red);font-weight:800;
+}
