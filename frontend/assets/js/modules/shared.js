@@ -3061,7 +3061,7 @@ function renderRoles(){
   const systemAdminRole = STATE.roles.find(r=>r.id==='role_admin');
   if(systemAdminRole){ ALL_CUSTOMER_ABILITY_IDS.forEach(id=>{ if(systemAdminRole.abilities[id]===undefined) systemAdminRole.abilities[id]=true; }); }
   if(!SELECTED_ROLE_ID) SELECTED_ROLE_ID = primaryRoleId();
-  const visibleRoles = STATE.roles.filter(r=>!r.hidden || loggedInPersonHasRole(r.id));
+  const visibleRoles = STATE.roles.filter(r=>!r.hidden || loggedInPersonHasRole(r.id)).sort((a,b)=>(a.name||'').localeCompare(b.name||'',undefined,{sensitivity:'base'}));
   if(!visibleRoles.find(r=>r.id===SELECTED_ROLE_ID)) SELECTED_ROLE_ID = visibleRoles[0].id;
 
   const roleListHtml = visibleRoles.map(r=>`
@@ -3099,7 +3099,7 @@ function renderRoles(){
   document.getElementById('view-roles').innerHTML = `
     ${!canManage ? lockedNote("You're viewing role definitions in read-only mode. An authorized administrator can edit abilities.") : ""}
     <div class="toolbar">
-      <div style="flex:1;max-width:520px;"><input type="search" id="roleAbilitySearch" placeholder="Search roles or abilities…" autocomplete="off" aria-label="Search roles or abilities"></div>
+      <div class="role-search-wrap"><span class="role-search-icon">${ICONS.search||"⌕"}</span><input type="search" id="roleAbilitySearch" class="role-search-input" placeholder="Search roles or abilities" autocomplete="off" aria-label="Search roles or abilities"><span class="role-search-hint">Search by role, permission, or function</span></div>
       <div style="display:flex;gap:8px;">
         ${canManage && missingDefaults.length ? `<button class="btn btn-outline" id="btnAddDefaultRoles">${ICONS.plus} Add ${missingDefaults.length} Missing Default Role${missingDefaults.length===1?'':'s'}</button>` : ''}
         ${canManage ? `<button class="btn btn-primary" id="btnAddRole">${ICONS.plus} New Role</button>` : ""}
