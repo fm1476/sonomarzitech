@@ -33,7 +33,8 @@
       const header=group.querySelector('.nav-mod-header');
       const name=(header?.textContent||'').replace(/[+\-]/g,'').trim().toLowerCase();
       if(name!=='drone management' && name!=='fleet management' && name!=='k9 management' && name!=='eod management' && name!=='personnel administration') return;
-      group.querySelectorAll('.navline').forEach(line=>{ line.style.display='none'; });
+      group.querySelectorAll('.navline, .navitem, .nav-subitem, .nav-mod-items, .nav-mod-body, [data-nav-item]').forEach(line=>{ line.style.display='none'; });
+      [...group.children].forEach(child=>{ if(child!==header && !child.contains(header)) child.style.display='none'; });
       group.classList.add('dashboard-first-module');
     });
   }
