@@ -209,14 +209,16 @@ function operatorCurrent(o){ return o.certExpiration && o.certExpiration >= fmt(
    NAV
    ========================================================================= */
 const NAV_ITEMS = [
-  {id:"drone-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"Fleet status and mission activity at a glance", requiredAbility:null},
-  {id:"drone-fleet", label:"Drone Fleet", icon:"drone", title:"Drone Fleet", sub:"Every aircraft, its status, and its assigned operator", requiredAbility:"drone_fleet_view"},
-  {id:"drone-operators", label:"Operators", icon:"radio", title:"Operators", sub:"Certified remote pilots, currency, and waivers", requiredAbility:"drone_operator_view"},
-  {id:"drone-flights", label:"Flight Log", icon:"grid", title:"Flight Log", sub:"Chronological record of every mission flown", requiredAbility:"drone_flight_view"},
-  {id:"drone-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Service history and battery health for the fleet", requiredAbility:"drone_maint_view"},
-  {id:"drone-incidents", label:"Incidents", icon:"alert", title:"Incidents", sub:"Crashes, flyaways, and reviewable incidents", requiredAbility:"drone_incident_view"},
-  {id:"drone-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Individual aircraft activity and configurable analytics", requiredAbility:"drone_reports_view"},
-  {id:"drone-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data, agency authorizations, and the system audit log", requiredAbility:["drone_admin_categories","drone_admin_audit"]},
+  // Drone Management is dashboard-first. All operational destinations remain
+  // permission-aware and are launched from the dashboard rather than the sidebar.
+  {id:"drone-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"Fleet status and mission activity at a glance", requiredAbility:null, hideFromSidebar:true},
+  {id:"drone-fleet", label:"Drone Fleet", icon:"drone", title:"Drone Fleet", sub:"Every aircraft, its status, and its assigned operator", requiredAbility:"drone_fleet_view", hideFromSidebar:true},
+  {id:"drone-operators", label:"Operators", icon:"radio", title:"Operators", sub:"Certified remote pilots, currency, and waivers", requiredAbility:"drone_operator_view", hideFromSidebar:true},
+  {id:"drone-flights", label:"Flight Log", icon:"grid", title:"Flight Log", sub:"Chronological record of every mission flown", requiredAbility:"drone_flight_view", hideFromSidebar:true},
+  {id:"drone-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Service history and battery health for the fleet", requiredAbility:"drone_maint_view", hideFromSidebar:true},
+  {id:"drone-incidents", label:"Incidents", icon:"alert", title:"Incidents", sub:"Crashes, flyaways, and reviewable incidents", requiredAbility:"drone_incident_view", hideFromSidebar:true},
+  {id:"drone-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Individual aircraft activity and configurable analytics", requiredAbility:"drone_reports_view", hideFromSidebar:true},
+  {id:"drone-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data, agency authorizations, and the system audit log", requiredAbility:["drone_admin_categories","drone_admin_audit"], hideFromSidebar:true},
 ];
 let ACTIVE_VIEW = "drone-dashboard";
 
@@ -229,7 +231,7 @@ function navItemVisible(item){
 }
 function renderNav(){
   const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
+  const visibleItems = NAV_ITEMS.filter(item=>navItemVisible(item) && !item.hideFromSidebar);
   nav.innerHTML = visibleItems.map(item=>`
     <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
       ${ICONS[item.icon]}<span>${item.label}</span>
@@ -492,7 +494,17 @@ function renderDashboard(){
   recalcNotifications();
   const prefs = myWidgetPrefs();
   const root = document.getElementById('view-drone-dashboard');
+  const dashboardDestinations = NAV_ITEMS.filter(item=>item.id!=='drone-dashboard' && navItemVisible(item));
   root.innerHTML = `
+    <div class="k9-card-grid" style="margin-bottom:24px;">
+      ${dashboardDestinations.map(item=>`
+        <button class="drone-card dash-clickable" data-nav-dest="${item.id}" style="text-align:left;cursor:pointer;font-family:inherit;color:inherit;">
+          <div style="width:30px;height:30px;color:var(--blue);margin-bottom:10px;">${ICONS[item.icon]||ICONS.grid}</div>
+          <div style="font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px;">${escapeHtml(item.label)}</div>
+          <div style="font-size:12.5px;line-height:1.45;color:var(--text-dim);">${escapeHtml(item.sub)}</div>
+        </button>
+      `).join('')}
+    </div>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
       <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
