@@ -230,16 +230,10 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 function renderNav(){
+  // Drone Management is dashboard-first. Clear the legacy module submenu entirely;
+  // every destination is available from the dashboard hub.
   const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(item=>navItemVisible(item) && !item.hideFromSidebar);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  nav.innerHTML = '';
 }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
@@ -491,8 +485,8 @@ function renderDashboard(){
       #view-drone-dashboard .drone-hub-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:20px}
       #view-drone-dashboard .drone-hub-card{grid-column:span 4;min-height:145px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background .15s ease}
       #view-drone-dashboard .drone-hub-card:nth-child(n+4){grid-column:span 3}
-      #view-drone-dashboard .drone-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray)}
-      #view-drone-dashboard .drone-hub-icon{width:30px;height:30px;color:var(--blue);margin-bottom:13px}
+      #view-drone-dashboard .drone-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray);box-shadow:0 10px 28px rgba(0,0,0,.16)}
+      #view-drone-dashboard .drone-hub-icon{width:30px;height:30px;margin-bottom:13px;filter:drop-shadow(0 0 8px currentColor)}
       #view-drone-dashboard .drone-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}
       #view-drone-dashboard .drone-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
       #view-drone-dashboard .drone-kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:22px}
@@ -503,7 +497,7 @@ function renderDashboard(){
       @media(max-width:700px){#view-drone-dashboard .drone-hub-card,#view-drone-dashboard .drone-hub-card:nth-child(n+4){grid-column:1/-1}#view-drone-dashboard .drone-kpi-grid{grid-template-columns:1fr}}
     </style>
     <div class="drone-hub-grid">
-      ${dashboardDestinations.map(item=>`<button class="drone-hub-card" data-nav-dest="${item.id}"><div class="drone-hub-icon">${ICONS[item.icon]||ICONS.grid}</div><div class="drone-hub-title">${escapeHtml(item.label)}</div><div class="drone-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
+      ${dashboardDestinations.map((item,index)=>`<button class="drone-hub-card" data-nav-dest="${item.id}"><div class="drone-hub-icon" style="color:${["#4D8DFF","#43D59B","#B47CFF","#FF9F43","#FF6678","#63A7FF","#8A9DB8"][index%7]};">${ICONS[item.icon]||ICONS.grid}</div><div class="drone-hub-title">${escapeHtml(item.label)}</div><div class="drone-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
     </div>
     <div class="drone-kpi-grid" id="dashTopZone">${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}</div>
     <div class="toolbar">
