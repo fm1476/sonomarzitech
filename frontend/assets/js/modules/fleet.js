@@ -525,16 +525,10 @@ function navItemVisible(item){
 }
 
 function renderNav(){
+  // Fleet Management is dashboard-first. Clear the legacy module submenu entirely;
+  // dashboard cards provide navigation into Fleet functions.
   const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(item=>navItemVisible(item) && !item.hideFromSidebar);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  nav.innerHTML = '';
 }
 
 function switchView(id){
