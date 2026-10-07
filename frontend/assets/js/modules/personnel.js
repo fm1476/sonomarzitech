@@ -283,6 +283,9 @@ function migrateData(){
   if(!STATE.pm.refData) STATE.pm.refData = defaultRefData();
   if(!STATE.pm.notifications) STATE.pm.notifications = [];
   if(!STATE.pm.dashboardPrefs) STATE.pm.dashboardPrefs = {};
+  if(!STATE.pm.personnelSettings) STATE.pm.personnelSettings = { authorizedStaffingEnabled:false, authorizedPositionsByUnit:{} };
+  if(STATE.pm.personnelSettings.authorizedStaffingEnabled===undefined) STATE.pm.personnelSettings.authorizedStaffingEnabled=false;
+  if(!STATE.pm.personnelSettings.authorizedPositionsByUnit) STATE.pm.personnelSettings.authorizedPositionsByUnit={};
   if(!STATE.pm.notifySettings) STATE.pm.notifySettings = { disciplinaryExpiringRoleId: STATE.roles[0].id, trainingExpiringRoleId: STATE.roles[0].id, medicalDueRoleId: STATE.roles[0].id };
   if(!STATE.pm.inquiries) STATE.pm.inquiries = [];
   if(!STATE.pm.trainingRequests) STATE.pm.trainingRequests = [];
@@ -394,18 +397,7 @@ function navItemVisible(item){
   if(Array.isArray(item.requiredAbility)) return item.requiredAbility.some(a=>can(a));
   return can(item.requiredAbility);
 }
-function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
-}
+function renderNav(){ document.getElementById('navlist').innerHTML=''; }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
@@ -418,6 +410,13 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=="pm-dashboard"){
+    const root=document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back=document.createElement('button'); back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
+      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px'; back.onclick=()=>switchView('pm-dashboard'); root.prepend(back);
+    }
+  }
 }
 function renderView(id){
   if(id==="pm-dashboard") renderDashboard();
@@ -658,50 +657,56 @@ function openCustomizeDashboardModal(){
 }
 function renderDashboard(){
   recalcNotifications();
-  const prefs = myWidgetPrefs();
-  const root = document.getElementById('view-pm-dashboard');
-  root.innerHTML = `
-    <div class="toolbar">
-      <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
-      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
-    </div>
-    <div class="stat-grid" id="dashTopZone">
-      ${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}
-    </div>
-    <div class="dash-extras-zone" id="dashExtrasZone">
-      ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
-    </div>
-  `;
-  root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
-  destroyChartsPm();
-  if(prefs.extras.some(e=>e.id==='chart_inquiries_by_category')){
-    const inquiryByCategory = {};
-    STATE.pm.refData.inquiryCategories.forEach(c=>inquiryByCategory[c]=0);
-    STATE.pm.inquiries.forEach(i=>inquiryByCategory[i.category]=(inquiryByCategory[i.category]||0)+1);
-    const blue='#134DD1';
-    CHART_REFS_PM.inquiries = safeChart('chartInquiries', {
-      type:'bar',
-      data:{ labels:Object.keys(inquiryByCategory), datasets:[{label:'Inquiries', data:Object.values(inquiryByCategory), backgroundColor:blue}] },
-      options: {maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:10}},grid:{display:false}}, y:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:11}},grid:{color:chartGridColor()}}}}
-    });
-  }
-  wireDashDragDrop(root.querySelector('#dashTopZone'), prefs.topOrder, false);
-  wireDashDragDrop(root.querySelector('#dashExtrasZone'), prefs.extras, true);
-  root.querySelectorAll('[data-widget-size-cycle]').forEach(b=>b.addEventListener('click', e=>{
-    e.preventDefault(); e.stopPropagation();
-    const entry = prefs.extras.find(x=>x.id===b.dataset.widgetSizeCycle);
-    if(!entry) return;
-    const order = ['quarter','half','threeQuarter','full'];
-    entry.size = order[(order.indexOf(entry.size)+1) % order.length];
-    persist(); renderDashboard();
-  }));
-  root.querySelectorAll('[data-widget-remove]').forEach(b=>b.addEventListener('click', e=>{
-    e.preventDefault(); e.stopPropagation();
-    prefs.extras = prefs.extras.filter(x=>x.id!==b.dataset.widgetRemove);
-    persist(); renderDashboard();
-  }));
-  const custBtn = root.querySelector('#btnCustomizeDashboard');
-  if(custBtn) custBtn.addEventListener('click', openCustomizeDashboardModal);
+  const root=document.getElementById('view-pm-dashboard'),records=STATE.pm.records,active=records.filter(r=>r.employmentStatus==='Active'),onLeave=records.filter(r=>r.employmentStatus==='On Leave').length;
+  const settings=STATE.pm.personnelSettings||(STATE.pm.personnelSettings={authorizedStaffingEnabled:false,authorizedPositionsByUnit:{}});
+  const unitCounts={};active.forEach(r=>{if(r.unitId)unitCounts[r.unitId]=(unitCounts[r.unitId]||0)+1;});
+  const unassigned=active.filter(r=>!r.unitId||!String(r.unitId).trim()).length;
+  const expiring=STATE.pm.notifications.filter(n=>n.type==='training_expiring'||n.type==='medical_due');
+  const staffingRows=STATE.pm.refData.units.map(u=>({unit:u,assigned:unitCounts[u]||0,authorized:settings.authorizedPositionsByUnit[u]}));
+  const vacancyCount=staffingRows.reduce((n,x)=>x.authorized==null||x.authorized===''?n:n+Math.max(0,Number(x.authorized)-x.assigned),0);
+  const hub=[
+    ['pm-records','Personnel','users','Manage employee profiles, contact information, and employment data','#4D8DFF'],
+    ['pm-admin','Units & Organization','organization','Units, divisions, teams, command structure, and staffing','#43D59B'],
+    ['pm-records','Assignments','idcard','Current assignments, supervisors, ranks, and positions','#D94DFF'],
+    ['pm-training','Qualifications','award','Certifications, training, skills, and expiration tracking','#FF9F43'],
+    ...(settings.authorizedStaffingEnabled?[['pm-admin','Positions & Vacancies','organization','Authorized positions, assigned staffing, vacancies, and overages','#20C7D9']]:[]),
+    ['pm-reports','Reports','chart','Staffing, personnel, and qualification analytics','#4D8DFF'],
+    ['pm-admin','Admin','gear','Ranks, titles, units, statuses, employment types, and configuration','#9AAAC0']
+  ].filter(x=>navItemVisible(NAV_ITEMS.find(n=>n.id===x[0])));
+  const attention=[
+    [expiring.filter(n=>n.type==='training_expiring').length,'Qualifications expiring (next 30 days)','alert'],
+    [unassigned,'Unassigned personnel','users'],
+    [STATE.pm.trainingRequests.filter(r=>r.status==='Pending').length,'Training requests awaiting decision','award'],
+    [STATE.pm.disciplinaryActions.filter(d=>d.status!=='Closed').length,'Open disciplinary actions','alert']
+  ];
+  const recent=(STATE.pm.activity||[]).slice().reverse().slice(0,5);
+  root.innerHTML=`
+  <style>
+    #view-pm-dashboard .pm-hub{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:16px}.pm-hub-card{grid-column:span 3;min-height:155px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:.15s}.pm-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray)}.pm-hub-icon{width:31px;height:31px;margin-bottom:13px;filter:drop-shadow(0 0 8px currentColor)}.pm-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}.pm-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
+    .pm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.pm-kpi{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:18px 20px}.pm-kpi-label{font-size:12px;color:var(--text-dim);display:flex;gap:8px;align-items:center}.pm-kpi-label svg{width:18px;height:18px}.pm-kpi-value{font-size:28px;font-weight:800;color:var(--heading);margin:7px 0}.pm-kpi-sub{font-size:11.5px;color:var(--text-dim)}
+    .pm-two{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:14px}.pm-panel{border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden}.pm-panel-head{display:flex;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);font-weight:800;color:var(--heading)}.pm-panel-body{padding:16px 18px}.pm-unit-row{display:grid;grid-template-columns:minmax(130px,1fr) 3fr auto;gap:12px;align-items:center;margin:9px 0;font-size:12px}.pm-unit-bar{height:9px;border-radius:8px;background:var(--lightgray);overflow:hidden}.pm-unit-fill{height:100%;background:var(--blue);border-radius:8px}.pm-attention-row{display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px}.pm-attention-row svg{width:18px;height:18px;color:var(--gold)}
+    @media(max-width:1100px){.pm-hub-card{grid-column:span 6}#view-pm-dashboard .pm-two{grid-template-columns:1fr}.pm-kpis{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.pm-hub-card{grid-column:1/-1}.pm-kpis{grid-template-columns:1fr}}
+  </style>
+  <div class="pm-hub">${hub.map(x=>`<button class="pm-hub-card" data-nav-dest="${x[0]}"><div class="pm-hub-icon" style="color:${x[4]}">${ICONS[x[2]]||ICONS.idcard}</div><div class="pm-hub-title">${x[1]}</div><div class="pm-hub-sub">${x[3]}</div></button>`).join('')}</div>
+  <div class="pm-kpis">
+    <div class="pm-kpi"><div class="pm-kpi-label">${ICONS.users} Total Staff</div><div class="pm-kpi-value">${records.length}</div><div class="pm-kpi-sub">${active.length} active personnel</div></div>
+    <div class="pm-kpi"><div class="pm-kpi-label">${ICONS.check} Active Staff</div><div class="pm-kpi-value">${active.length}</div><div class="pm-kpi-sub">${onLeave} on leave</div></div>
+    <div class="pm-kpi"><div class="pm-kpi-label">${ICONS.organization||ICONS.users} Unassigned</div><div class="pm-kpi-value">${unassigned}</div><div class="pm-kpi-sub">Personnel needing a unit assignment</div></div>
+    <div class="pm-kpi"><div class="pm-kpi-label">${ICONS.alert} Expiring Qualifications</div><div class="pm-kpi-value">${expiring.length}</div><div class="pm-kpi-sub">Training, certifications, and credentials</div></div>
+  </div>
+  <div class="pm-two">
+    <div class="pm-panel"><div class="pm-panel-head"><span>Staff by Unit</span><span style="color:var(--blue);font-size:12px;">${settings.authorizedStaffingEnabled?'Authorized staffing enabled':'Workforce distribution'}</span></div><div class="pm-panel-body">
+      ${staffingRows.slice(0,10).map(x=>{const max=Math.max(1,...staffingRows.map(y=>y.assigned));const pct=Math.max(3,Math.round(x.assigned/max*100));const status=settings.authorizedStaffingEnabled&&x.authorized!=null?` · ${x.assigned}/${x.authorized} authorized`:'';return `<div class="pm-unit-row"><strong>${escapeHtml(x.unit)}</strong><div class="pm-unit-bar"><div class="pm-unit-fill" style="width:${pct}%"></div></div><span>${x.assigned}${status}</span></div>`;}).join('')}
+    </div></div>
+    <div class="pm-panel"><div class="pm-panel-head"><span>Personnel Attention Needed</span><span style="color:var(--blue);font-size:12px;">${settings.authorizedStaffingEnabled?vacancyCount+' vacancies':''}</span></div><div class="pm-panel-body">
+      ${attention.map(a=>`<div class="pm-attention-row"><span>${ICONS[a[2]]||ICONS.alert}</span><span>${a[1]}</span><strong>${a[0]}</strong></div>`).join('')}
+    </div></div>
+  </div>
+  <div class="pm-two">
+    <div class="pm-panel"><div class="pm-panel-head"><span>Recent Personnel Activity</span><span></span></div><div class="pm-panel-body">${recent.length?recent.map(a=>`<div class="pm-attention-row"><span>${ICONS.history}</span><span>${escapeHtml(a.message||a.action||'Personnel activity')}</span><span>${escapeHtml(a.ts||a.date||'')}</span></div>`).join(''):'<div style="color:var(--text-dim);font-size:12px;">No recent personnel activity.</div>'}</div></div>
+    <div class="pm-panel"><div class="pm-panel-head"><span>Upcoming Expirations</span><span style="color:var(--blue);font-size:12px;">Next 30 days</span></div><div class="pm-panel-body">${expiring.slice(0,5).map(n=>`<div class="pm-attention-row"><span>${ICONS.alert}</span><span>${escapeHtml(n.message)}</span><span></span></div>`).join('')||'<div style="color:var(--text-dim);font-size:12px;">No upcoming expirations.</div>'}</div></div>
+  </div>`;
+  root.querySelectorAll('[data-nav-dest]').forEach(b=>b.onclick=()=>switchView(b.dataset.navDest));
 }
 
 /* =========================================================================
@@ -4696,6 +4701,7 @@ function renderAdmin(){
     Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label]));
     tabs.push(['trainingLocations','Training Locations']);
     tabs.push(['exceptionCodes','Time Off Codes']);
+    tabs.push(['personnelSettings','Personnel Settings']);
     tabs.push(['schedulingSettings','Scheduling Settings']);
     tabs.push(['notifications','Notification Routing']);
   }
@@ -4726,6 +4732,7 @@ function renderAdminTabBody(){
   if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
   else if(ADMIN_TAB==='trainingLocations') renderTrainingLocationsTab(body);
   else if(ADMIN_TAB==='exceptionCodes') renderExceptionCodesTab(body);
+  else if(ADMIN_TAB==='personnelSettings') renderPersonnelSettingsTab(body);
   else if(ADMIN_TAB==='schedulingSettings') renderSchedulingSettingsTab(body);
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImportPersonnel') renderBulkImportTab(body, 'personnel');
@@ -4950,6 +4957,28 @@ function renderSimpleListTab(body, key){
 // on-duty + extra-duty hours in one day trips the fatigue flag on an Extra Duty signup. Different
 // agencies (and different union contracts) set this differently, so it has to be an admin setting,
 // not a constant buried in the code.
+function renderPersonnelSettingsTab(body){
+  const settings=STATE.pm.personnelSettings||(STATE.pm.personnelSettings={authorizedStaffingEnabled:false,authorizedPositionsByUnit:{}});
+  const counts={}; STATE.pm.records.filter(r=>r.employmentStatus==='Active').forEach(r=>{if(r.unitId)counts[r.unitId]=(counts[r.unitId]||0)+1;});
+  body.innerHTML=`
+    <div class="panel"><div class="panel-head"><h2>Authorized Staffing Tracking</h2></div><div class="panel-body">
+      <label style="display:flex;gap:10px;align-items:center;font-weight:700;margin-bottom:8px;"><input type="checkbox" id="fAuthorizedStaffingEnabled" ${settings.authorizedStaffingEnabled?'checked':''}> Enable authorized staffing tracking</label>
+      <p style="font-size:12.5px;color:var(--text-dim);max-width:760px;">When enabled, each unit can optionally have an authorized staffing number. SonoMarzi compares active personnel assignments with that number to show vacancies, fully staffed units, and units over authorized strength. Units without a number remain Not Set.</p>
+      <div id="authorizedUnitSettings" style="${settings.authorizedStaffingEnabled?'':'display:none;'};margin-top:18px;">
+        <table><thead><tr><th>Unit</th><th>Assigned</th><th>Authorized Positions</th><th>Status</th></tr></thead><tbody>
+          ${STATE.pm.refData.units.map(unit=>{const auth=settings.authorizedPositionsByUnit[unit],assigned=counts[unit]||0,status=auth==null||auth===''?'Not Set':assigned<Number(auth)?(Number(auth)-assigned)+' Vacant':assigned>Number(auth)?'+'+(assigned-Number(auth))+' Over':'Fully Staffed';return `<tr><td>${escapeHtml(unit)}</td><td>${assigned}</td><td><input type="number" min="0" step="1" data-auth-unit="${escapeHtml(unit)}" value="${auth==null?'':auth}" placeholder="Optional" style="width:130px;"></td><td>${status}</td></tr>`;}).join('')}
+        </tbody></table>
+      </div>
+      <button class="btn btn-primary btn-sm" id="btnSavePersonnelSettings" style="margin-top:16px;">Save Personnel Settings</button>
+    </div></div>`;
+  const toggle=body.querySelector('#fAuthorizedStaffingEnabled'); toggle.onchange=()=>{body.querySelector('#authorizedUnitSettings').style.display=toggle.checked?'':'none';};
+  body.querySelector('#btnSavePersonnelSettings').onclick=()=>{
+    settings.authorizedStaffingEnabled=toggle.checked;
+    const next={}; body.querySelectorAll('[data-auth-unit]').forEach(inp=>{if(inp.value!=='')next[inp.dataset.authUnit]=Math.max(0,Math.floor(Number(inp.value)||0));});
+    settings.authorizedPositionsByUnit=next; logActivity(`${settings.authorizedStaffingEnabled?'Enabled':'Disabled'} authorized staffing tracking.`,'admin'); persist(); toast('Personnel settings saved.'); renderAdminTabBody();
+  };
+}
+
 function renderSchedulingSettingsTab(body){
   if(!isGlobalScheduleAdmin()){body.innerHTML=lockedNote('An agency or platform administrator manages agency-wide scheduling settings.');return;}
   const settings = STATE.pm.schedulingSettings || (STATE.pm.schedulingSettings = { fatigueThresholdHours: 16 });
