@@ -28,7 +28,24 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded',cleanAwsDevChrome);
-  window.addEventListener('load',cleanAwsDevChrome);
-  setTimeout(cleanAwsDevChrome,500);
+  function collapseDashboardFirstModuleMenus(){
+    document.querySelectorAll('.module-navgroup').forEach(group=>{
+      const header=group.querySelector('.nav-mod-header');
+      const name=(header?.textContent||'').replace(/[+\-]/g,'').trim().toLowerCase();
+      if(name!=='drone management' && name!=='fleet management') return;
+      group.querySelectorAll('.navline').forEach(line=>{ line.style.display='none'; });
+      group.classList.add('dashboard-first-module');
+    });
+  }
+
+  function cleanProductionChrome(){
+    cleanAwsDevChrome();
+    collapseDashboardFirstModuleMenus();
+  }
+
+  document.addEventListener('DOMContentLoaded',cleanProductionChrome);
+  window.addEventListener('load',cleanProductionChrome);
+  setTimeout(cleanProductionChrome,500);
+  setTimeout(cleanProductionChrome,1500);
+  new MutationObserver(collapseDashboardFirstModuleMenus).observe(document.documentElement,{childList:true,subtree:true});
 })();
