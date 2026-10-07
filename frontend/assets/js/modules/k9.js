@@ -261,7 +261,7 @@ function monthlyTrainingHours(k9Id, monthsBack){
 const NAV_ITEMS = [
   {id:"k9-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"K9 unit status at a glance", requiredAbility:null},
   {id:"k9-roster", label:"K9 Roster", icon:"pawprint", title:"K9 Roster", sub:"Every dog, handler, and profile in the unit", requiredAbility:"k9_roster_view"},
-  {id:"k9-deployments", label:"Deployments", icon:"grid", title:"Deployments & Activity", sub:"The full activity log for every K9 team", requiredAbility:"k9_deployment_view"},
+  {id:"k9-deployments", label:"Deployments", icon:"activity", title:"Deployments & Activity", sub:"The full activity log for every K9 team", requiredAbility:"k9_deployment_view"},
   {id:"k9-training", label:"Training", icon:"award", title:"Training", sub:"Sessions, hours, and maintenance-training compliance", requiredAbility:"k9_training_view"},
   {id:"k9-certifications", label:"Certifications", icon:"ribbon", title:"Certifications", sub:"Discipline certifications and recertification tracking", requiredAbility:"k9_certification_view"},
   {id:"k9-incidents", label:"Incidents", icon:"alert", title:"Incidents", sub:"Bites, injuries, and reviewable incidents", requiredAbility:"k9_incident_view"},
@@ -279,16 +279,9 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 function renderNav(){
+  // K9 Management is dashboard-first. All section navigation lives on the dashboard hub.
   const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  nav.innerHTML = '';
 }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
@@ -302,6 +295,16 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=="k9-dashboard"){
+    const root=document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back=document.createElement('button');
+      back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
+      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px';
+      back.addEventListener('click',()=>switchView('k9-dashboard'));
+      root.prepend(back);
+    }
+  }
 }
 function renderView(id){
   if(id==="k9-dashboard") renderDashboard();
@@ -408,20 +411,20 @@ function renderWidget(id){
     const active = STATE.k9.k9s.filter(k=>k.status==="Active").length;
     const lightDuty = STATE.k9.k9s.filter(k=>k.status==="Light Duty").length;
     const retired = STATE.k9.k9s.filter(k=>k.status==="Retired").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="k9-roster"><div class="label">Active K9s</div><div class="value">${active}</div><div class="delta neutral">${lightDuty} light duty &bull; ${retired} retired</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="k9-roster"><div class="label">${ICONS.pawprint} <span>Active K9s</span></div><div class="value">${active}</div><div class="delta neutral">${lightDuty} light duty &bull; ${retired} retired</div></button>`;
   }
   if(id==='stat_certs_expiring'){
     const certsExpiring = STATE.k9.notifications.filter(n=>n.type==="cert_expiring").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="k9-certifications"><div class="label">Certifications Expiring</div><div class="value" style="color:${certsExpiring?'var(--red)':'var(--heading)'}">${certsExpiring}</div><div class="delta ${certsExpiring?'warn':'ok'}">Within 45 days</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="k9-certifications"><div class="label">${ICONS.ribbon} <span>Certifications Expiring</span></div><div class="value" style="color:${certsExpiring?'var(--red)':'var(--heading)'}">${certsExpiring}</div><div class="delta ${certsExpiring?'warn':'ok'}">Within 45 days</div></button>`;
   }
   if(id==='stat_below_compliance'){
     const belowCompliance = STATE.k9.notifications.filter(n=>n.type==="training_compliance").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="k9-training"><div class="label">Below Training Compliance</div><div class="value" style="color:${belowCompliance?'var(--red)':'var(--heading)'}">${belowCompliance}</div><div class="delta ${belowCompliance?'warn':'ok'}">${MONTHLY_TRAINING_HOURS_STANDARD}hrs/mo standard</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="k9-training"><div class="label">${ICONS.award} <span>Below Training Compliance</span></div><div class="value" style="color:${belowCompliance?'var(--red)':'var(--heading)'}">${belowCompliance}</div><div class="delta ${belowCompliance?'warn':'ok'}">${MONTHLY_TRAINING_HOURS_STANDARD}hrs/mo standard</div></button>`;
   }
   if(id==='stat_open_incidents'){
     const openIncidents = STATE.k9.incidents.filter(i=>i.reviewStatus==="Pending").length;
     const last30Deployments = STATE.k9.deployments.filter(d=>daysBetween(d.date, fmt(new Date()))<=30).length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="k9-incidents"><div class="label">Open Incident Reviews</div><div class="value" style="color:${openIncidents?'var(--red)':'var(--heading)'}">${openIncidents}</div><div class="delta neutral">${last30Deployments} deployments (30d)</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="k9-incidents"><div class="label">${ICONS.alert} <span>Open Incident Reviews</span></div><div class="value" style="color:${openIncidents?'var(--red)':'var(--heading)'}">${openIncidents}</div><div class="delta neutral">${last30Deployments} deployments (30d)</div></button>`;
   }
   if(id==='list_training_compliance'){
     const complianceRows = STATE.k9.k9s.filter(k=>k.status!=="Retired" && k.status!=="Deceased").map(k=>{
@@ -540,7 +543,23 @@ function renderDashboard(){
   recalcNotifications();
   const prefs = myWidgetPrefs();
   const root = document.getElementById('view-k9-dashboard');
+  const dashboardDestinations = NAV_ITEMS.filter(item=>item.id!=='k9-dashboard' && navItemVisible(item));
+  const hubColors=['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#FF6678','#41C7C7','#63A7FF','#8A9DB8'];
   root.innerHTML = `
+    <style>
+      #view-k9-dashboard .k9-hub-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:20px}
+      #view-k9-dashboard .k9-hub-card{grid-column:span 3;min-height:145px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background .15s ease,box-shadow .15s ease}
+      #view-k9-dashboard .k9-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray);box-shadow:0 10px 28px rgba(0,0,0,.16)}
+      #view-k9-dashboard .k9-hub-icon{width:30px;height:30px;margin-bottom:13px;filter:drop-shadow(0 0 8px currentColor)}
+      #view-k9-dashboard .k9-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}
+      #view-k9-dashboard .k9-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
+      #view-k9-dashboard .stat-card .label svg{width:18px;height:18px;vertical-align:middle;margin-right:6px}
+      @media(max-width:1100px){#view-k9-dashboard .k9-hub-card{grid-column:span 6}}
+      @media(max-width:700px){#view-k9-dashboard .k9-hub-card{grid-column:1/-1}}
+    </style>
+    <div class="k9-hub-grid">
+      ${dashboardDestinations.map((item,index)=>`<button class="k9-hub-card" data-nav-dest="${item.id}"><div class="k9-hub-icon" style="color:${hubColors[index%hubColors.length]};">${ICONS[item.icon]||ICONS.pawprint}</div><div class="k9-hub-title">${escapeHtml(item.label)}</div><div class="k9-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
+    </div>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
       <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
