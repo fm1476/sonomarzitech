@@ -505,10 +505,12 @@ function unreadNotificationCount(){ return STATE.fleet.notifications.filter(n=>!
    NAV
    ========================================================================= */
 const NAV_ITEMS = [
-  {id:"fleet-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"Fleet-wide vehicle status at a glance", requiredAbility:null},
-  {id:"fleet-vehicles", label:"Vehicles", icon:"truck", title:"Fleet Vehicles", sub:"Every vehicle tracked by the fleet management module", requiredAbility:"fleet_vehicle_view"},
-  {id:"fleet-inspections", label:"Inspections", icon:"checklist", title:"Vehicle Inspections", sub:"Pre/post-shift inspections and condition history", requiredAbility:["fleet_inspection_conduct","fleet_inspection_view_all"]},
-  {id:"fleet-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Repairs, service, and vendor tracking across the fleet", requiredAbility:"fleet_vehicle_view"},
+  // Fleet Management itself is the dashboard entry point. Operational areas are
+  // launched from the dashboard so the persistent sidebar stays focused.
+  {id:"fleet-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"Fleet-wide vehicle status at a glance", requiredAbility:null, hideFromSidebar:true},
+  {id:"fleet-vehicles", label:"Vehicles", icon:"truck", title:"Fleet Vehicles", sub:"Every vehicle tracked by the fleet management module", requiredAbility:"fleet_vehicle_view", hideFromSidebar:true},
+  {id:"fleet-inspections", label:"Inspections", icon:"checklist", title:"Vehicle Inspections", sub:"Pre/post-shift inspections and condition history", requiredAbility:["fleet_inspection_conduct","fleet_inspection_view_all"], hideFromSidebar:true},
+  {id:"fleet-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Repairs, service, and vendor tracking across the fleet", requiredAbility:"fleet_vehicle_view", hideFromSidebar:true},
   {id:"fleet-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Inspections, maintenance, mileage, and equipment reporting", requiredAbility:"fleet_reports_view"},
   {id:"fleet-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data, vendors, and the system audit log", requiredAbility:["fleet_admin_categories","fleet_admin_audit"]},
 ];
@@ -524,7 +526,7 @@ function navItemVisible(item){
 
 function renderNav(){
   const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
+  const visibleItems = NAV_ITEMS.filter(item=>navItemVisible(item) && !item.hideFromSidebar);
   nav.innerHTML = visibleItems.map(item=>`
     <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
       ${ICONS[item.icon]}<span>${item.label}</span>
