@@ -731,7 +731,11 @@ function enterModule(key){
   if(!can(MODULE_META[key].ability)){ toast("This role doesn't have access to that module.", true); showLauncher(); return; }
   ACTIVE_MODULE = key;
   document.getElementById('moduleSwitchBar').style.display = '';
-  document.getElementById('activeModuleName').textContent = MODULE_META[key].name;
+  const activeModuleName = document.getElementById('activeModuleName');
+  activeModuleName.textContent = MODULE_META[key].name;
+  activeModuleName.style.cursor = key==='fleet' ? 'pointer' : '';
+  activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : '';
+  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : null;
   document.getElementById('qmTenantFooter').style.display = key==='qm' ? '' : 'none';
   document.getElementById('defaultFooter').style.display = key==='qm' ? 'none' : '';
   document.getElementById('navSeparator').style.display = '';
