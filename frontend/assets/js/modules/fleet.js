@@ -543,6 +543,19 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=="fleet-dashboard"){
+    const root = document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'btn btn-outline';
+      back.dataset.moduleDashboardBack = '1';
+      back.innerHTML = '&#8592; Back to Dashboard';
+      back.style.marginBottom = '16px';
+      back.addEventListener('click', ()=>switchView('fleet-dashboard'));
+      root.prepend(back);
+    }
+  }
 }
 
 function renderRoleSwitcher(){
