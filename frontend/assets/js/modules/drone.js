@@ -213,7 +213,7 @@ const NAV_ITEMS = [
   // permission-aware and are launched from the dashboard rather than the sidebar.
   {id:"drone-dashboard", label:"Dashboard", icon:"dashboard", title:"Dashboard", sub:"Fleet status and mission activity at a glance", requiredAbility:null, hideFromSidebar:true},
   {id:"drone-fleet", label:"Drone Fleet", icon:"drone", title:"Drone Fleet", sub:"Every aircraft, its status, and its assigned operator", requiredAbility:"drone_fleet_view", hideFromSidebar:true},
-  {id:"drone-operators", label:"Operators", icon:"radio", title:"Operators", sub:"Certified remote pilots, currency, and waivers", requiredAbility:"drone_operator_view", hideFromSidebar:true},
+  {id:"drone-operators", label:"Operators", icon:"users", title:"Operators", sub:"Certified remote pilots, currency, and waivers", requiredAbility:"drone_operator_view", hideFromSidebar:true},
   {id:"drone-flights", label:"Flight Log", icon:"grid", title:"Flight Log", sub:"Chronological record of every mission flown", requiredAbility:"drone_flight_view", hideFromSidebar:true},
   {id:"drone-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Service history and battery health for the fleet", requiredAbility:"drone_maint_view", hideFromSidebar:true},
   {id:"drone-incidents", label:"Incidents", icon:"alert", title:"Incidents", sub:"Crashes, flyaways, and reviewable incidents", requiredAbility:"drone_incident_view", hideFromSidebar:true},
