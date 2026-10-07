@@ -226,16 +226,9 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  // EOD Management is dashboard-first. Section navigation lives on the dashboard hub.
+  const nav=document.getElementById('navlist');
+  nav.innerHTML='';
 }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
@@ -249,6 +242,16 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=="eod-dashboard"){
+    const root=document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back=document.createElement('button');
+      back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
+      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px';
+      back.addEventListener('click',()=>switchView('eod-dashboard'));
+      root.prepend(back);
+    }
+  }
 }
 function renderView(id){
   if(id==="eod-dashboard") renderDashboard();
@@ -350,20 +353,20 @@ function renderWidget(id){
   if(id==='stat_current_technicians'){
     const currentTechs = activeTechs.filter(technicianCurrent).length;
     const recertDue = STATE.eod.notifications.filter(n=>n.type==="hds_recert").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="eod-technicians"><div class="label">Current Technicians</div><div class="value">${currentTechs} <span style="font-size:14px;color:var(--text-dim);font-weight:600;">/ ${activeTechs.length}</span></div><div class="delta ${recertDue?'warn':'ok'}">${recertDue} recert alert(s)</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="eod-technicians"><div class="label">${ICONS.users} <span>Current Technicians</span></div><div class="value">${currentTechs} <span style="font-size:14px;color:var(--text-dim);font-weight:600;">/ ${activeTechs.length}</span></div><div class="delta ${recertDue?'warn':'ok'}">${recertDue} recert alert(s)</div></button>`;
   }
   if(id==='stat_magazine_inspections'){
     const inspOverdue = STATE.eod.notifications.filter(n=>n.type==="inspection_due").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="eod-magazines"><div class="label">Magazine Inspections</div><div class="value" style="color:${inspOverdue?'var(--red)':'var(--heading)'}">${inspOverdue}</div><div class="delta ${inspOverdue?'warn':'ok'}">Overdue past ${MAGAZINE_INSPECTION_DAYS}-day cycle</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="eod-magazines"><div class="label">${ICONS.checklist} <span>Magazine Inspections</span></div><div class="value" style="color:${inspOverdue?'var(--red)':'var(--heading)'}">${inspOverdue}</div><div class="delta ${inspOverdue?'warn':'ok'}">Overdue past ${MAGAZINE_INSPECTION_DAYS}-day cycle</div></button>`;
   }
   if(id==='stat_inventory_onhand'){
     const onHandItems = STATE.eod.inventory.filter(i=>i.status==="On Hand").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="eod-inventory"><div class="label">Inventory On Hand</div><div class="value">${onHandItems}</div><div class="delta neutral">items across ${STATE.eod.magazines.length} magazines</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="eod-inventory"><div class="label">${ICONS.boxlock} <span>Inventory On Hand</span></div><div class="value">${onHandItems}</div><div class="delta neutral">items across ${STATE.eod.magazines.length} magazines</div></button>`;
   }
   if(id==='stat_open_theft_reports'){
     const openTheftReports = STATE.eod.theftLossReports.filter(r=>!r.reportedAtfDate).length;
     const last30Incidents = STATE.eod.incidents.filter(i=>daysBetween(i.date, fmt(new Date()))<=30).length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="eod-theftloss"><div class="label">Open Theft/Loss Reports</div><div class="value" style="color:${openTheftReports?'var(--red)':'var(--heading)'}">${openTheftReports}</div><div class="delta neutral">${last30Incidents} incidents (30d)</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="eod-theftloss"><div class="label">${ICONS.alert} <span>Open Theft/Loss Reports</span></div><div class="value" style="color:${openTheftReports?'var(--red)':'var(--heading)'}">${openTheftReports}</div><div class="delta neutral">${last30Incidents} incidents (30d)</div></button>`;
   }
   if(id==='list_tech_cert_status'){
     const rows = activeTechs.map(t=>{
@@ -483,7 +486,23 @@ function renderDashboard(){
   recalcNotifications();
   const prefs = myWidgetPrefs();
   const root = document.getElementById('view-eod-dashboard');
+  const dashboardDestinations=NAV_ITEMS.filter(item=>item.id!=='eod-dashboard'&&navItemVisible(item));
+  const hubColors=['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#FF6678','#41C7C7','#63A7FF'];
   root.innerHTML = `
+    <style>
+      #view-eod-dashboard .eod-hub-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:20px}
+      #view-eod-dashboard .eod-hub-card{grid-column:span 3;min-height:150px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background .15s ease,box-shadow .15s ease}
+      #view-eod-dashboard .eod-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray);box-shadow:0 10px 28px rgba(0,0,0,.16)}
+      #view-eod-dashboard .eod-hub-icon{width:31px;height:31px;margin-bottom:14px;filter:drop-shadow(0 0 8px currentColor)}
+      #view-eod-dashboard .eod-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}
+      #view-eod-dashboard .eod-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
+      #view-eod-dashboard .stat-card .label svg{width:18px;height:18px;vertical-align:middle;margin-right:6px}
+      @media(max-width:1100px){#view-eod-dashboard .eod-hub-card{grid-column:span 6}}
+      @media(max-width:700px){#view-eod-dashboard .eod-hub-card{grid-column:1/-1}}
+    </style>
+    <div class="eod-hub-grid">
+      ${dashboardDestinations.map((item,index)=>`<button class="eod-hub-card" data-nav-dest="${item.id}"><div class="eod-hub-icon" style="color:${hubColors[index%hubColors.length]};">${ICONS[item.icon]||ICONS.bomb}</div><div class="eod-hub-title">${escapeHtml(item.label)}</div><div class="eod-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
+    </div>
     <div class="locked-note" style="background:var(--callout-blue-bg);border-color:var(--callout-blue-border);color:var(--blue);">
       ${ICONS.bomb}<div>This module tracks the real compliance obligations bomb squads operate under: FBI Hazardous Devices School (HDS) certification currency (3-year recert cycle), 27 CFR Part 555 explosives storage and 7-day magazine inspection requirements, and the federal 24-hour theft/loss reporting deadline to ATF and the U.S. Bomb Data Center.</div>
     </div>
