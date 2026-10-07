@@ -4600,7 +4600,7 @@ const SuiteStore=(()=>{
     return pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open');
   }
   async function checkLiveWorkspace(){
-    if(mode!=='shared'||!serverReady||document.hidden||!document.getElementById('app')?.classList.contains('authenticated'))return false;
+    if(mode!=='shared'||!serverReady||document.hidden||!document.getElementById('app')?.classList.contains('authenticated')||idlePauseBackgroundSync())return false;
     const context={...remoteContext};
     if(!context.tenantId||!context.agencyId)return false;
     try{
@@ -5388,6 +5388,13 @@ const IDLE_WARNING_MS = 60 * 1000;        // show the countdown this long before
 let idleLastActivity = Date.now();
 let idleWarningShown = false;
 
+function idlePlatformAdminExempt(){
+  // Use assigned roles, never the roles selected in View As.
+  const roles=SuiteStore.mode()==='shared'?(HOME_ROLE_IDS||[]):(STATE?.personnel?.find(p=>p.id===CURRENT_USER_ID)?.roleIds||[]);
+  return roles.includes('role_platform_admin');
+}
+function idlePauseBackgroundSync(){return idlePlatformAdminExempt()&&Date.now()-idleLastActivity>=IDLE_TIMEOUT_MS;}
+
 function idleOverlayEl(){
   let el = document.getElementById('idleLockOverlay');
   if(!el){
@@ -5424,7 +5431,7 @@ function idleRegisterActivity(){
 
 setInterval(()=>{
   const authed = document.getElementById('app')?.classList.contains('authenticated');
-  if(!authed){ idleWarningShown = false; const ov = document.getElementById('idleLockOverlay'); if(ov) ov.style.display='none'; return; }
+  if(!authed||idlePlatformAdminExempt()){ idleWarningShown = false; const ov = document.getElementById('idleLockOverlay'); if(ov) ov.style.display='none'; return; }
   const idleFor = Date.now() - idleLastActivity;
   if(idleFor >= IDLE_TIMEOUT_MS){
     idleWarningShown = false;
