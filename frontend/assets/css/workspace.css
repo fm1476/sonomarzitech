@@ -100,3 +100,6 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .mobile-day-agenda-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.mobile-day-agenda-head h3{margin:0;overflow-wrap:anywhere}.mobile-day-agenda-head button{flex-shrink:0;min-height:44px}
 .cal-grid[hidden],.mobile-calendar-controls[hidden]{display:none!important}
 .mobile-day-details{scroll-margin-top:20px}
+
+/* Field Training record links */
+.ft-trainee-link{appearance:none;border:0;background:transparent;padding:0;margin:0;color:var(--blue);font:inherit;font-weight:700;text-align:left;cursor:pointer;min-height:0;text-decoration:none}.ft-trainee-link:hover{text-decoration:underline}.ft-trainee-link:focus-visible{outline:3px solid var(--focus);outline-offset:3px;border-radius:3px}
