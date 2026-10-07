@@ -1613,10 +1613,9 @@ function openNewInspectionModal(prefillVehicleId){
         <div class="form-row"><label>Time</label><input type="time" id="fITime" value="${new Date().toTimeString().slice(0,5)}"></div>
       </div>
       <div class="form-row"><label>Shift</label><select id="fIShift">${SHIFTS.map(s=>`<option>${s}</option>`).join('')}</select></div>
-      <div class="form-row"><label>Personnel Performing Inspection</label>
-        <div style="border:1px solid var(--border);border-radius:5px;padding:8px 10px;max-height:140px;overflow-y:auto;">
-          ${(can('fleet_inspection_view_all')?STATE.personnel:STATE.personnel.filter(p=>p.id===CURRENT_USER_ID)).map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;"><input type="checkbox" class="insp-person" value="${p.id}" ${CURRENT_USER_ID===p.id?'checked':''} ${can('fleet_inspection_view_all')?'':'disabled'} style="width:auto;">${escapeHtml(p.name)}</label>`).join('')}
-        </div>
+      <div class="form-row"><label for="fIPerson">Personnel Performing Inspection</label>
+        <select id="fIPerson">${(can('fleet_inspection_view_all')?STATE.personnel:STATE.personnel.filter(p=>p.id===CURRENT_USER_ID)).map(p=>`<option value="${p.id}" ${CURRENT_USER_ID===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+        ${can('fleet_inspection_view_all')?`<details style="margin-top:10px"><summary>Additional inspection participants</summary>${STATE.personnel.map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" class="insp-person" value="${p.id}" style="width:auto">${escapeHtml(p.name)}</label>`).join('')}</details>`:''}
       </div>
       <div class="form-row"><label>Current Mileage</label><input type="number" id="fIMileage" value=""></div>
       <div class="form-2col">
@@ -1676,7 +1675,7 @@ function openNewInspectionModal(prefillVehicleId){
     const vehicleId = vSel.value;
     const v = available.find(item=>item.id===vehicleId);
     if(!v)return toast('This vehicle is no longer available for inspection.',true);
-    const personnelIds = Array.from(document.querySelectorAll('.insp-person:checked')).map(el=>el.value);
+    const personnelIds = [...new Set([document.getElementById('fIPerson').value,...Array.from(document.querySelectorAll('.insp-person:checked')).map(el=>el.value)])].filter(Boolean);
     if(personnelIds.length===0){ toast("Select at least one person performing the inspection.", true); return; }
     const equipmentChecklist = EQUIPMENT_CATALOG.map((name,i)=>({
       name,

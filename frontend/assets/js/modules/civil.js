@@ -3637,7 +3637,7 @@ const SuiteUX = (()=>{
     searchWrap.append(ICONS.search?Object.assign(document.createElement('span'),{className:'nav-search-icon',innerHTML:ICONS.search}):document.createTextNode(''));
     searchWrap.append(searchInput);
     const collapseBtn=document.createElement('button');collapseBtn.className='nav-collapse-btn';collapseBtn.type='button';const isCollapsed=document.getElementById('sidebar').classList.contains('sidebar-collapsed');collapseBtn.title=isCollapsed?'Expand sidebar':'Collapse sidebar';collapseBtn.setAttribute('aria-label',collapseBtn.title);collapseBtn.textContent=isCollapsed?'\u00bb':'\u00ab';
-    collapseBtn.onclick=()=>setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('sidebar-collapsed'));
+    collapseBtn.onclick=()=>{setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('sidebar-collapsed'));navigation();};
     // Distinct from collapseBtn above: that one shrinks the whole sidebar to icon-only, this one
     // folds every module's accordion group shut without changing the sidebar's width. A role with
     // broad access accumulates open groups over time -- every module ever visited stays expanded
@@ -3695,7 +3695,7 @@ const SuiteUX = (()=>{
     // collapsing it to icons on top of that would stack two different "smaller sidebar"
     // behaviors and leave no visible way to read or re-expand it. Only apply the saved
     // preference when there's room for a persistent rail in the first place.
-    if(preferences.get('sidebarCollapsed',false) && window.innerWidth>860)document.getElementById('sidebar').classList.add('sidebar-collapsed');
+    if(preferences.get('sidebarCollapsed',false) && window.innerWidth>860 && !window.matchMedia('(pointer:coarse) and (max-width:1366px)').matches)document.getElementById('sidebar').classList.add('sidebar-collapsed');
     else document.getElementById('sidebar').classList.remove('sidebar-collapsed');
     applyNavFilter();
   }
@@ -5491,6 +5491,8 @@ const SonoMarziSecurity=(()=>{
     sidebar.classList.toggle('sidebar-open', open);
     backdrop.classList.toggle('open', open);
   }
+  const tabletLayout=window.matchMedia('(pointer:coarse) and (max-width:1366px)');
+  tabletLayout.addEventListener('change',()=>{toggleSidebar(false);SuiteUX.navigation();});
   document.getElementById('btnSidebarToggle').addEventListener('click', ()=>toggleSidebar());
   document.getElementById('sidebarBackdrop').addEventListener('click', ()=>toggleSidebar(false));
   document.getElementById('sidebar').addEventListener('click', (e)=>{

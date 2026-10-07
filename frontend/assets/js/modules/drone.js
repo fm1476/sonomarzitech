@@ -910,7 +910,7 @@ function openFlightFormModal(drone){
     <div class="modal-head"><h3>Log Flight</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       ${fromDetail ? '' : `<div class="form-row"><label>Aircraft</label><select id="fFlDrone">${STATE.drone.drones.map(x=>`<option value="${x.id}" ${x.id===drone.id?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}</select></div>`}
-      <div class="form-row"><label>Operator</label><select id="fFlOperator">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===drone.assignedOperatorId?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Operator</label><select id="fFlOperator">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===CURRENT_USER_ID?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Mission Type</label><select id="fFlMission">${STATE.drone.refData.missionTypes.map(t=>`<option>${escapeHtml(t)}</option>`).join('')}</select></div>
       <div class="form-2col">
         <div class="form-row"><label>Date</label><input type="date" id="fFlDate" value="${fmt(new Date())}"></div>

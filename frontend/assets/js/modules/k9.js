@@ -1131,6 +1131,7 @@ function openK9TrainingFormModal(k){
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>Log Training Session</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
+      <div class="form-row"><label for="fTrHandler">Handler Performing Activity</label><select id="fTrHandler">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===CURRENT_USER_ID?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       ${fromDetail ? '' : `<div class="form-row"><label>K9</label><select id="fTrK9">${STATE.k9.k9s.map(x=>`<option value="${x.id}" ${x.id===k.id?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}</select></div>`}
       <div class="form-2col">
         <div class="form-row"><label>Date</label><input type="date" id="fTrDate" value="${fmt(new Date())}"></div>
@@ -1155,7 +1156,7 @@ function openK9TrainingFormModal(k){
     if(hours<=0){ toast("Enter a positive number of hours.", true); return; }
     const actualK9 = fromDetail ? k : k9For(document.getElementById('fTrK9').value);
     const newT = {
-      id:'k9tr'+Date.now(), k9Id:actualK9.id, handlerId:actualK9.handlerId, date: document.getElementById('fTrDate').value, hours,
+      id:'k9tr'+Date.now(), k9Id:actualK9.id, handlerId:document.getElementById('fTrHandler').value, date: document.getElementById('fTrDate').value, hours,
       type: document.getElementById('fTrType').value, provider: document.getElementById('fTrProvider').value,
       location: document.getElementById('fTrLocation').value.trim(), instructor: document.getElementById('fTrInstructor').value.trim(),
       passed: document.getElementById('fTrPassed').value==='true', narrative: document.getElementById('fTrNarrative').value.trim(),
@@ -1219,6 +1220,7 @@ function openK9DeploymentFormModal(k){
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>Log Deployment</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
+      <div class="form-row"><label for="fDepHandler">Handler Performing Activity</label><select id="fDepHandler">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===CURRENT_USER_ID?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       ${fromDetail ? '' : `<div class="form-row"><label>K9</label><select id="fDepK9">${STATE.k9.k9s.map(x=>`<option value="${x.id}" ${x.id===k.id?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}</select></div>`}
       <div class="form-2col">
         <div class="form-row"><label>Date</label><input type="date" id="fDepDate" value="${fmt(new Date())}"></div>
@@ -1252,7 +1254,7 @@ function openK9DeploymentFormModal(k){
     const actualK9 = fromDetail ? k : k9For(document.getElementById('fDepK9').value);
     const biteOccurred = document.getElementById('fDepBite').checked;
     const newD = {
-      id:'dep'+Date.now(), k9Id:actualK9.id, handlerId:actualK9.handlerId, date: document.getElementById('fDepDate').value, time: document.getElementById('fDepTime').value,
+      id:'dep'+Date.now(), k9Id:actualK9.id, handlerId:document.getElementById('fDepHandler').value, date: document.getElementById('fDepDate').value, time: document.getElementById('fDepTime').value,
       type: document.getElementById('fDepType').value, location, callNumber: document.getElementById('fDepCad').value.trim(),
       outcome: document.getElementById('fDepOutcome').value, narrative: document.getElementById('fDepNarrative').value.trim(),
       biteOccurred, subjectInjured: document.getElementById('fDepInjury').checked, duration: Number(document.getElementById('fDepDuration').value)||0,
@@ -1282,6 +1284,7 @@ function openK9IncidentFormModal(existingId, prefillK9Id){
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>${editing?'Edit':'Record'} Incident</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
+      <div class="form-row"><label for="fIncHandler">Handler Performing Activity</label><select id="fIncHandler">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===(editing?i.handlerId:CURRENT_USER_ID)?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>K9</label><select id="fIncK9" ${prefillK9Id?'disabled':''}>${STATE.k9.k9s.map(k=>`<option value="${k.id}" ${i.k9Id===k.id?'selected':''}>${escapeHtml(k.name)}</option>`).join('')}</select></div>
       <div class="form-2col">
         <div class="form-row"><label>Type</label><select id="fIncType">${STATE.k9.refData.incidentTypes.map(t=>`<option ${i.type===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select></div>
@@ -1311,7 +1314,7 @@ function openK9IncidentFormModal(existingId, prefillK9Id){
     const k = k9For(k9Id);
     const reviewStatus = document.getElementById('fIncStatus').value;
     const data = {
-      k9Id, handlerId: k.handlerId, type: document.getElementById('fIncType').value, date: document.getElementById('fIncDate').value,
+      k9Id, handlerId: document.getElementById('fIncHandler').value, type: document.getElementById('fIncType').value, date: document.getElementById('fIncDate').value,
       caseNumber: document.getElementById('fIncCase').value.trim(), description: document.getElementById('fIncDesc').value.trim(),
       outcome: document.getElementById('fIncOutcome').value.trim(), reviewStatus,
       reviewedBy: document.getElementById('fIncReviewer').value.trim(),

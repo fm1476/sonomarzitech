@@ -888,6 +888,7 @@ function openInspectionFormModal(magazineId){
     <div class="modal-head"><h3>Log Inspection \u2014 ${escapeHtml(m.name)}</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">27 CFR \u00a7 555.204 requires this inspection to confirm no unauthorized entry or removal \u2014 a full explosives inventory is not required for this check.</div>
+      <div class="form-row"><label for="fEodInspector">Personnel Performing Inspection</label><select id="fEodInspector">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===CURRENT_USER_ID?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Inspection Date</label><input type="date" id="fInspDate" value="${fmt(new Date())}"></div>
       <div class="form-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="fInspUnauthorized" style="width:auto;">Evidence of unauthorized entry or attempted entry</label></div>
       <div class="form-row"><label>Notes</label><textarea id="fInspNotes" rows="2" placeholder="e.g. Seals intact, no unauthorized entry."></textarea></div>
@@ -899,7 +900,7 @@ function openInspectionFormModal(magazineId){
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
     const unauthorized = document.getElementById('fInspUnauthorized').checked;
-    const newInsp = { id:'insp'+Date.now(), magazineId, inspectorId: CURRENT_USER_ID, date: document.getElementById('fInspDate').value,
+    const newInsp = { id:'insp'+Date.now(), magazineId, inspectorId: document.getElementById('fEodInspector').value, date: document.getElementById('fInspDate').value,
       unauthorizedEntry: unauthorized, notes: document.getElementById('fInspNotes').value.trim() };
     STATE.eod.magazineInspections.push(newInsp);
     m.lastInspectionDate = newInsp.date;
@@ -987,7 +988,7 @@ function openIncidentDetailModal(incId){
 function openIncidentFormModal(existingId){
   const editing = !!existingId;
   const i = editing ? STATE.eod.incidents.find(x=>x.id===existingId) : {
-    date: fmt(new Date()), type: STATE.eod.refData.incidentTypes[0], location:"", technicianIds:[],
+    date: fmt(new Date()), type: STATE.eod.refData.incidentTypes[0], location:"", technicianIds:STATE.eod.technicians.some(t=>t.personId===CURRENT_USER_ID)?[CURRENT_USER_ID]:[],
     dispositionType: STATE.eod.refData.dispositionTypes[0], batsReported:false, batsCaseNumber:"", evidenceCollected:false, rsp:"", narrative:"",
   };
   document.getElementById('modalBox').className = 'modal modal-wide';

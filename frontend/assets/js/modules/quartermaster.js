@@ -2537,7 +2537,7 @@ function openNewRequestModal(){
     <div class="modal-head"><h3>Submit Equipment Request</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Requesting on behalf of</label>
-        <select id="fReqPerson">${STATE.personnel.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} - ${escapeHtml(p.unit)}</option>`).join('')}</select>
+        <select id="fReqPerson">${STATE.personnel.map(p=>`<option value="${p.id}" ${p.id===CURRENT_USER_ID?'selected':''}>${escapeHtml(p.name)} - ${escapeHtml(p.unit)}</option>`).join('')}</select>
       </div>
       <div class="form-row"><label>Item description</label><input type="text" id="fReqItem" placeholder="e.g. Replacement duty belt"></div>
       <div class="form-2col">
