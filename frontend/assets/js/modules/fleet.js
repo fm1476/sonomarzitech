@@ -511,8 +511,8 @@ const NAV_ITEMS = [
   {id:"fleet-vehicles", label:"Vehicles", icon:"truck", title:"Fleet Vehicles", sub:"Every vehicle tracked by the fleet management module", requiredAbility:"fleet_vehicle_view", hideFromSidebar:true},
   {id:"fleet-inspections", label:"Inspections", icon:"checklist", title:"Vehicle Inspections", sub:"Pre/post-shift inspections and condition history", requiredAbility:["fleet_inspection_conduct","fleet_inspection_view_all"], hideFromSidebar:true},
   {id:"fleet-maintenance", label:"Maintenance", icon:"wrench", title:"Maintenance", sub:"Repairs, service, and vendor tracking across the fleet", requiredAbility:"fleet_vehicle_view", hideFromSidebar:true},
-  {id:"fleet-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Inspections, maintenance, mileage, and equipment reporting", requiredAbility:"fleet_reports_view"},
-  {id:"fleet-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data, vendors, and the system audit log", requiredAbility:["fleet_admin_categories","fleet_admin_audit"]},
+  {id:"fleet-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Inspections, maintenance, mileage, and equipment reporting", requiredAbility:"fleet_reports_view", hideFromDashboardHub:true},
+  {id:"fleet-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data, vendors, and the system audit log", requiredAbility:["fleet_admin_categories","fleet_admin_audit"], hideFromDashboardHub:true},
 ];
 let ACTIVE_VIEW = "fleet-dashboard";
 
@@ -665,8 +665,8 @@ function permissionBlockedView(msg){
 const TOP_WIDGETS = [
   {id:"stat_total_vehicles", label:"Total Vehicles"},
   {id:"stat_in_service", label:"In Service"},
-  {id:"stat_out_of_service", label:"Out of Service / In Maintenance"},
-  {id:"stat_inspections_overdue", label:"Inspections Overdue"},
+  {id:"stat_maintenance_due", label:"Maintenance Due"},
+  {id:"stat_inspections_due", label:"Inspections Due"},
 ];
 const EXTRA_WIDGETS = [
   {id:"list_inspections_overdue", label:"Inspections Overdue (list)", defaultSize:"half"},
@@ -690,21 +690,21 @@ function myWidgetPrefs(){
 }
 function renderWidget(id){
   const veh = visibleVehicles();
+  const maintenanceDue = STATE.fleet.notifications.filter(n=>n.type==="maintenance_due");
+  const inspectionDue = STATE.fleet.notifications.filter(n=>n.type==="inspection_overdue");
   if(id==='stat_total_vehicles'){
-    const inService = veh.filter(v=>v.status==="In Service").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-vehicles"><div class="label">Total Vehicles</div><div class="value">${veh.length}</div><div class="delta neutral">${veh.length?Math.round(inService/veh.length*100):0}% in service</div></button>`;
+    const inService=veh.filter(v=>v.status==="In Service").length;
+    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-vehicles"><div class="label">${ICONS.truck} <span>Total Vehicles</span></div><div class="value">${veh.length}</div><div class="delta neutral">${inService} in service &bull; ${Math.max(0,veh.length-inService)} unavailable</div></button>`;
   }
   if(id==='stat_in_service'){
-    const inService = veh.filter(v=>v.status==="In Service").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-vehicles"><div class="label">In Service</div><div class="value">${inService}</div><div class="delta neutral">Ready for duty</div></button>`;
+    const inService=veh.filter(v=>v.status==="In Service").length;
+    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-vehicles"><div class="label">${ICONS.check} <span>In Service</span></div><div class="value">${inService}</div><div class="delta ok">Ready for duty</div></button>`;
   }
-  if(id==='stat_out_of_service'){
-    const outOfService = veh.filter(v=>v.status==="Out of Service" || v.status==="In Maintenance").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-maintenance"><div class="label">Out of Service / In Maintenance</div><div class="value" style="color:${outOfService?'var(--red)':'var(--navy)'}">${outOfService}</div><div class="delta ${outOfService?'warn':'ok'}">${outOfService?'Needs attention':'All clear'}</div></button>`;
+  if(id==='stat_maintenance_due'){
+    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-maintenance"><div class="label">${ICONS.wrench} <span>Maintenance Due</span></div><div class="value" style="color:${maintenanceDue.length?'var(--red)':'var(--heading)'}">${maintenanceDue.length}</div><div class="delta ${maintenanceDue.length?'warn':'ok'}">${maintenanceDue.length?'Needs attention':'No maintenance currently due'}</div></button>`;
   }
-  if(id==='stat_inspections_overdue'){
-    const inspOverdue = STATE.fleet.notifications.filter(n=>n.type==="inspection_overdue");
-    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-inspections"><div class="label">Inspections Overdue</div><div class="value" style="color:${inspOverdue.length?'var(--red)':'var(--navy)'}">${inspOverdue.length}</div><div class="delta ${inspOverdue.length?'warn':'ok'}">${inspOverdue.length?'Follow up needed':'Up to date'}</div></button>`;
+  if(id==='stat_inspections_due'){
+    return `<button class="stat-card dash-clickable" data-nav-dest="fleet-inspections"><div class="label">${ICONS.checklist} <span>Inspections Due</span></div><div class="value" style="color:${inspectionDue.length?'var(--red)':'var(--heading)'}">${inspectionDue.length}</div><div class="delta ${inspectionDue.length?'warn':'ok'}">${inspectionDue.length?'Follow up needed':'All inspections current'}</div></button>`;
   }
   if(id==='list_inspections_overdue'){
     const inspOverdue = STATE.fleet.notifications.filter(n=>n.type==="inspection_overdue");
@@ -833,41 +833,79 @@ function openCustomizeDashboardModal(){
 }
 function renderDashboard(){
   recalcNotifications();
-  const prefs = myWidgetPrefs();
-  const root = document.getElementById('view-fleet-dashboard');
-  root.innerHTML = `
+  const prefs=myWidgetPrefs();
+  const root=document.getElementById('view-fleet-dashboard');
+  const dashboardDestinations=NAV_ITEMS.filter(item=>item.id!=='fleet-dashboard'&&!item.hideFromDashboardHub&&navItemVisible(item));
+  const hubColors=['#4D8DFF','#43D59B','#FF9F43','#B47CFF'];
+  const vehicles=visibleVehicles();
+  const statusCards=vehicles.map(v=>{
+    const missing=(v.equipmentChecklist||[]).filter(e=>!e.present).length;
+    const latestInspection=STATE.fleet.inspections.filter(i=>i.vehicleId===v.id).sort((a,b)=>b.dateTime.localeCompare(a.dateTime))[0];
+    const photo=v.photoDataUrl || (v.photos&&v.photos.length ? (v.photos.find(p=>p.isPrimary)?.dataUrl||v.photos[0]?.dataUrl||v.photos[0]?.src||'') : '');
+    const visual=photo
+      ? `<img src="${photo}" alt="${escapeHtml(v.unitNumber)}" style="width:100%;height:118px;object-fit:cover;display:block;border-radius:9px;background:rgba(255,255,255,.025);">`
+      : `<div style="height:118px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:rgba(255,255,255,.025);color:#4D8DFF;"><span style="width:68px;height:68px;display:inline-block;filter:drop-shadow(0 0 8px currentColor);">${ICONS.truck}</span></div>`;
+    return `<div class="fleet-status-card dash-clickable" data-open-veh="${v.id}">
+      ${visual}
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-top:13px;">
+        <div><div class="fleet-status-unit">${escapeHtml(v.unitNumber)}</div><div class="fleet-status-model">${escapeHtml(v.year+' '+v.make+' '+v.model)}</div></div>
+        <span class="fleet-status-dot" style="background:${v.status==='In Service'?'#43D59B':(v.status==='In Maintenance'?'#FF9F43':'#FF6678')};"></span>
+      </div>
+      <div style="margin-top:11px;"><span class="badge ${statusBadgeClass(v.status)}">${escapeHtml(v.status)}</span></div>
+      <div class="fleet-status-meta">
+        <div>Mileage: <strong>${Number(v.mileage||0).toLocaleString()} mi</strong></div>
+        <div>Fuel: <strong>${v.currentFuelLevel==null?'—':v.currentFuelLevel+'%'}</strong></div>
+        <div>Inspection: <strong>${latestInspection?latestInspection.dateTime.slice(0,10):'No inspection on file'}</strong></div>
+        <div>Equipment: <strong style="color:${missing?'var(--gold)':'var(--green)'};">${missing?missing+' missing':'Complete'}</strong></div>
+      </div>
+    </div>`;
+  }).join('');
+  root.innerHTML=`
+    <style>
+      #view-fleet-dashboard .fleet-hub-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+      #view-fleet-dashboard .fleet-hub-card{min-height:154px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background .15s ease,box-shadow .15s ease}
+      #view-fleet-dashboard .fleet-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray);box-shadow:0 10px 28px rgba(0,0,0,.16)}
+      #view-fleet-dashboard .fleet-hub-icon{width:31px;height:31px;margin-bottom:14px;filter:drop-shadow(0 0 8px currentColor)}
+      #view-fleet-dashboard .fleet-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}
+      #view-fleet-dashboard .fleet-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
+      #view-fleet-dashboard .fleet-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:22px}
+      #view-fleet-dashboard .fleet-kpi-grid .dash-widget{min-width:0}
+      #view-fleet-dashboard .fleet-kpi-grid .stat-card{height:100%;min-height:126px}
+      #view-fleet-dashboard .stat-card .label svg{width:18px;height:18px;vertical-align:middle;margin-right:6px}
+      #view-fleet-dashboard .fleet-status-board{border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden;margin-bottom:22px}
+      #view-fleet-dashboard .fleet-status-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border)}
+      #view-fleet-dashboard .fleet-status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:14px;padding:20px}
+      #view-fleet-dashboard .fleet-status-card{border:1px solid var(--border);border-radius:11px;padding:14px;background:var(--bg);cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+      #view-fleet-dashboard .fleet-status-card:hover{transform:translateY(-2px);border-color:var(--blue)}
+      #view-fleet-dashboard .fleet-status-unit{font-size:15px;font-weight:800;color:var(--heading)}
+      #view-fleet-dashboard .fleet-status-model{font-size:11px;color:var(--text-dim);margin-top:3px}
+      #view-fleet-dashboard .fleet-status-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 4px rgba(77,141,255,.08)}
+      #view-fleet-dashboard .fleet-status-meta{margin-top:12px;font-size:11.5px;color:var(--text-dim);display:grid;gap:6px}
+      #view-fleet-dashboard .fleet-status-meta strong{color:var(--heading)}
+      @media(max-width:1100px){#view-fleet-dashboard .fleet-hub-grid,#view-fleet-dashboard .fleet-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:700px){#view-fleet-dashboard .fleet-hub-grid,#view-fleet-dashboard .fleet-kpi-grid{grid-template-columns:1fr}}
+    </style>
+    <div class="fleet-hub-grid">
+      ${dashboardDestinations.map((item,index)=>`<button class="fleet-hub-card" data-nav-dest="${item.id}"><div class="fleet-hub-icon" style="color:${hubColors[index%hubColors.length]};">${ICONS[item.icon]||ICONS.truck}</div><div class="fleet-hub-title">${escapeHtml(item.label)}</div><div class="fleet-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
+    </div>
+    <div class="fleet-kpi-grid" id="dashTopZone">${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}</div>
+    <div class="fleet-status-board">
+      <div class="fleet-status-head"><div><div style="font-size:16px;font-weight:800;color:var(--heading);">Fleet Status Board</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:3px;">Live operational status of every vehicle</div></div><div style="font-size:12px;color:var(--text-dim);">${vehicles.length} vehicles</div></div>
+      <div class="fleet-status-grid">${statusCards||'<div style="color:var(--text-dim);padding:8px;">No vehicles available.</div>'}</div>
+    </div>
     <div class="toolbar">
-      <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
+      <div style="font-size:12px;color:var(--text-dim);">Additional dashboard widgets can be rearranged and customized for your account.</div>
       <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
     </div>
-    <div class="stat-grid" id="dashTopZone">
-      ${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}
-    </div>
-    <div class="dash-extras-zone" id="dashExtrasZone">
-      ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
-    </div>
+    <div class="dash-extras-zone" id="dashExtrasZone">${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}</div>
   `;
   wireVehicleLinks();
-  // Scoped to `root`, this module's own dashboard container -- see the identical note in QM's
-  // renderDashboard for why an unscoped document-wide lookup here is the actual bug being avoided.
-  root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
-  wireDashDragDrop(root.querySelector('#dashTopZone'), prefs.topOrder, false);
-  wireDashDragDrop(root.querySelector('#dashExtrasZone'), prefs.extras, true);
-  root.querySelectorAll('[data-widget-size-cycle]').forEach(b=>b.addEventListener('click', e=>{
-    e.preventDefault(); e.stopPropagation();
-    const entry = prefs.extras.find(x=>x.id===b.dataset.widgetSizeCycle);
-    if(!entry) return;
-    const order = ['quarter','half','threeQuarter','full'];
-    entry.size = order[(order.indexOf(entry.size)+1) % order.length];
-    persist(); renderDashboard();
-  }));
-  root.querySelectorAll('[data-widget-remove]').forEach(b=>b.addEventListener('click', e=>{
-    e.preventDefault(); e.stopPropagation();
-    prefs.extras = prefs.extras.filter(x=>x.id!==b.dataset.widgetRemove);
-    persist(); renderDashboard();
-  }));
-  const custBtn = root.querySelector('#btnCustomizeDashboard');
-  if(custBtn) custBtn.addEventListener('click', openCustomizeDashboardModal);
+  root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.navDest)));
+  wireDashDragDrop(root.querySelector('#dashTopZone'),prefs.topOrder,false);
+  wireDashDragDrop(root.querySelector('#dashExtrasZone'),prefs.extras,true);
+  root.querySelectorAll('[data-widget-size-cycle]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const entry=prefs.extras.find(x=>x.id===b.dataset.widgetSizeCycle);if(!entry)return;const order=['quarter','half','threeQuarter','full'];entry.size=order[(order.indexOf(entry.size)+1)%order.length];persist();renderDashboard();}));
+  root.querySelectorAll('[data-widget-remove]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();prefs.extras=prefs.extras.filter(x=>x.id!==b.dataset.widgetRemove);persist();renderDashboard();}));
+  const custBtn=root.querySelector('#btnCustomizeDashboard'); if(custBtn) custBtn.addEventListener('click',openCustomizeDashboardModal);
 }
 
 /* =========================================================================
