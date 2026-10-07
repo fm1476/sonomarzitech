@@ -369,7 +369,7 @@ function renderWidget(id){
   }
   if(id==='stat_active_operators'){
     const active=STATE.drone.operators.filter(operatorCurrent).length, expiring=STATE.drone.notifications.filter(n=>n.type==="cert_expiring").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="drone-operators"><div class="label">${ICONS.radio} <span>Active Operators</span></div><div class="value">${active}</div><div class="delta ${expiring?'warn':'ok'}">${expiring?expiring+' certification'+(expiring===1?'':'s')+' expiring':'All certifications current'}</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-operators"><div class="label">${ICONS.users} <span>Active Operators</span></div><div class="value">${active}</div><div class="delta ${expiring?'warn':'ok'}">${expiring?expiring+' certification'+(expiring===1?'':'s')+' expiring':'All certifications current'}</div></button>`;
   }
   if(id==='stat_maintenance_due'){
     const down=fleet.filter(d=>d.status==="Maintenance"||d.status==="Grounded").length, alerts=STATE.drone.notifications.filter(n=>n.type==="battery_health").length;
