@@ -337,13 +337,14 @@ let CHART_REFS_DRONE = {};
 function destroyChartsDrone(){ Object.values(CHART_REFS_DRONE).forEach(c=>c && c.destroy()); CHART_REFS_DRONE = {}; }
 
 const TOP_WIDGETS = [
-  {id:"stat_fleet_status", label:"Fleet Status"},
-  {id:"stat_avg_dfr", label:"Avg. DFR Response Time"},
-  {id:"stat_certs_expiring", label:"Certifications Expiring"},
-  {id:"stat_flights_30d", label:"Flights (30 days)"},
+  {id:"stat_total_drones", label:"Total Drones"},
+  {id:"stat_flight_hours_30d", label:"Flight Hours (30 days)"},
+  {id:"stat_active_operators", label:"Active Operators"},
+  {id:"stat_maintenance_due", label:"Maintenance Due"},
+  {id:"stat_incidents_30d", label:"Incidents (30 days)"},
 ];
 const EXTRA_WIDGETS = [
-  {id:"list_fleet_status_board", label:"Fleet Status Board", defaultSize:"full"},
+  {id:"list_fleet_status_board", label:"Drone Fleet Status", defaultSize:"full"},
   {id:"chart_missions_by_type", label:"Missions by Type", defaultSize:"half"},
   {id:"list_recent_flights", label:"Recent Flights", defaultSize:"half"},
 ];
@@ -351,67 +352,57 @@ const DEFAULT_EXTRAS = EXTRA_WIDGETS.map(w=>({id:w.id, size:w.defaultSize}));
 function myWidgetPrefs(){
   let p = STATE.drone.dashboardPrefs[CURRENT_USER_ID];
   const topIds = TOP_WIDGETS.map(w=>w.id), extraIds = EXTRA_WIDGETS.map(w=>w.id);
-  if(!p || (!p.topOrder && !p.extras)){
-    p = { topOrder:[...topIds], extras: DEFAULT_EXTRAS.map(e=>({...e})) };
-    STATE.drone.dashboardPrefs[CURRENT_USER_ID] = p;
-  }
-  if(!Array.isArray(p.topOrder)) p.topOrder = [...topIds];
-  if(!Array.isArray(p.extras)) p.extras = [];
-  p.topOrder = [...p.topOrder.filter(id=>topIds.includes(id)), ...topIds.filter(id=>!p.topOrder.includes(id))];
-  p.extras = p.extras.filter(e=>e && extraIds.includes(e.id));
+  if(!p || (!p.topOrder && !p.extras)){ p={topOrder:[...topIds],extras:DEFAULT_EXTRAS.map(e=>({...e}))}; STATE.drone.dashboardPrefs[CURRENT_USER_ID]=p; }
+  if(!Array.isArray(p.topOrder)) p.topOrder=[...topIds];
+  if(!Array.isArray(p.extras)) p.extras=[];
+  p.topOrder=[...p.topOrder.filter(id=>topIds.includes(id)),...topIds.filter(id=>!p.topOrder.includes(id))];
+  p.extras=p.extras.filter(e=>e&&extraIds.includes(e.id));
   return p;
 }
 function renderWidget(id){
-  const fleet = STATE.drone.drones.filter(d=>d.status!=="Retired");
-  if(id==='stat_fleet_status'){
-    const ready = fleet.filter(d=>d.status==="Ready").length;
-    const deployed = fleet.filter(d=>d.status==="Deployed").length;
-    const grounded = fleet.filter(d=>d.status==="Grounded"||d.status==="Maintenance").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="drone-fleet"><div class="label">Fleet Status</div><div class="value">${ready} <span style="font-size:14px;color:var(--text-dim);font-weight:600;">Ready</span></div><div class="delta neutral">${deployed} deployed &bull; ${grounded} down</div></button>`;
+  const today=fmt(new Date());
+  const fleet=STATE.drone.drones.filter(d=>d.status!=="Retired");
+  const flights30=STATE.drone.flights.filter(f=>daysBetween(f.date,today)>=0&&daysBetween(f.date,today)<=30);
+  if(id==='stat_total_drones'){
+    const active=fleet.filter(d=>d.status!=="Maintenance"&&d.status!=="Grounded").length;
+    const maintenance=fleet.filter(d=>d.status==="Maintenance"||d.status==="Grounded").length;
+    const retired=STATE.drone.drones.filter(d=>d.status==="Retired").length;
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-fleet"><div class="label">${ICONS.drone} <span>Total Drones</span></div><div class="value">${STATE.drone.drones.length}</div><div class="delta neutral"><span style="color:var(--green);">${active} active</span> &bull; <span style="color:var(--gold);">${maintenance} maintenance</span> &bull; ${retired} retired</div></button>`;
   }
-  if(id==='stat_avg_dfr'){
-    const dfrFlights = STATE.drone.flights.filter(f=>f.missionType==="DFR Response" && f.dispatchToAirborneSeconds!=null);
-    const avgDfrSeconds = dfrFlights.length ? Math.round(dfrFlights.reduce((s,f)=>s+f.dispatchToAirborneSeconds,0)/dfrFlights.length) : null;
-    return `<button class="stat-card dash-clickable" data-nav-dest="drone-flights"><div class="label">Avg. DFR Response Time</div><div class="value" style="color:${avgDfrSeconds && avgDfrSeconds>DFR_RESPONSE_TARGET_SECONDS?'var(--red)':'var(--heading)'}">${avgDfrSeconds!=null?avgDfrSeconds+'s':'—'}</div><div class="delta neutral">Target: under ${DFR_RESPONSE_TARGET_SECONDS}s (Chula Vista model)</div></button>`;
+  if(id==='stat_flight_hours_30d'){
+    const mins=flights30.reduce((sum,f)=>sum+(Number(f.durationMin)||0),0), hours=Math.round((mins/60)*10)/10;
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-flights"><div class="label">${ICONS.grid} <span>Flight Hours (30 days)</span></div><div class="value">${hours.toFixed(1)}</div><div class="delta neutral">${flights30.length} flights in the last 30 days</div></button>`;
   }
-  if(id==='stat_certs_expiring'){
-    const certsExpiring = STATE.drone.notifications.filter(n=>n.type==="cert_expiring").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="drone-operators"><div class="label">Certifications Expiring</div><div class="value" style="color:${certsExpiring?'var(--red)':'var(--heading)'}">${certsExpiring}</div><div class="delta ${certsExpiring?'warn':'ok'}">Within 45 days</div></button>`;
+  if(id==='stat_active_operators'){
+    const active=STATE.drone.operators.filter(operatorCurrent).length, expiring=STATE.drone.notifications.filter(n=>n.type==="cert_expiring").length;
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-operators"><div class="label">${ICONS.radio} <span>Active Operators</span></div><div class="value">${active}</div><div class="delta ${expiring?'warn':'ok'}">${expiring?expiring+' certification'+(expiring===1?'':'s')+' expiring':'All certifications current'}</div></button>`;
   }
-  if(id==='stat_flights_30d'){
-    const last30Flights = STATE.drone.flights.filter(f=>daysBetween(f.date, fmt(new Date()))<=30).length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="drone-flights"><div class="label">Flights (30 days)</div><div class="value">${last30Flights}</div><div class="delta neutral">${STATE.drone.flights.length} total on file</div></button>`;
+  if(id==='stat_maintenance_due'){
+    const down=fleet.filter(d=>d.status==="Maintenance"||d.status==="Grounded").length, alerts=STATE.drone.notifications.filter(n=>n.type==="battery_health").length;
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-maintenance"><div class="label">${ICONS.wrench} <span>Maintenance Due</span></div><div class="value">${down}</div><div class="delta ${down||alerts?'warn':'ok'}">${alerts?alerts+' battery health alert'+(alerts===1?'':'s'):(down?'Aircraft currently down':'No current maintenance alerts')}</div></button>`;
+  }
+  if(id==='stat_incidents_30d'){
+    const recent=STATE.drone.incidents.filter(i=>daysBetween(i.date,today)>=0&&daysBetween(i.date,today)<=30);
+    return `<button class="stat-card dash-clickable" data-nav-dest="drone-incidents"><div class="label">${ICONS.alert} <span>Incidents (30 days)</span></div><div class="value" style="color:${recent.length?'var(--red)':'var(--heading)'}">${recent.length}</div><div class="delta ${recent.length?'warn':'ok'}">${recent.length?'Review recent incidents':'No recent incidents'}</div></button>`;
   }
   if(id==='list_fleet_status_board'){
-    const rows = fleet.map(d=>`<div style="border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;background:var(--lightgray);"><div style="width:10px;height:10px;border-radius:50%;background:${statusColorDrone(d.status)};margin:0 auto 8px;"></div><div style="font-weight:800;font-size:13px;">${escapeHtml(d.name)}</div><div style="font-size:10.5px;color:var(--text-dim);margin:2px 0 6px;">${escapeHtml(d.model)}</div><div style="font-size:11px;font-weight:700;color:${statusColorDrone(d.status)};">${d.status}</div></div>`).join('');
-    return `<div class="panel"><div class="panel-head"><h2>Fleet Status Board</h2><span class="hint">Live-style overview of every aircraft</span></div><div class="panel-body"><div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));gap:12px;">${rows}</div></div></div>`;
+    const rows=fleet.map(d=>{
+      const avg=d.batteries&&d.batteries.length?Math.round(d.batteries.reduce((s,b)=>s+(Number(b.healthPct)||0),0)/d.batteries.length):null;
+      const last=STATE.drone.flights.filter(f=>f.droneId===d.id).sort((a,b)=>b.date.localeCompare(a.date))[0];
+      return `<div class="dash-clickable" data-open-drone="${d.id}" style="border:1px solid var(--border);border-radius:10px;padding:16px;text-align:left;background:var(--lightgray);cursor:pointer;min-width:0;"><div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="font-weight:800;font-size:14px;color:var(--heading);">${escapeHtml(d.name)}</div><div style="font-size:11px;color:var(--text-dim);margin-top:3px;">${escapeHtml(d.model)}</div></div><div style="width:10px;height:10px;border-radius:50%;background:${statusColorDrone(d.status)};box-shadow:0 0 0 4px ${statusColorDrone(d.status)}22;"></div></div><div style="margin-top:12px;"><span class="badge ${statusBadgeClassDrone(d.status)}">${escapeHtml(d.status)}</span></div><div style="margin-top:12px;font-size:11.5px;color:var(--text-dim);display:grid;gap:6px;"><div>Battery health: <strong style="color:var(--heading);">${avg==null?'—':avg+'%'}</strong></div><div>Last flight: <strong style="color:var(--heading);">${last?last.date:'No flights on file'}</strong></div></div></div>`;
+    }).join('');
+    return `<div class="panel"><div class="panel-head"><h2>Drone Fleet Status</h2><span class="hint">Live status of all active aircraft</span></div><div class="panel-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;">${rows}</div></div></div>`;
   }
-  if(id==='chart_missions_by_type'){
-    return `<div class="panel"><div class="panel-head"><h2>Missions by Type</h2></div><div class="panel-body"><div class="chart-box" style="height:220px;"><canvas id="chartMissionType"></canvas></div></div></div>`;
-  }
+  if(id==='chart_missions_by_type') return `<div class="panel"><div class="panel-head"><h2>Missions by Type</h2></div><div class="panel-body"><div class="chart-box" style="height:220px;"><canvas id="chartMissionType"></canvas></div></div></div>`;
   if(id==='list_recent_flights'){
-    const rows = STATE.drone.flights.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(f=>`<tr><td>${droneLink(f.droneId)}</td><td>${escapeHtml(f.missionType)}</td><td>${f.date}</td></tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No flights on file.</td></tr>`;
+    const rows=STATE.drone.flights.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(f=>`<tr><td>${droneLink(f.droneId)}</td><td>${escapeHtml(f.missionType)}</td><td>${f.date}</td></tr>`).join('')||`<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No flights on file.</td></tr>`;
     return `<div class="panel"><div class="panel-head"><h2>Recent Flights</h2></div><div class="panel-body" style="padding:0;"><table><thead><tr><th>Aircraft</th><th>Mission</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
   return `<div class="panel"><div class="panel-body">Unknown widget.</div></div>`;
 }
-const DASH_SIZE_LABELS = {quarter:'\u00bc', half:'\u00bd', threeQuarter:'\u00be', full:'Full'};
-function renderTopWidget(id){
-  return `<div class="dash-widget" data-widget-id="${id}">
-    <div class="dash-widget-toolbar"><span class="dash-drag-handle" role="button" tabindex="0" title="Drag to reorder" aria-label="Drag to reorder">☰</span></div>
-    ${renderWidget(id)}
-  </div>`;
-}
-function renderExtraWidget(id, size){
-  return `<div class="dash-widget" data-widget-id="${id}" data-size="${size}">
-    <div class="dash-widget-toolbar">
-      <span class="dash-drag-handle" role="button" tabindex="0" title="Drag to reorder" aria-label="Drag to reorder">☰</span>
-      <button data-widget-size-cycle="${id}" title="Resize (currently ${size})">${DASH_SIZE_LABELS[size]||'\u00bd'}</button>
-      <button data-widget-remove="${id}" title="Remove from dashboard" aria-label="Remove">&times;</button>
-    </div>
-    ${renderWidget(id)}
-  </div>`;
-}
+const DASH_SIZE_LABELS={quarter:'¼',half:'½',threeQuarter:'¾',full:'Full'};
+function renderTopWidget(id){ return `<div class="dash-widget" data-widget-id="${id}"><div class="dash-widget-toolbar"><span class="dash-drag-handle" role="button" tabindex="0" title="Drag to reorder" aria-label="Drag to reorder">☰</span></div>${renderWidget(id)}</div>`; }
+function renderExtraWidget(id,size){ return `<div class="dash-widget" data-widget-id="${id}" data-size="${size}"><div class="dash-widget-toolbar"><span class="dash-drag-handle" role="button" tabindex="0" title="Drag to reorder" aria-label="Drag to reorder">☰</span><button data-widget-size-cycle="${id}" title="Resize (currently ${size})">${DASH_SIZE_LABELS[size]||'½'}</button><button data-widget-remove="${id}" title="Remove from dashboard" aria-label="Remove">&times;</button></div>${renderWidget(id)}</div>`; }
 function wireDashDragDrop(zone, orderedArray, isExtras){
   if(!zone) return;
   let draggedId = null;
@@ -496,25 +487,30 @@ function renderDashboard(){
   const root = document.getElementById('view-drone-dashboard');
   const dashboardDestinations = NAV_ITEMS.filter(item=>item.id!=='drone-dashboard' && navItemVisible(item));
   root.innerHTML = `
-    <div class="k9-card-grid" style="margin-bottom:24px;">
-      ${dashboardDestinations.map(item=>`
-        <button class="drone-card dash-clickable" data-nav-dest="${item.id}" style="text-align:left;cursor:pointer;font-family:inherit;color:inherit;">
-          <div style="width:30px;height:30px;color:var(--blue);margin-bottom:10px;">${ICONS[item.icon]||ICONS.grid}</div>
-          <div style="font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px;">${escapeHtml(item.label)}</div>
-          <div style="font-size:12.5px;line-height:1.45;color:var(--text-dim);">${escapeHtml(item.sub)}</div>
-        </button>
-      `).join('')}
+    <style>
+      #view-drone-dashboard .drone-hub-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:20px}
+      #view-drone-dashboard .drone-hub-card{grid-column:span 4;min-height:145px;padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--panel);text-align:left;color:inherit;font-family:inherit;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background .15s ease}
+      #view-drone-dashboard .drone-hub-card:nth-child(n+4){grid-column:span 3}
+      #view-drone-dashboard .drone-hub-card:hover{transform:translateY(-2px);border-color:var(--blue);background:var(--lightgray)}
+      #view-drone-dashboard .drone-hub-icon{width:30px;height:30px;color:var(--blue);margin-bottom:13px}
+      #view-drone-dashboard .drone-hub-title{font-size:16px;font-weight:800;color:var(--heading);margin-bottom:7px}
+      #view-drone-dashboard .drone-hub-sub{font-size:12.5px;line-height:1.45;color:var(--text-dim)}
+      #view-drone-dashboard .drone-kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:22px}
+      #view-drone-dashboard .drone-kpi-grid .dash-widget{min-width:0}
+      #view-drone-dashboard .drone-kpi-grid .stat-card{height:100%;min-height:130px}
+      #view-drone-dashboard .stat-card .label svg{width:18px;height:18px;vertical-align:middle;margin-right:6px}
+      @media(max-width:1100px){#view-drone-dashboard .drone-hub-card,#view-drone-dashboard .drone-hub-card:nth-child(n+4){grid-column:span 6}#view-drone-dashboard .drone-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:700px){#view-drone-dashboard .drone-hub-card,#view-drone-dashboard .drone-hub-card:nth-child(n+4){grid-column:1/-1}#view-drone-dashboard .drone-kpi-grid{grid-template-columns:1fr}}
+    </style>
+    <div class="drone-hub-grid">
+      ${dashboardDestinations.map(item=>`<button class="drone-hub-card" data-nav-dest="${item.id}"><div class="drone-hub-icon">${ICONS[item.icon]||ICONS.grid}</div><div class="drone-hub-title">${escapeHtml(item.label)}</div><div class="drone-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
     </div>
+    <div class="drone-kpi-grid" id="dashTopZone">${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}</div>
     <div class="toolbar">
-      <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
+      <div style="font-size:12px;color:var(--text-dim);">Dashboard widgets below can be rearranged and customized for your account.</div>
       <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
     </div>
-    <div class="stat-grid" id="dashTopZone">
-      ${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}
-    </div>
-    <div class="dash-extras-zone" id="dashExtrasZone">
-      ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
-    </div>
+    <div class="dash-extras-zone" id="dashExtrasZone">${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}</div>
   `;
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
   destroyChartsDrone();
