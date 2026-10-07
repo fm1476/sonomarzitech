@@ -733,10 +733,10 @@ function enterModule(key){
   document.getElementById('moduleSwitchBar').style.display = '';
   const activeModuleName = document.getElementById('activeModuleName');
   activeModuleName.textContent = MODULE_META[key].name;
-  const dashboardModule = key==='fleet' || key==='drone' || key==='k9' || key==='eod';
+  const dashboardModule = key==='fleet' || key==='drone' || key==='k9' || key==='eod' || key==='personnel';
   activeModuleName.style.cursor = dashboardModule ? 'pointer' : '';
-  activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : (key==='drone' ? 'Open Drone Dashboard' : (key==='k9' ? 'Open K9 Dashboard' : (key==='eod' ? 'Open EOD Dashboard' : '')));
-  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : (key==='drone' ? ()=>DRONE.switchView('drone-dashboard') : (key==='k9' ? ()=>K9.switchView('k9-dashboard') : (key==='eod' ? ()=>EOD.switchView('eod-dashboard') : null)));
+  activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : (key==='drone' ? 'Open Drone Dashboard' : (key==='k9' ? 'Open K9 Dashboard' : (key==='eod' ? 'Open EOD Dashboard' : (key==='personnel' ? 'Open Personnel Dashboard' : ''))));
+  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : (key==='drone' ? ()=>DRONE.switchView('drone-dashboard') : (key==='k9' ? ()=>K9.switchView('k9-dashboard') : (key==='eod' ? ()=>EOD.switchView('eod-dashboard') : (key==='personnel' ? ()=>PERSONNEL.switchView('pm-dashboard') : null))));
   document.getElementById('qmTenantFooter').style.display = key==='qm' ? '' : 'none';
   document.getElementById('defaultFooter').style.display = key==='qm' ? 'none' : '';
   document.getElementById('navSeparator').style.display = '';
