@@ -5004,7 +5004,7 @@ function startPmModule(){
   renderNav();
   switchView('pm-dashboard');
 }
-window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openRecordDetail, openSessionDetailModal, openCheckinFlow, renderCalendarSub };
+window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openRecordDetail, openSessionDetailModal, openCheckinFlow, renderCalendarSub, readinessCoverageGaps: (days=7)=>computeCoverageGaps(days).filter(g=>canViewScheduleShift(g.shift)) };
 
 })();
 

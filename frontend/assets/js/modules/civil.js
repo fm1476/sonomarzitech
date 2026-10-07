@@ -3289,7 +3289,7 @@ const WorkOperations=(()=>{
  const manager=()=>allowed('workflow_manage');
  const canApprove=()=>allowed('workflow_approve');
  const canUse=()=>allowed('workflow_use');
- const visible=mod=>({fleet:'module_fleet',qm:'module_quartermaster',personnel:'module_personnel',k9:'module_k9',drone:'module_drone'})[mod] && allowed(({fleet:'module_fleet',qm:'module_quartermaster',personnel:'module_personnel',k9:'module_k9',drone:'module_drone'})[mod]);
+ const visible=mod=>({fleet:'module_fleet',qm:'module_quartermaster',personnel:'module_personnel',k9:'module_k9',drone:'module_drone',eod:'module_eod'})[mod] && allowed(({fleet:'module_fleet',qm:'module_quartermaster',personnel:'module_personnel',k9:'module_k9',drone:'module_drone',eod:'module_eod'})[mod]);
  const safeList=v=>Array.isArray(v)?v:[];
  let cache={key:'',templates:[],items:[],loaded:false,busy:false,error:'',at:0};
  function readiness(){
@@ -3304,8 +3304,8 @@ const WorkOperations=(()=>{
    if(!broad&&r.personId!==me.id)continue;
    if(r.recertRequired&&r.recertDate&&daysUntil(r.recertDate)<=60)add('People',`${personName(r.personId)}: ${r.description||'Training'} recertification`,r.recertDate,'Training renewal','pm-training',r.personId);
   }
-  if(visible('personnel')&&allowed('pm_overtime_view')&&typeof computeCoverageGaps==='function'){
-   for(const gap of computeCoverageGaps(7))add('Staffing',`${gap.shift.name}: ${gap.needed} open position${gap.needed===1?'':'s'}`,gap.date,`${gap.staffed}/${gap.minStaff} staffed`,'pm-scheduling');
+  if(visible('personnel')&&allowed('pm_overtime_view')&&typeof window.PM?.readinessCoverageGaps==='function'){
+   for(const gap of window.PM.readinessCoverageGaps(7))add('Staffing',`${gap.shift.name}: ${gap.needed} open position${gap.needed===1?'':'s'}`,gap.date,`${gap.categoryName?gap.categoryName+': ':''}${gap.staffed}/${gap.minStaff} staffed`,'pm-scheduling');
   }
   if(visible('fleet')&&allowed('fleet_vehicle_view'))for(const v of safeList(STATE.fleet?.vehicles)){
    if(['Out of Service','In Maintenance','Maintenance'].includes(v.status))add('Fleet',`${v.unitNumber||v.name||'Vehicle'}: ${v.status}`,'',v.make+' '+v.model,'fleet-vehicles');
@@ -3319,11 +3319,32 @@ const WorkOperations=(()=>{
   if(visible('drone')&&allowed('drone_operator_view'))for(const o of safeList(STATE.drone?.operators))for(const w of safeList(o.waivers)){
    if(w.expirationDate&&daysUntil(w.expirationDate)<=60)add('Specialty',`UAS waiver: ${w.type||'Renewal'}`,w.expirationDate,'Operator authorization','drone-operators');
   }
+  if(visible('eod')){
+   if(allowed('eod_technician_view'))for(const t of safeList(STATE.eod?.technicians).filter(t=>t.status==='Active')){
+    if(t.hdsRecertDueDate&&daysUntil(t.hdsRecertDueDate)<=60)add('Specialty',`EOD HDS recertification: ${personName(t.personId)}`,t.hdsRecertDueDate,'Technician certification renewal','eod-technicians',t.personId);
+   }
+   if(allowed('eod_inventory_view'))for(const i of safeList(STATE.eod?.inventory).filter(i=>i.status==='On Hand')){
+    if(i.expirationDate&&daysUntil(i.expirationDate)<=60)add('Specialty',`EOD inventory: ${i.materialType||'Material'} expiration`,i.expirationDate,'On-hand material expiration','eod-inventory');
+   }
+   if(allowed('eod_magazine_view'))for(const m of safeList(STATE.eod?.magazines)){
+    // Follow the EOD module's inspection cycle; include due and overdue inspections.
+    const due=m.lastInspectionDate?fmt(addDays(new Date(m.lastInspectionDate+'T12:00:00'),window.EOD.MAGAZINE_INSPECTION_DAYS)):'';
+    if(!due||due<=today)add('Specialty',`EOD magazine: ${m.name||'Storage'} inspection`,due,due?'Magazine inspection due':'No inspection date recorded','eod-magazines');
+   }
+   if(allowed('eod_theft_report_view'))for(const r of safeList(STATE.eod?.theftLossReports).filter(r=>!r.reportedAtfDate))add('Specialty','EOD theft/loss: reporting outstanding','','ATF reporting completion not recorded','eod-theftloss');
+  }
   return items.sort((a,b)=>Number(b.urgent)-Number(a.urgent)||(a.due||'9999').localeCompare(b.due||'9999'));
  }
  function readinessTasks(){return readiness().filter(x=>(x.group==='People'&&(x.owner===CURRENT_USER_ID||allowed('pm_training_manage')))||(x.group==='Staffing'&&allowed('pm_overtime_manage'))).slice(0,25).map(x=>({title:x.title,owner:x.owner===CURRENT_USER_ID?'You':x.group==='Staffing'?'Scheduling':'Training',due:x.due,type:x.owner===CURRENT_USER_ID?'mine':'attention',consequence:x.detail,action:()=>SuiteUX.go(x.route)}));}
  function renderReadiness(el){const items=readiness(),groups=['Staffing','People','Fleet','Equipment','Specialty'];const cards=groups.map(g=>({g,rows:items.filter(i=>i.group===g)}));
-  el.innerHTML=`<div class="work-hero"><div><div class="work-eyebrow">Agency operations</div><h2>Operational readiness</h2><p>Live exceptions from the records available to your role. Clear each item in its source workspace.</p></div><div class="work-date">${esc(SuiteUX.displayDate(date()))}</div></div><div class="work-metrics">${cards.map(({g,rows})=>`<div class="work-metric ${rows.some(x=>x.urgent)?'urgent':'good'}"><span>${esc(g)}</span><strong>${rows.length}</strong><small>${rows.filter(x=>x.urgent).length} overdue</small></div>`).join('')}</div><div class="work-layout"><div>${cards.map(({g,rows})=>`<section class="panel"><div class="panel-head"><h2>${esc(g)}</h2><span class="hint">${rows.length} items</span></div><div class="readiness-items" data-readiness-group="${g}"></div></section>`).join('')}</div><aside class="work-aside"><section class="panel"><div class="panel-head"><h2>How this view works</h2></div><div class="panel-body"><p>Only records loaded for your role appear here. Expirations enter the list 60 days before their due date. Staffing gaps use the next seven days of shift minimums and actual coverage. Vehicle and equipment exceptions remain until their source status is cleared.</p><p>This view does not certify that every employee is deployable.</p></div></section></aside></div>`;
+  el.innerHTML=`<div class="work-hero"><div><div class="work-eyebrow">Agency operations</div><h2>Operational readiness</h2><p>Live exceptions from the records available to your role. Clear each item in its source workspace.</p></div><div class="work-date">${esc(SuiteUX.displayDate(date()))}</div></div><div class="work-metrics">${cards.map(({g,rows})=>`<button type="button" class="work-metric ${rows.some(x=>x.urgent)?'urgent':'good'}" data-readiness-card="${g}"><span>${esc(g)}</span><strong>${rows.length}</strong><small>${rows.filter(x=>x.urgent).length} overdue</small></button>`).join('')}</div><div class="work-layout"><div>${cards.map(({g,rows})=>`<section class="panel"><div class="panel-head"><h2>${esc(g)}</h2><span class="hint">${rows.length} items</span></div><div class="readiness-items" data-readiness-group="${g}"></div></section>`).join('')}</div><aside class="work-aside"><section class="panel"><div class="panel-head"><h2>How this view works</h2></div><div class="panel-body"><p>Only records loaded for your role appear here. Expirations enter the list 60 days before their due date. Staffing gaps use the next seven days of shift minimums and actual coverage. Vehicle and equipment exceptions remain until their source status is cleared. Specialty includes K9 certifications, UAS waivers, EOD technician renewals, material expirations, magazine inspections, and outstanding theft/loss reports. Select Specialty to jump to its exceptions and open the relevant workspace.</p><p>This view does not certify that every employee is deployable.</p></div></section></aside></div>`;
+  for(const card of el.querySelectorAll('[data-readiness-card]'))card.onclick=()=>{
+   const group=card.dataset.readinessCard;
+   const routes={Staffing:'pm-scheduling',People:'pm-training',Fleet:'fleet-dashboard',Equipment:'qm-dashboard'};
+   if(routes[group]){SuiteUX.go(routes[group]);return;}
+   const section=el.querySelector(`[data-readiness-group="${group}"]`).closest('section');
+   section.setAttribute('tabindex','-1');section.scrollIntoView({behavior:'smooth',block:'start'});section.focus({preventScroll:true});
+  };
   for(const {g,rows} of cards){const box=el.querySelector(`[data-readiness-group="${g}"]`);if(!rows.length){box.innerHTML='<div class="panel-body">No visible exceptions.</div>';continue;}for(const x of rows.slice(0,80)){const row=document.createElement('div');row.className='work-item';row.innerHTML=`<div class="work-priority ${x.urgent?'urgent':''}"></div><div><h3>${esc(x.title)}</h3><p>${esc(x.detail)}${x.due?' · '+esc(SuiteUX.displayDate(x.due)):''}</p></div>`;const b=document.createElement('button');b.className='btn btn-outline btn-sm';b.textContent='Open';b.onclick=()=>SuiteUX.go(x.route);row.append(b);box.append(row);}}
  }
  const key=()=>{const c=SuiteStore.remoteContext();return SuiteStore.mode()==='shared'?`${c.tenantId}/${c.agencyId}/${CURRENT_USER_ID}`:`local/${CURRENT_USER_ID}`;};
