@@ -98,18 +98,21 @@ async function ensureStaffNoticeTables(client) {
 
   // Legacy push prototypes used auth_key/p256dh_key. They are obsolete, but an
   // existing NOT NULL constraint can still block inserts before the new columns are read.
+  // Check column existence before ALTER: catching undefined-column errors inside
+  // a report approval transaction would leave that transaction aborted.
   await client.query(`
-    ALTER TABLE suite_push_subscriptions
-      ALTER COLUMN auth_key DROP NOT NULL
-  `).catch(error => {
-    if (error?.code !== "42703") throw error;
-  });
-  await client.query(`
-    ALTER TABLE suite_push_subscriptions
-      ALTER COLUMN p256dh_key DROP NOT NULL
-  `).catch(error => {
-    if (error?.code !== "42703") throw error;
-  });
+    DO $migration$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema=current_schema() AND table_name='suite_push_subscriptions' AND column_name='auth_key') THEN
+        ALTER TABLE suite_push_subscriptions ALTER COLUMN auth_key DROP NOT NULL;
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema=current_schema() AND table_name='suite_push_subscriptions' AND column_name='p256dh_key') THEN
+        ALTER TABLE suite_push_subscriptions ALTER COLUMN p256dh_key DROP NOT NULL;
+      END IF;
+    END $migration$;
+  `);
 
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS suite_push_subscription_identity_uidx
