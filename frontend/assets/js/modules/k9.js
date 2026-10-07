@@ -265,7 +265,7 @@ const NAV_ITEMS = [
   {id:"k9-training", label:"Training", icon:"award", title:"Training", sub:"Sessions, hours, and maintenance-training compliance", requiredAbility:"k9_training_view"},
   {id:"k9-certifications", label:"Certifications", icon:"ribbon", title:"Certifications", sub:"Discipline certifications and recertification tracking", requiredAbility:"k9_certification_view"},
   {id:"k9-incidents", label:"Incidents", icon:"alert", title:"Incidents", sub:"Bites, injuries, and reviewable incidents", requiredAbility:"k9_incident_view"},
-  {id:"k9-gps", label:"GPS Tracking", icon:"mappin", title:"GPS Tracking", sub:"Last known location and location history per K9", requiredAbility:"k9_gps_view"},
+  {id:"k9-gps", label:"GPS Tracking", icon:"mappin", title:"GPS Tracking", sub:"Last known location and location history per K9", requiredAbility:"k9_gps_view", featureDisabled:true},
   {id:"k9-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Individual K9 activity reports and configurable analytics", requiredAbility:"k9_reports_view"},
   {id:"k9-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data and the system audit log", requiredAbility:["k9_admin_categories","k9_admin_audit"]},
 ];
@@ -274,6 +274,7 @@ let ACTIVE_VIEW = "k9-dashboard";
 function navItemVisible(item){
   if(!can('module_k9')) return false;
   if(!item) return false;
+  if(item.featureDisabled) return false;
   if(!item.requiredAbility) return true;
   if(Array.isArray(item.requiredAbility)) return item.requiredAbility.some(a=>can(a));
   return can(item.requiredAbility);
