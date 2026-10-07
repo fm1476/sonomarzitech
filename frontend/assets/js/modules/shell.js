@@ -733,9 +733,10 @@ function enterModule(key){
   document.getElementById('moduleSwitchBar').style.display = '';
   const activeModuleName = document.getElementById('activeModuleName');
   activeModuleName.textContent = MODULE_META[key].name;
-  activeModuleName.style.cursor = key==='fleet' ? 'pointer' : '';
-  activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : '';
-  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : null;
+  const dashboardModule = key==='fleet' || key==='drone';
+  activeModuleName.style.cursor = dashboardModule ? 'pointer' : '';
+  activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : (key==='drone' ? 'Open Drone Dashboard' : '');
+  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : (key==='drone' ? ()=>DRONE.switchView('drone-dashboard') : null);
   document.getElementById('qmTenantFooter').style.display = key==='qm' ? '' : 'none';
   document.getElementById('defaultFooter').style.display = key==='qm' ? 'none' : '';
   document.getElementById('navSeparator').style.display = '';
