@@ -3659,9 +3659,11 @@ const SuiteUX = (()=>{
     const mainModules=accessibleModules().map(key=>({type:'module',key,name:MODULE_META[key].name}));if(FieldTraining.available())mainModules.push({type:'fieldtraining',key:'fieldtraining',name:'Field Training'});mainModules.sort((a,b)=>a.name.localeCompare(b.name));
     for(const entry of mainModules){
       if(entry.type==='fieldtraining'){
-        const group=document.createElement('details');group.className='navgroup module-navgroup';group.dataset.label='mod:fieldtraining';group.open=route==='fieldtraining'||preferences.get('group.mod:fieldtraining',false);
-        const s=document.createElement('summary');s.innerHTML='<span class="nav-mod-icon">'+(ICONS.award||'')+'</span><span>Field Training</span>';group.append(s);group.addEventListener('toggle',()=>preferences.set('group.mod:fieldtraining',group.open));
-        const line=document.createElement('div');line.className='navline';line.dataset.searchText='field training trainee files reports';line.append(button('Trainee files & reports','award',fieldTrainingView,'navitem'+(route==='fieldtraining'?' active':'')));group.append(line);nav.append(group);continue;
+        // Field Training has a single primary destination, so the module heading itself
+        // opens Trainee files & reports. Avoid a redundant one-item submenu.
+        const line=document.createElement('div');line.className='navline fieldtraining-direct';line.dataset.searchText='field training trainee files reports';
+        line.append(button('Field Training','award',fieldTrainingView,'navitem'+(route==='fieldtraining'?' active':'')));
+        nav.append(line);continue;
       }
       const key=entry.key,items=modules()[key].NAV_ITEMS.filter(n=>allowedView(n.id));
       if(!items.length)continue;
