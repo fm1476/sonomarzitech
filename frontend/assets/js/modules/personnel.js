@@ -2790,12 +2790,12 @@ function wireStaffingNeedsEditor(id,totalId){
   document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());update();};update();
 }
 function staffingCategoryOptions(record,selected=''){
-  return '<option value="">General / Unclassified</option>'+(record?.staffingRequirements||[]).map(row=>`<option value="${escapeHtml(row.id)}" ${row.id===selected?'selected':''}>${escapeHtml(row.name)}</option>`).join('');
+  return '<option value="">'+((record?.staffingRequirements||[]).length?'Select Staffing Category':'General / Unclassified')+'</option>'+(record?.staffingRequirements||[]).map(row=>`<option value="${escapeHtml(row.id)}" ${row.id===selected?'selected':''}>${escapeHtml(row.name)}</option>`).join('');
 }
 function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
   const shiftSelect=document.getElementById(shiftId),categorySelect=document.getElementById(categoryId),personSelect=document.getElementById(personId);
   const update=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftSelect.value),category=(shift?.staffingRequirements||[]).find(c=>c.id===categorySelect.value),selected=personSelect.value;
-    const people=STATE.personnel.filter(p=>staffingPersonHasSkill(STATE.pm.records,p.id,category));
+    const people=STATE.personnel.filter(p=>(!(shift?.staffingRequirements||[]).length||category)&&staffingPersonHasSkill(STATE.pm.records,p.id,category));
     personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
   };
   categorySelect.addEventListener('change',update);shiftSelect.addEventListener('change',update);update();
@@ -3012,7 +3012,7 @@ function renderRosterSub(){
     const canManage=canManageScheduleShift(shift);
     return `<tr><td>${recordLink(a.personId)}</td><td>${escapeHtml(a.unit)}</td><td>${shift?escapeHtml(shift.name)+(a.staffingCategoryId?' · '+escapeHtml(staffingCategoryName(shift,a.staffingCategoryId)):'')+(shift.published===false?' <span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);">Draft</span>':''):'—'}</td>
     <td>${shift?SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd):''}</td><td>${escapeHtml(a.location)}</td>
-    ${canManage?`<td><div class="cell-actions"><button class="btn-icon" data-edit-assign="${a.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-assign="${a.id}" title="End assignment">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
+    ${canManage?`<td><div class="cell-actions"><button class="btn-icon" data-edit-assign="${a.id}" title="Edit">${ICONS.edit}</button><button class="btn btn-sm btn-outline" data-del-assign="${a.id}" title="End assignment">End Assignment</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No active shift assignments.</td></tr>`;
 
   const exceptionRows = (STATE.pm.scheduleExceptions||[]).slice()
@@ -3171,7 +3171,9 @@ function renderRosterSub(){
       const a = STATE.pm.scheduleAssignments.find(x=>x.id===b.dataset.delAssign);
       if(!a||!canManageScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId)))return;
       if(!confirm(`End the shift assignment for ${personName(a.personId)}?`)) return;
-      a.endDate = fmt(new Date());
+      const effectiveDate=fmt(new Date());
+      if(a.startDate>effectiveDate)STATE.pm.scheduleAssignments=STATE.pm.scheduleAssignments.filter(row=>row.id!==a.id);
+      else a.endDate=effectiveDate;
       logActivity(`Ended shift assignment for ${personName(a.personId)}.`, "schedule", a.id);
       persist(); renderScheduling();
     }));
@@ -4302,6 +4304,7 @@ function openAssignmentFormModal(existing){
       startDate: document.getElementById('fAssignStart').value,
     };
     const selectedShift=STATE.pm.scheduleShifts.find(s=>s.id===data.shiftId);
+    if((selectedShift?.staffingRequirements||[]).length&&!data.staffingCategoryId){toast('Select the staffing category this employee will fill.',true);return;}
     if(!data.personId||!staffingPersonHasSkill(STATE.pm.records,data.personId,(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId))){toast('Select personnel with the required skill.',true);return;}
     if(!canManageScheduleShift(selectedShift))return;
     if(editing){

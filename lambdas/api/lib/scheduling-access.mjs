@@ -333,9 +333,12 @@ export function validateSchedulingBatch(snapshot,changes) {
       if((value.staffingRequirements||[]).some(r=>!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a required skill from the Personnel Special Skills Catalog.');
       if(minimum>0&&Number(collection==='pm.specialEvents'?value.staffNeeded:value.minStaff)!==minimum)fail('The total staffing requirement must equal the category requirements.');
     }
-    if(['pm.scheduleAssignments','pm.scheduleCoverages','pm.overtimeOpportunities'].includes(collection)&&value.staffingCategoryId){
+    const previousAssignment=(snapshot[collection]||[]).find(row=>row.id===change.itemId);
+    const endingAssignment=collection==='pm.scheduleAssignments'&&previousAssignment&&value.endDate&&!previousAssignment.endDate&&sameExcept(previousAssignment,value,['endDate']);
+    if(['pm.scheduleAssignments','pm.scheduleCoverages','pm.overtimeOpportunities'].includes(collection)&&!endingAssignment){
       const shift=(final['pm.scheduleShifts']||[]).find(s=>s.id===value.shiftId);
       const category=(shift?.staffingRequirements||[]).find(c=>c.id===value.staffingCategoryId);
+      if((shift?.staffingRequirements||[]).length&&!category)fail('Select a required staffing category before assigning personnel.');
       if(category&&value.personId&&!staffingPersonHasSkill(final['pm.records'],value.personId,category))fail('This employee does not have the required staffing skill.');
       if(!shift||(shift.staffingRequirements||[]).length&&!shift.staffingRequirements.some(r=>r.id===value.staffingCategoryId))fail('Select a staffing category defined for this shift.');
     }
