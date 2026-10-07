@@ -89,3 +89,5 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
  .mobile-day-details[hidden]{display:none}.mobile-day-details h3{margin:0 0 10px}.mobile-day-details .cal-event{display:block;white-space:normal;margin:6px 0;min-height:44px!important}
  .cal-grid.mobile-agenda{grid-template-columns:1fr}.mobile-agenda .cal-cell-empty{display:none}.mobile-agenda .cal-cell{min-height:0;padding:10px}.mobile-agenda .mobile-day-indicators{display:none}
 }
+
+.export-picker{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700}.export-picker select{min-width:180px;max-width:100%}#ftReportExports>.hint{flex-basis:100%;margin:4px 0 0}@media(max-width:640px){.export-picker{flex-wrap:wrap;width:100%}.export-picker select{flex:1;min-width:0}}
