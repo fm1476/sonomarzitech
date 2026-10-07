@@ -32,7 +32,7 @@
     document.querySelectorAll('.module-navgroup').forEach(group=>{
       const header=group.querySelector('.nav-mod-header');
       const name=(header?.textContent||'').replace(/[+\-]/g,'').trim().toLowerCase();
-      if(name!=='drone management' && name!=='fleet management' && name!=='k9 management') return;
+      if(name!=='drone management' && name!=='fleet management' && name!=='k9 management' && name!=='eod management') return;
       group.querySelectorAll('.navline').forEach(line=>{ line.style.display='none'; });
       group.classList.add('dashboard-first-module');
     });
