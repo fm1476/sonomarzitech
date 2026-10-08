@@ -3793,7 +3793,7 @@ function renderTimeOffSub(){
     <td>${codeBadge(r.code)}</td>
     <td>${dateRange(r)}</td>
     <td style="max-width:220px;">${escapeHtml(r.reason||'\u2014')}</td>
-    <td>${statusBadge(r.status)}${r.decisionNotes?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${escapeHtml(r.decisionNotes)}</div>`:''}</td>
+    <td>${statusBadge(r.status)}${r.courtConflictOverride?`<div style="margin-top:5px;font-size:11px;color:var(--warning,#d8aa50);font-weight:700;" title="${escapeHtml(r.courtConflictOverride.reason||'')}">Court conflict override recorded</div>`:''}${r.decisionNotes?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${escapeHtml(r.decisionNotes)}</div>`:''}</td>
     <td style="font-size:12px;color:var(--text-dim);">${r.submittedAt?SuiteUX.displayInstant(r.submittedAt):'\u2014'}</td>
     <td>${r.status==='pending'?`<button class="btn btn-sm btn-outline" data-cancel-leave="${r.id}" title="Rescind request">Rescind</button>`:''}</td>
   </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No requests submitted yet.</td></tr>`;
