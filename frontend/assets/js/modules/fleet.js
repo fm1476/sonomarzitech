@@ -1146,8 +1146,17 @@ function openVehicleModal(id){
       notes: document.getElementById('fNotes').value,
     };
     if(editing){
+      const changes = Object.keys(data).filter(key=>JSON.stringify(v[key] ?? null)!==JSON.stringify(data[key] ?? null));
+      const prior = Object.fromEntries(changes.map(key=>[key,v[key]]));
       Object.assign(v, data);
-      logActivity(`${v.unitNumber} details updated.`, "vehicle", v.id);
+      changes.forEach(key=>{
+        const display = key.replace(/([A-Z])/g,' $1').toLowerCase();
+        const valueText = value=>value==null || value==='' ? '(empty)' : String(value).slice(0,120);
+        logActivity(key==='notes'
+          ? `${v.unitNumber}: notes updated.`
+          : `${v.unitNumber}: ${display} changed from "${valueText(prior[key])}" to "${valueText(data[key])}".`,
+          "vehicle", v.id);
+      });
       toast("Vehicle updated.");
     }else{
       const newVeh = {id:"veh"+Date.now(), currentFuelLevel:100, equipmentChecklist: stdEquipmentChecklist(), photoDataUrl:null, disposal:null, ...data};

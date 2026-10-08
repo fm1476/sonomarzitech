@@ -104,6 +104,26 @@ async function ftMembers(client, workspaceAuth) {
   return result.rows;
 }
 
+async function ftEligibleMembers(client, ctx, members) {
+  if (ctx.admin) return members.map(m=>({...m, eligibleTrainer:true, eligibleSupervisor:true}));
+  const checked = await Promise.all(members.map(async m=>{
+    const roles=Array.isArray(m.role_ids)?m.role_ids:[];
+    const abilities=await loadRoleAbilityMap(client,ctx.tenantId,ctx.agencyId,roles);
+    const able=name=>roleHasAbility(abilities,roles,name);
+    return {...m,eligibleTrainer:able("ft_train")||able("ft_manage"),eligibleSupervisor:able("ft_manage")||able("ft_assign_cover")};
+  }));
+  return checked;
+}
+function ftValidateParticipants(members, traineeUser, trainerUser, supervisorUser) {
+  const byUser=new Map(members.map(m=>[m.user_id,m]));
+  if(!traineeUser || !byUser.has(traineeUser)) throw new Error("Choose an active agency member as the trainee.");
+  if(!trainerUser || !byUser.has(trainerUser)) throw new Error("Choose an active agency member as the assigned trainer.");
+  if(!supervisorUser || !byUser.has(supervisorUser)) throw new Error("Choose an active agency member as the assigned supervisor.");
+  if(new Set([traineeUser,trainerUser,supervisorUser]).size!==3) throw new Error("The trainee, trainer and supervisor must be three different people.");
+  if(!byUser.get(trainerUser).eligibleTrainer) throw new Error("The assigned trainer needs the Field Training Officer or Field Training management permission.");
+  if(!byUser.get(supervisorUser).eligibleSupervisor) throw new Error("The assigned supervisor needs Field Training management or coverage-assignment permission.");
+  return byUser;
+}
 function ftEnrollmentFor(state, id) { return state.enrollments.find(x => x.id === id); }
 function ftReportFor(state, id) { return state.reports.find(x => x.id === id); }
 function ftActiveCoverage(state, enrollmentId, userId, day) {
@@ -231,7 +251,8 @@ async function fieldTrainingApi(client, auth, body) {
 
   if (action === "list") {
     const [{state},members] = await Promise.all([ftLoadState(client,ctx,false),ftMembers(client,ctx)]);
-    return response(200,{success:true,data:ftVisibleState(ctx,state,members)});
+    const eligibleMembers = await ftEligibleMembers(client,ctx,members);
+    return response(200,{success:true,data:ftVisibleState(ctx,state,eligibleMembers)});
   }
 
   await client.query("BEGIN");
@@ -251,9 +272,8 @@ async function fieldTrainingApi(client, auth, body) {
     } else if (action === "enroll") {
       ftAssert(ctx.ftManage,"Field Training management permission required.");
       if(!state.config) throw new Error("Configure the Field Training program first.");
-      const members=await ftMembers(client,ctx), byUser=new Map(members.map(m=>[m.user_id,m]));
-      const users=[payload.traineeUser,payload.trainerUser,payload.supervisorUser];
-      if(users.some(x=>!byUser.has(x)) || new Set(users).size!==3) throw new Error("Choose three different active agency members.");
+      const members=await ftEligibleMembers(client,ctx,await ftMembers(client,ctx));
+      const byUser=ftValidateParticipants(members,payload.traineeUser,payload.trainerUser,payload.supervisorUser);
       if(!ftDateOk(payload.startedOn)) throw new Error("A valid start date is required.");
       if(state.enrollments.some(e=>e.trainee_user===payload.traineeUser && ["active","extended"].includes(e.status))) throw new Error("That trainee already has an active Field Training file.");
       const trainee=byUser.get(payload.traineeUser);
@@ -262,7 +282,7 @@ async function fieldTrainingApi(client, auth, body) {
     } else if (action === "reassign") {
       ftAssert(ctx.ftManage,"Field Training management permission required.");
       const e=ftEnrollmentFor(state,payload.enrollmentId); if(!e) throw new Error("Trainee file not found."); ftVersion(e.version,payload.version,"trainee file");
-      if(new Set([e.trainee_user,payload.trainerUser,payload.supervisorUser]).size!==3) throw new Error("Choose different trainee, trainer, and supervisor participants.");
+      ftValidateParticipants(await ftEligibleMembers(client,ctx,await ftMembers(client,ctx)),e.trainee_user,payload.trainerUser,payload.supervisorUser);
       e.trainer_user=payload.trainerUser; e.supervisor_user=payload.supervisorUser; e.version++; e.updated_at=ftIsoNow(); result=e;
     } else if (action === "coverage_add") {
       const e=ftEnrollmentFor(state,payload.enrollmentId); if(!e) throw new Error("Trainee file not found.");

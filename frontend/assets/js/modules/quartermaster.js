@@ -1442,11 +1442,20 @@ function openEquipmentModal(id){
       } : null,
     };
     if(editing){
-      const prevStatus = item.status;
+      const photoChanged = item.photoDataUrl!==data.photoDataUrl;
+      const changes = Object.keys(data).filter(key=>key!=='photoDataUrl' && JSON.stringify(item[key] ?? null)!==JSON.stringify(data[key] ?? null));
+      const prior = Object.fromEntries(changes.map(key=>[key,item[key]]));
       Object.assign(item, data);
-      if(needsDisposal && prevStatus!==status){
-        logActivity(`${item.name} status changed to ${status} (${data.disposal.method}).`, "disposal", item.id);
-      }
+      changes.forEach(key=>{
+        const display = key.replace(/([A-Z])/g,' $1').toLowerCase();
+        const isSensitive = ['notes','personalWeaponAuth','disposal'].includes(key);
+        const valueText = value=>value==null || value==='' ? '(empty)' : typeof value==='object' ? '(structured value)' : String(value).slice(0,120);
+        logActivity(isSensitive
+          ? `${item.name} (${item.assetId}): ${display} updated.`
+          : `${item.name} (${item.assetId}): ${display} changed from "${valueText(prior[key])}" to "${valueText(data[key])}".`,
+          key==='status' && needsDisposal ? 'disposal' : 'equipment', item.id);
+      });
+      if(photoChanged) logActivity(`${item.name} (${item.assetId}): equipment photo updated.`, 'equipment', item.id);
       toast("Equipment updated.");
     }else{
       const newItem = {id:"e"+(Date.now()), assignedTo:null, assignedToType:null, ...data};
@@ -1603,7 +1612,7 @@ function renderEqDetailTabContent(item){
     if(oosBtn) oosBtn.addEventListener('click', ()=>{
       item.status = 'Maintenance';
       STATE.qm.maintenance.push({id:'m'+Date.now(), equipmentId:item.id, type:'Repair', date:fmt(new Date()), cost:0, vendor:'', status:'Open', notes:'Marked out of service.'});
-      STATE.qm.activity.push({ts:fmt(new Date()), text:`${item.name} marked out of service.`});
+      logActivity(`${item.name} (${item.assetId}) marked out of service.`, "equipment", item.id);
       persist();
       toast('Item marked out of service.');
       renderEquipmentDetailModal(item.id);

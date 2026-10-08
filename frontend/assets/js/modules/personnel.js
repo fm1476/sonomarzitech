@@ -967,10 +967,8 @@ function openRecordEditModal(personId){
       if(last && !last.endDate) last.endDate = fmt(new Date());
       r.promotionHistory.push({rank:newRank, startDate: fmt(new Date()), endDate:null});
     }
-    recordFieldChange(r, 'employmentStatus', r.employmentStatus, document.getElementById('fEmpStatus').value);
-    recordFieldChange(r, 'unitId', r.unitId, document.getElementById('fUnitId').value);
-    recordFieldChange(r, 'rank', r.rank, newRank);
-    Object.assign(r, {
+    const previousValues = JSON.parse(JSON.stringify(r));
+    const nextValues = {
       photoDataUrl: pendingPhoto,
       agency: document.getElementById('fAgencyPm').value,
       employeeId: document.getElementById('fEmployeeId').value.trim(),
@@ -991,8 +989,24 @@ function openRecordEditModal(personId){
       address: { street: document.getElementById('fAddrStreet').value.trim(), city: document.getElementById('fAddrCity').value.trim(), state: document.getElementById('fAddrState').value.trim(), zip: document.getElementById('fAddrZip').value.trim() },
       driversLicense: { number: document.getElementById('fDlNumber').value.trim(), licenseClass: document.getElementById('fDlClass').value, state: r.driversLicense.state||'NV', expiration: document.getElementById('fDlExpiration').value },
       specialSkills: Array.from(document.querySelectorAll('.fSkill:checked')).map(el=>el.value),
+    };
+    const publicFields = ['agency','employeeId','unitId','assignment','rank','badgeNumber','employmentStatus','supervisorIds','hireDate','swornDate','terminationDate','specialSkills'];
+    const restrictedFields = ['sex','race','maritalStatus','bloodType','phones','address','driversLicense','photoDataUrl'];
+    const formatAuditValue = value=>value==null || value==='' ? '(empty)' : Array.isArray(value) ? value.join(', ') || '(empty)' : String(value).slice(0,120);
+    const updatedFields = [];
+    publicFields.forEach(field=>{
+      if(JSON.stringify(previousValues[field] ?? null)===JSON.stringify(nextValues[field] ?? null)) return;
+      recordFieldChange(r,field,previousValues[field],nextValues[field]);
+      updatedFields.push(field);
+      logActivity(`Updated ${field} for ${personName(personId)}: "${formatAuditValue(previousValues[field])}" to "${formatAuditValue(nextValues[field])}".`, "personnel_record", personId);
     });
-    logActivity(`Updated personnel record for ${personName(personId)}.`, "personnel_record", personId);
+    restrictedFields.forEach(field=>{
+      if(JSON.stringify(previousValues[field] ?? null)===JSON.stringify(nextValues[field] ?? null)) return;
+      updatedFields.push(field);
+      logActivity(`Updated restricted personnel field ${field} for ${personName(personId)} (values withheld).`, "personnel_record", personId);
+    });
+    Object.assign(r,nextValues);
+    if(!updatedFields.length) logActivity(`Personnel record for ${personName(personId)} saved with no field changes.`, "personnel_record", personId);
     persist();
     toast("Personnel record saved.");
     closeModal();
