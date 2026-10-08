@@ -530,8 +530,11 @@ function openSubpoenaFormModal(existingId){
     };
     const conflicts=window.SonoMarziCourtLeaveConflicts?.approvedLeaveForCourt(data.personId,data.courtDate)||[];
     if(conflicts.length){
-      toast('Scheduling conflict: approved time off ('+conflicts.map(x=>x.code).join(', ')+') exists for this court date. Contact a supervisor or subpoena coordinator before assignment.',true);
-      return;
+      if(!confirm('COURT / LEAVE CONFLICT: Approved time off ('+conflicts.map(x=>x.code).join(', ')+') overlaps this court date. The subpoena must still be recorded, but assignment requires coordinator resolution. Save as pending conflict?'))return;
+      data.assignmentConflictPending=true;
+      data.assignmentConflictRecordedAt=new Date().toISOString();
+    } else {
+      data.assignmentConflictPending=false;
     }
     if(editing){
       recordFieldChangeSubpoena(s, 'courtDate', s.courtDate, data.courtDate);
