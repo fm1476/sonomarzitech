@@ -2014,7 +2014,6 @@ function renderCalendarSub(body, lockedPersonId){
   }
 
   body.innerHTML = `
-    ${preview?`<div class="callout" style="margin-bottom:14px;border:1px solid var(--gold);"><strong>Draft preview: ${escapeHtml(preview.name)}</strong> — only you can see this unpublished pattern here. This preview does not publish it or change the live roster. <button class="btn btn-sm btn-outline" id="btnExitDraftPreview">Exit Preview</button></div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <button class="btn btn-sm btn-outline" data-cal-nav="prev">&larr;</button>
@@ -4193,6 +4192,7 @@ function renderDutyCalendar(body){
   }
 
   body.innerHTML = `
+    ${preview?`<div class="callout" style="margin-bottom:14px;border:1px solid var(--gold);"><strong>Draft preview: ${escapeHtml(preview.name)}</strong> — only you can see this unpublished pattern here. This preview does not publish it or change the live roster. <button class="btn btn-sm btn-outline" id="btnExitDraftPreview">Exit Preview</button></div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="prev">&larr;</button>
