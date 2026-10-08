@@ -103,3 +103,6 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 
 /* Field Training record links */
 .ft-trainee-link{appearance:none;border:0;background:transparent;padding:0;margin:0;color:var(--blue);font:inherit;font-weight:700;text-align:left;cursor:pointer;min-height:0;text-decoration:none}.ft-trainee-link:hover{text-decoration:underline}.ft-trainee-link:focus-visible{outline:3px solid var(--focus);outline-offset:3px;border-radius:3px}
+
+/* Readiness exception lists start closed and expand independently. */
+.readiness-panel>summary{cursor:pointer;list-style:none}.readiness-panel>summary::-webkit-details-marker{display:none}.readiness-panel>summary::after{content:"▸";margin-left:12px;color:var(--text-dim);transition:transform .15s}.readiness-panel[open]>summary::after{transform:rotate(90deg)}.readiness-panel>summary h2{flex:1}
