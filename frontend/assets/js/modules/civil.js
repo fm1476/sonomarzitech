@@ -3634,7 +3634,14 @@ const SuiteUX = (()=>{
     if(collapsed)document.querySelectorAll('#suiteNav .navgroup').forEach(g=>g.open=true);
     else document.querySelectorAll('#suiteNav .navgroup').forEach(g=>g.open=preferences.get('group.'+g.dataset.label,true));
   }
-  function navigation(){const nav=document.getElementById('suiteNav');const navlistEl=document.getElementById('navlist');if(navlistEl.parentElement===nav||navlistEl.parentElement?.closest('#suiteNav'))document.getElementById('sidebar').insertBefore(navlistEl,nav.nextSibling);nav.innerHTML='';const top=document.createElement('div');top.style.padding='0 10px';top.append(button('My Work','dashboard',home,'navitem'+(route==='home'?' active':'')));top.append(button('Workspaces','grid',workspaces,'navitem'+(route==='workspaces'?' active':'')));top.append(button('Readiness','checklist',readinessView,'navitem'+(route==='readiness'?' active':'')));if(WorkOperations.available())top.append(button('Workflows','briefcase',workflowView,'navitem'+(route==='workflows'?' active':'')));nav.append(top);
+  function navigation(){const nav=document.getElementById('suiteNav');const navlistEl=document.getElementById('navlist');if(navlistEl.parentElement===nav||navlistEl.parentElement?.closest('#suiteNav'))document.getElementById('sidebar').insertBefore(navlistEl,nav.nextSibling);nav.innerHTML='';const top=document.createElement('div');top.style.padding='0 10px';top.append(button('My Work','dashboard',home,'navitem'+(route==='home'?' active':'')));top.append(button('Workspaces','grid',workspaces,'navitem'+(route==='workspaces'?' active':'')));top.append(button('Readiness','checklist',readinessView,'navitem'+(route==='readiness'?' active':'')));if(WorkOperations.available())top.append(button('Workflows','briefcase',workflowView,'navitem'+(route==='workflows'?' active':'')));if(SuiteStore.mode()==='shared'){
+      const noticeNav=button('Staff Notices','bell',()=>shared('notices','Staff Notices','Scheduling and staff messages'),'navitem staff-notices-nav'+(route==='shared/notices'?' active':''));
+      noticeNav.id='staffNoticesNav';
+      const count=document.createElement('strong');count.id='staffNoticeCount';count.className='staff-notice-count';count.hidden=true;noticeNav.append(count);
+      top.prepend(noticeNav);
+    }
+    nav.append(top);
+    if(SuiteStore.mode()==='shared')StaffNotices.updateNavBadge();
     const searchWrap=document.createElement('div');searchWrap.className='nav-search-wrap';
     const searchInput=document.createElement('input');searchInput.type='search';searchInput.placeholder='Jump to anything';searchInput.className='nav-search';searchInput.value=NAV_FILTER_TEXT;searchInput.setAttribute('aria-label','Filter navigation');
     searchInput.addEventListener('input',()=>{NAV_FILTER_TEXT=searchInput.value;applyNavFilter();});
@@ -3657,7 +3664,6 @@ const SuiteUX = (()=>{
       moduleLinks.append(line);
     }
     nav.append(moduleLinks);
-    const sharedTools=document.createElement('div');sharedTools.style.padding='10px 10px 3px';sharedTools.innerHTML='<div style="height:1px;background:#2B3B54;margin:0 4px 10px"></div><div style="padding:0 8px 6px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)">Shared tools</div>';if(SuiteStore.mode()==='shared'){const noticeNav=button('Staff Notices','bell',()=>shared('notices','Staff Notices','Scheduling and staff messages'),'navitem staff-notices-nav'+(route==='shared/notices'?' active':''));noticeNav.id='staffNoticesNav';const count=document.createElement('strong');count.id='staffNoticeCount';count.className='staff-notice-count';count.hidden=true;noticeNav.append(count);sharedTools.append(noticeNav);}nav.append(sharedTools);if(SuiteStore.mode()==='shared')StaffNotices.updateNavBadge();
     const bottom=document.createElement('div');bottom.style.padding='5px 10px';if(Object.values(modules()).some(m=>m.NAV_ITEMS.some(n=>n.id.endsWith('-reports')&&allowedView(n.id))))bottom.append(button('Reports','chart',reports,'navitem'+(route==='reports'?' active':'')));if(adminDestinations().length)bottom.append(button('Administration','gear',administration,'navitem'+(route==='administration'?' active':'')));nav.append(bottom);
     document.getElementById('sidebar').querySelector('.nav-context')?.remove();
     // Module dashboards provide workspace navigation. Keep the legacy submenu host hidden.

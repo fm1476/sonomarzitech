@@ -26,6 +26,19 @@ assert(!tree.some(n=>n.label==='fleet-admin'),'Saved pins must not revive submen
 assert(links[2].children[0].className.includes('active'),'Scheduling stays selected inside roster');
 links[0].children[0].onclick();assert.equal(entered,'fleet');
 assert.equal(nodes.navlist.style.display,'none');
+// Shared-mode notices lead the sidebar and retain the unread badge and inbox route.
+let badgeUpdates=0,noticeRoute=null;
+context.SuiteStore.mode=()=> 'shared';context.StaffNotices={updateNavBadge:()=>{badgeUpdates++;}};context.shared=(...args)=>{noticeRoute=args;};
+context.navigation();
+const sharedTree=descendants(nodes.suiteNav),topLinks=nodes.suiteNav.children[0].children;
+assert.equal(topLinks[0].label,'Staff Notices');assert.equal(topLinks[1].label,'My Work');
+assert.equal(sharedTree.filter(n=>n.id==='staffNoticesNav').length,1);
+assert(sharedTree.some(n=>n.id==='staffNoticeCount'&&n.className==='staff-notice-count'));
+assert(!sharedTree.some(n=>n.innerHTML.includes('Shared tools')));
+assert.equal(badgeUpdates,1);topLinks[0].onclick();assert.equal(noticeRoute[0],'notices');
+context.route='shared/notices';context.navigation();assert(nodes.suiteNav.children[0].children[0].className.includes('active'));
+context.SuiteStore.mode=()=> 'local';context.navigation();assert(!descendants(nodes.suiteNav).some(n=>n.id==='staffNoticesNav'));
+console.log('Staff Notices first-position, unread badge, inbox navigation, active state, and removed Shared tools heading checks passed.');
 // Module entry always opens the permitted dashboard, even with an old remembered subview.
 const entryLine=source.split('\n').find(line=>line.startsWith('enterModule=function(key)'));
 let destination=null;
