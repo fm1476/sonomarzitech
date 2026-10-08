@@ -3891,8 +3891,15 @@ function decideLeaveRequest(id, decision){
   } else {
     const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(req.personId,req.startDate,req.endDate)||[];
     if(courtConflicts.length){
-      toast('Approval blocked: active subpoena(s) '+courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate).join(', ')+'. Resolve the court conflict before approving leave.',true);
-      return;
+      const summary=courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate+(s.courtTime?' at '+s.courtTime:'')).join('; ');
+      if(!confirm('COURT CONFLICT: '+personName(req.personId)+' has an active subpoena: '+summary+'.\\n\\nPress OK to continue to an override explanation, or Cancel to leave the request pending.'))return;
+      const overrideReason=(prompt('Required: explain why time off is being approved despite the court conflict:','')||'').trim();
+      if(!overrideReason){toast('Approval not completed. A conflict override explanation is required.',true);return;}
+      req.courtConflictOverride={
+        reason:overrideReason,approvedBy:CURRENT_USER_ID,approvedAt:new Date().toISOString(),
+        subpoenas:courtConflicts.map(s=>({id:s.id,caseNumber:s.caseNumber,courtDate:s.courtDate,courtTime:s.courtTime}))
+      };
+      logActivity('Approved time off with subpoena conflict override for '+personName(req.personId)+': '+summary+'. Reason: '+overrideReason, 'schedule');
     }
     // Approving isn't just a status flip -- it's the moment this becomes a real change to the
     // schedule. It's written as the same kind of schedule exception record the duty roster and
