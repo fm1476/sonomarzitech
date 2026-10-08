@@ -106,3 +106,5 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 
 /* Readiness exception lists start closed and expand independently. */
 .readiness-panel>summary{cursor:pointer;list-style:none}.readiness-panel>summary::-webkit-details-marker{display:none}.readiness-panel>summary::after{content:"▸";margin-left:12px;color:var(--text-dim);transition:transform .15s}.readiness-panel[open]>summary::after{transform:rotate(90deg)}.readiness-panel>summary h2{flex:1}
+
+.readiness-status{padding:4px 10px;border-radius:999px;font-weight:700}.readiness-panel[data-readiness-state="clear"] .readiness-status{color:#43d59b;background:rgba(67,213,155,.14)}.readiness-panel[data-readiness-state="deficient"] .readiness-status{color:#ff6b6b;background:rgba(255,107,107,.14)}
