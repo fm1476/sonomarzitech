@@ -169,6 +169,7 @@ function migrateData(){
   if(!STATE.eod.theftLossReports) STATE.eod.theftLossReports = [];
   if(!STATE.eod.dashboardPrefs) STATE.eod.dashboardPrefs = {};
   STATE.eod.technicians.forEach(t=>{ if(!t.fieldHistory) t.fieldHistory = []; });
+  STATE.eod.inventory.forEach(i=>{ if(!i.fieldHistory) i.fieldHistory = []; });
 }
 
 function logActivity(text, entityType, entityId){
@@ -277,9 +278,9 @@ function recalcNotifications(){
     }
   });
   STATE.eod.magazines.forEach(m=>{
-    const days = daysBetween(m.lastInspectionDate, fmt(today));
-    if(days > MAGAZINE_INSPECTION_DAYS){
-      upcoming.push({type:"inspection_due", entityId:m.id, message:`${m.name} has not been inspected in ${days} days \u2014 27 CFR 555.204 requires inspection at least every ${MAGAZINE_INSPECTION_DAYS} days while explosive material is stored.`, recipientRoleId: STATE.eod.notifySettings.inspectionDueRoleId});
+    const days = m.lastInspectionDate ? daysBetween(m.lastInspectionDate, fmt(today)) : null;
+    if(days === null || days > MAGAZINE_INSPECTION_DAYS){
+      upcoming.push({type:"inspection_due", entityId:m.id, message:`${m.name} ${days===null?'has no recorded inspection':'has not been inspected in '+days+' days'} \u2014 27 CFR 555.204 requires inspection at least every ${MAGAZINE_INSPECTION_DAYS} days while explosive material is stored.`, recipientRoleId: STATE.eod.notifySettings.inspectionDueRoleId});
     }
   });
   const prevReadBy = {};
@@ -380,8 +381,8 @@ function renderWidget(id){
   }
   if(id==='list_magazine_inspection_status'){
     const rows = STATE.eod.magazines.map(m=>{
-      const days = daysBetween(m.lastInspectionDate, fmt(new Date()));
-      return `<tr><td>${magazineLink(m.id)}</td><td style="font-size:11.5px;">${escapeHtml(m.type)}</td><td style="${days>MAGAZINE_INSPECTION_DAYS?'color:var(--red);font-weight:700;':''}">${m.lastInspectionDate} (${days}d ago)</td></tr>`;
+      const days = m.lastInspectionDate ? daysBetween(m.lastInspectionDate, fmt(new Date())) : null;
+      return `<tr><td>${magazineLink(m.id)}</td><td style="font-size:11.5px;">${escapeHtml(m.type)}</td><td style="${days>MAGAZINE_INSPECTION_DAYS?'color:var(--red);font-weight:700;':''}">${m.lastInspectionDate||'Never inspected'} (${days===null?'inspection required':days+'d ago'})</td></tr>`;
     }).join('');
     return `<div class="panel"><div class="panel-head"><h2>Magazine Inspection Status</h2></div><div class="panel-body" style="padding:0;"><table><thead><tr><th>Magazine</th><th>Type</th><th>Last Inspected</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
@@ -638,7 +639,7 @@ function openTechFormModal(personId){
       hazmatTechCert: document.getElementById('fTechHazmat').checked, cesCredential: document.getElementById('fTechCes').checked,
       cesNumber: document.getElementById('fTechCesNum').value.trim() || null,
     };
-    if(editing) recordFieldChangeEod(tRec, 'hdsRecertDueDate', tRec.hdsRecertDueDate, data.hdsRecertDueDate);
+    if(editing) Object.keys(data).forEach(field=>recordFieldChangeEod(tRec,field,tRec[field],data[field]));
     Object.assign(tRec, data);
     logActivity(`${editing?'Updated':'Added'} technician record for ${personName(targetId)}.`, "eod_technician", targetId);
     persist();
@@ -814,8 +815,16 @@ function openInventoryFormModal(existingId){
       acquisitionDate: document.getElementById('fInvAcqDate').value, status: document.getElementById('fInvStatus').value,
       expirationDate: document.getElementById('fInvExpire').value || null, notes: document.getElementById('fInvNotes').value.trim(),
     };
-    if(editing){ Object.assign(i, data); logActivity(`Updated inventory record: ${data.materialType}.`, "eod_inventory", i.id); }
-    else { const newI = {id:'exp'+Date.now(), ...data}; STATE.eod.inventory.push(newI); logActivity(`Logged new inventory acquisition: ${data.materialType}.`, "eod_inventory", newI.id); }
+    if(editing){
+      i.fieldHistory = i.fieldHistory || [];
+      Object.keys(data).forEach(field=>recordFieldChangeEod(i,field,i[field],data[field]));
+      Object.assign(i,data);
+      logActivity(`Updated inventory record: ${data.materialType}.`, "eod_inventory", i.id);
+    } else {
+      const newI={id:'exp'+Date.now(),fieldHistory:[],...data};
+      STATE.eod.inventory.push(newI);
+      logActivity(`Logged new inventory acquisition: ${data.materialType}.`,"eod_inventory",newI.id);
+    }
     persist();
     toast("Inventory record saved.");
     closeModal();
@@ -834,8 +843,8 @@ function renderMagazines(){
   const canManage = can('eod_magazine_manage');
   const canInspect = can('eod_inspection_log');
   const cards = STATE.eod.magazines.map(m=>{
-    const days = daysBetween(m.lastInspectionDate, fmt(new Date()));
-    const overdue = days > MAGAZINE_INSPECTION_DAYS;
+    const days = m.lastInspectionDate ? daysBetween(m.lastInspectionDate, fmt(new Date())) : null;
+    const overdue = days === null || days > MAGAZINE_INSPECTION_DAYS;
     return `
     <div class="drone-card">
       <div style="position:absolute;top:14px;right:14px;width:9px;height:9px;border-radius:50%;background:${overdue?'var(--red)':'var(--green)'};"></div>
@@ -843,7 +852,7 @@ function renderMagazines(){
       <div style="font-size:11.5px;color:var(--text-dim);margin:2px 0 10px;">${escapeHtml(m.type)}</div>
       <div style="font-size:12.5px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:var(--text-dim);">Location</span><span style="font-weight:600;">${escapeHtml(m.location)}</span></div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:var(--text-dim);">Last Inspected</span><span style="font-weight:600;${overdue?'color:var(--red);':''}">${m.lastInspectionDate} (${days}d ago)</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:var(--text-dim);">Last Inspected</span><span style="font-weight:600;${overdue?'color:var(--red);':''}">${m.lastInspectionDate||'Never inspected'} (${days===null?'inspection required':days+'d ago'})</span></div>
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-dim);">Contents</span><span style="font-weight:600;">${STATE.eod.inventory.filter(i=>i.magazineId===m.id && i.status==='On Hand').length} item(s)</span></div>
       </div>
       <div class="cell-actions" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);justify-content:flex-start;">
@@ -870,7 +879,7 @@ function renderMagazines(){
 
 function openMagazineFormModal(existingId){
   const editing = !!existingId;
-  const m = editing ? magazineFor(existingId) : { name:"", type: STATE.eod.refData.magazineTypes[0], location:"", lastInspectionDate: fmt(new Date()), securityFeatures:"", notes:"" };
+  const m = editing ? magazineFor(existingId) : { name:"", type: STATE.eod.refData.magazineTypes[0], location:"", lastInspectionDate: null, securityFeatures:"", notes:"" };
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>${editing?'Edit':'Add'} Magazine</h3><button class="modal-close" id="mClose">&times;</button></div>
@@ -892,7 +901,7 @@ function openMagazineFormModal(existingId){
     const data = { name, type: document.getElementById('fMagType').value, location: document.getElementById('fMagLocation').value.trim(),
       securityFeatures: document.getElementById('fMagSecurity').value.trim(), notes: document.getElementById('fMagNotes').value.trim() };
     if(editing){ Object.assign(m, data); logActivity(`Updated magazine record: ${name}.`, "eod_magazine", m.id); }
-    else { const newM = {id:'mag'+Date.now(), lastInspectionDate: fmt(new Date()), ...data}; STATE.eod.magazines.push(newM); logActivity(`Added new magazine: ${name}.`, "eod_magazine", newM.id); }
+    else { const newM = {id:'mag'+Date.now(), lastInspectionDate: null, ...data}; STATE.eod.magazines.push(newM); logActivity(`Added new magazine: ${name}.`, "eod_magazine", newM.id); }
     persist();
     toast("Magazine saved.");
     closeModal();
@@ -922,7 +931,7 @@ function openInspectionFormModal(magazineId){
     const newInsp = { id:'insp'+Date.now(), magazineId, inspectorId: document.getElementById('fEodInspector').value, date: document.getElementById('fInspDate').value,
       unauthorizedEntry: unauthorized, notes: document.getElementById('fInspNotes').value.trim() };
     STATE.eod.magazineInspections.push(newInsp);
-    m.lastInspectionDate = newInsp.date;
+    if(!m.lastInspectionDate || newInsp.date > m.lastInspectionDate) m.lastInspectionDate = newInsp.date;
     logActivity(`Logged magazine inspection for ${m.name}.${unauthorized?' UNAUTHORIZED ENTRY FLAGGED.':''}`, "eod_inspection", newInsp.id);
     persist();
     toast(unauthorized ? "Inspection logged \u2014 unauthorized entry flagged. Notify your commander immediately." : "Inspection logged.", unauthorized);
@@ -1480,7 +1489,7 @@ function openMagazineDetail(magazineId){
       <div class="detail-grid" style="margin-bottom:14px;">
         <div><div class="k">Type</div><div class="v">${escapeHtml(m.type)}</div></div>
         <div><div class="k">Location</div><div class="v">${escapeHtml(m.location)}</div></div>
-        <div><div class="k">Last Inspected</div><div class="v">${m.lastInspectionDate}</div></div>
+        <div><div class="k">Last Inspected</div><div class="v">${m.lastInspectionDate||'Never inspected'}</div></div>
         <div><div class="k">Security Features</div><div class="v">${(m.securityFeatures ? escapeHtml(m.securityFeatures) : '—')}</div></div>
       </div>
       <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Inspection History</h2></div>
@@ -1492,7 +1501,7 @@ function openMagazineDetail(magazineId){
       </div>
       <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Current Contents</h2></div>
         <div class="panel-body" style="padding:0;"><table><thead><tr><th>Material</th><th>Quantity</th><th>Status</th></tr></thead><tbody>
-        ${STATE.eod.inventory.filter(i=>i.magazineId===m.id).map(i=>`<tr><td>${escapeHtml(i.materialType)}</td><td>${i.quantity} ${escapeHtml(i.unit)}</td><td><span class="badge ${statusBadgeClassEod(i.status)}">${i.status}</span></td></tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:12px;">No inventory currently logged in this magazine.</td></tr>`}
+        ${STATE.eod.inventory.filter(i=>i.magazineId===m.id && i.status==='On Hand').map(i=>`<tr><td>${escapeHtml(i.materialType)}</td><td>${i.quantity} ${escapeHtml(i.unit)}</td><td><span class="badge ${statusBadgeClassEod(i.status)}">${i.status}</span></td></tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:12px;">No inventory currently logged in this magazine.</td></tr>`}
         </tbody></table></div>
       </div>
     </div>
