@@ -116,18 +116,7 @@ function navItemVisible(item){
   if(Array.isArray(item.requiredAbility)) return item.requiredAbility.some(a=>can(a));
   return can(item.requiredAbility);
 }
-function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
-}
+function renderNav(){ document.getElementById('navlist').innerHTML=''; }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
@@ -140,6 +129,15 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=='subpoena-dashboard'){
+    const root=document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back=document.createElement('button');
+      back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
+      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px';
+      back.onclick=()=>switchView('subpoena-dashboard'); root.prepend(back);
+    }
+  }
 }
 function renderView(id){
   if(id==="subpoena-dashboard") renderDashboard();
@@ -355,6 +353,20 @@ function renderDashboard(){
       ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
     </div>
   `;
+  const destinations=NAV_ITEMS.filter(item=>item.id!=='subpoena-dashboard' && navItemVisible(item));
+  const hub=document.createElement('div');
+  hub.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;margin-bottom:20px';
+  hub.innerHTML=destinations.map((item,i)=>`<button data-nav-dest="${item.id}" style="min-height:132px;padding:18px;text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:inherit;font:inherit;cursor:pointer"><div style="color:${['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#20C7D9'][i%5]};width:28px;height:28px;margin-bottom:12px">${ICONS[item.icon]||ICONS.filetext}</div><strong style="display:block;color:var(--heading);font-size:16px;margin-bottom:8px">${escapeHtml(item.label)}</strong><span style="font-size:12px;color:var(--text-dim)">${escapeHtml(item.sub)}</span></button>`).join('');
+  root.prepend(hub);
+  const extras=root.querySelector('#dashExtrasZone');
+  if(extras){
+    const details=document.createElement('details');
+    details.style.cssText='border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:14px';
+    const summary=document.createElement('summary');
+    summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800';
+    summary.textContent='Court Dates & Subpoena Status';
+    extras.parentNode.insertBefore(details,extras);details.append(summary,extras);
+  }
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
   destroyChartsSubpoena();
   if(prefs.extras.some(e=>e.id==='chart_by_status')){
