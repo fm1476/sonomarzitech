@@ -436,7 +436,7 @@ function renderSubpoenaList(showAll){
           <div style="font-size:16px;font-weight:800;">${subpoenaLink(s.id)}</div>
           <div style="font-size:12px;color:var(--text-dim);margin:2px 0 8px;">${escapeHtml(personName(s.personId))}</div>
         </div>
-        <span class="badge ${subpoenaStatusBadgeClass(s.status)}">${s.status}</span>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="badge ${subpoenaStatusBadgeClass(s.status)}">${escapeHtml(s.status)}</span>${s.assignmentConflictPending?'<span class="badge badge-maintenance" title="Court appearance conflicts with approved leave. Coordinator resolution required.">Scheduling conflict pending</span>':''}</div>
       </div>
       <div style="font-size:12.5px;margin-bottom:10px;">${escapeHtml(s.subject)}</div>
       <div style="font-size:12.5px;">
