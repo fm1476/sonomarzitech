@@ -532,6 +532,8 @@ function renderDashboard(){
       options: {indexAxis:'y', maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:10}},grid:{color:chartGridColor()}}, y:{ticks:{color:chartTextColor(),font:{family:'Archivo',size:9}},grid:{display:false}}}}
     });
   }
+  const statusZone=root.querySelector('#dashExtrasZone');
+  if(statusZone){const details=document.createElement('details');details.style.cssText='border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:14px;';const summary=document.createElement('summary');summary.textContent='Drone Status ▾';summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800;';statusZone.parentNode.insertBefore(details,statusZone);details.append(summary,statusZone);}
   wireDroneLinks();
   wireDashDragDrop(root.querySelector('#dashTopZone'), prefs.topOrder, false);
   wireDashDragDrop(root.querySelector('#dashExtrasZone'), prefs.extras, true);
