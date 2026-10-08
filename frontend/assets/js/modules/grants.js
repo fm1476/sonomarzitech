@@ -357,6 +357,7 @@ function renderDashboard(){
       ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size,canCustomize)).join('')}
     </div>
   `;
+  SuiteUX.renderModuleHub(root,'grants','grants-dashboard');
   destroyChartsGrants();
   renderWidgetCharts(prefs.extras.map(e=>e.id));
   wireSeizureLinks(); wireGrantLinks();

@@ -392,6 +392,7 @@ function stageColor(stage){
    NAV
    ========================================================================= */
 const NAV_ITEMS = [
+  {id:"civil-dashboard",label:"Dashboard",icon:"scale",title:"Civil Process",sub:"Service assignments, court deadlines, lookup, and administration",requiredAbility:null},
   {id:"civil-board", label:"Service Board", icon:"scale", title:"Civil Process Service Board", sub:"Drag papers through intake, assignment, attempts, and return to court", requiredAbility:"civil_paper_view_all"},
   {id:"civil-mine", label:"My Assignments", icon:"clipboardcheck", title:"My Assignments", sub:"Papers assigned to you, with attempt logging and Return of Service generation", requiredAbility:"civil_paper_view_own"},
   {id:"civil-calendar", label:"Master Calendar", icon:"dashboard", title:"Civil Process Master Calendar", sub:"Every return-by deadline across the unit, by case", requiredAbility:"civil_paper_view_all"},
@@ -435,7 +436,10 @@ function switchView(id){
   renderView(id);
 }
 function renderView(id){
-  if(id==="civil-board") renderBoard();
+  if(id==='civil-dashboard'){
+    const root=document.getElementById('view-civil-dashboard');root.innerHTML='';SuiteUX.renderModuleHub(root,'civil','civil-dashboard');
+  }
+  else if(id==="civil-board") renderBoard();
   else if(id==="civil-mine") renderMyAssignments();
   else if(id==="civil-calendar") renderMasterCalendarCivil();
   else if(id==="civil-lookup") renderPartyLookup();
@@ -3638,58 +3642,25 @@ const SuiteUX = (()=>{
     searchWrap.append(searchInput);
     const collapseBtn=document.createElement('button');collapseBtn.className='nav-collapse-btn';collapseBtn.type='button';const isCollapsed=document.getElementById('sidebar').classList.contains('sidebar-collapsed');collapseBtn.title=isCollapsed?'Expand sidebar':'Collapse sidebar';collapseBtn.setAttribute('aria-label',collapseBtn.title);collapseBtn.textContent=isCollapsed?'\u00bb':'\u00ab';
     collapseBtn.onclick=()=>{setSidebarCollapsed(!document.getElementById('sidebar').classList.contains('sidebar-collapsed'));navigation();};
-    // Distinct from collapseBtn above: that one shrinks the whole sidebar to icon-only, this one
-    // folds every module's accordion group shut without changing the sidebar's width. A role with
-    // broad access accumulates open groups over time -- every module ever visited stays expanded
-    // by design (see the toggle handler below), which is exactly right for one or two modules but
-    // becomes clutter once someone's touched all of them. This button resets that accumulation in
-    // one click rather than making someone close a dozen groups by hand. The currently active
-    // module still reopens itself on the very next render regardless (see group.open below), since
-    // losing sight of where you currently are would be a worse problem than the clutter this fixes.
-    const collapseAllBtn=document.createElement('button');collapseAllBtn.className='nav-collapse-btn nav-collapse-all-btn';collapseAllBtn.type='button';collapseAllBtn.title='Collapse all module groups';collapseAllBtn.setAttribute('aria-label','Collapse all module groups');collapseAllBtn.textContent='\u2261\u2212';
-    collapseAllBtn.onclick=()=>{ for(const key of accessibleModules()) preferences.set('group.mod:'+key, false); navigation(); };
-    const topRow=document.createElement('div');topRow.className='nav-top-row';topRow.append(searchWrap);topRow.append(collapseAllBtn);topRow.append(collapseBtn);
+    const topRow=document.createElement('div');topRow.className='nav-top-row';topRow.append(searchWrap,collapseBtn);
     nav.append(topRow);
     const navDivider=document.createElement('div');navDivider.style.cssText='height:1px;background:#2B3B54;margin:2px 14px 12px;flex-shrink:0;';nav.append(navDivider);
-    const pins=preferences.get('pins',[]);if(pins.length){const d=document.createElement('div');d.className='navgroup';d.dataset.label='__pins';for(const id of pins){const m=metaFor(id);if(m&&allowedView(id)){const line=document.createElement('div');line.className='navline';line.dataset.searchText=m.title.toLowerCase();line.append(button(m.title,m.icon,()=>go(id),'navitem'));d.append(line);}}nav.append(d);}
-    // Modules are listed alphabetically by display name, one per accordion group. Each group's
-    // own sub-pages (from that module's NAV_ITEMS, filtered to what this role can see) render
-    // directly inside it, so opening a module always reveals its submenu right there -- no
-    // dependence on which specific sub-page happens to be active.
-    const mainModules=accessibleModules().map(key=>({type:'module',key,name:MODULE_META[key].name}));if(FieldTraining.available())mainModules.push({type:'fieldtraining',key:'fieldtraining',name:'Field Training'});mainModules.sort((a,b)=>a.name.localeCompare(b.name));
+    const moduleLinks=document.createElement('div');moduleLinks.className='navgroup module-navlist';moduleLinks.dataset.label='modules';
+    const mainModules=accessibleModules().map(key=>({type:'module',key,name:MODULE_META[key].name}));
+    if(FieldTraining.available())mainModules.push({type:'fieldtraining',key:'fieldtraining',name:'Field Training'});
+    mainModules.sort((a,b)=>a.name.localeCompare(b.name));
     for(const entry of mainModules){
-      if(entry.type==='fieldtraining'){
-        // Field Training has a single primary destination, so the module heading itself
-        // opens Trainee files & reports. Avoid a redundant one-item submenu.
-        const line=document.createElement('div');line.className='navline fieldtraining-direct';line.dataset.searchText='field training trainee files reports';
-        line.append(button('Field Training','award',fieldTrainingView,'navitem'+(route==='fieldtraining'?' active':'')));
-        nav.append(line);continue;
-      }
-      const key=entry.key,items=modules()[key].NAV_ITEMS.filter(n=>allowedView(n.id));
-      if(!items.length)continue;
-      const group=document.createElement('details');group.className='navgroup module-navgroup';group.dataset.label='mod:'+key;
-      group.open=ACTIVE_MODULE===key||preferences.get('group.mod:'+key,false);
-      const s=document.createElement('summary');s.innerHTML='<span class="nav-mod-icon">'+(ICONS[MODULE_META[key].icon]||'')+'</span><span>'+esc(MODULE_META[key].name)+'</span>';
-      group.append(s);
-      group.addEventListener('toggle',()=>preferences.set('group.mod:'+key,group.open));
-      for(const item of items){
-        const isActive=route==='view/'+item.id;
-        const line=document.createElement('div');line.className='navline';line.dataset.searchText=item.label.toLowerCase();
-        line.append(button(item.label,item.icon,()=>go(item.id),'navitem'+(isActive?' active':'')));
-        const pin=document.createElement('button');pin.className='nav-favorite';pin.textContent=pins.includes(item.id)?'★':'☆';pin.title=(pins.includes(item.id)?'Unpin ':'Pin ')+item.label;pin.setAttribute('aria-label',pin.title);
-        pin.onclick=()=>{preferences.set('pins',pins.includes(item.id)?pins.filter(p=>p!==item.id):[...pins,item.id]);navigation();};
-        line.append(pin);
-        group.append(line);
-      }
-      nav.append(group);
+      const line=document.createElement('div');line.className='navline module-direct';line.dataset.searchText=entry.name.toLowerCase();
+      const action=entry.type==='fieldtraining'?fieldTrainingView:()=>enterModule(entry.key);
+      const active=entry.type==='fieldtraining'?route==='fieldtraining':ACTIVE_MODULE===entry.key;
+      line.append(button(entry.name,entry.type==='fieldtraining'?'award':MODULE_META[entry.key].icon,action,'navitem'+(active?' active':'')));
+      moduleLinks.append(line);
     }
+    nav.append(moduleLinks);
     const sharedTools=document.createElement('div');sharedTools.style.padding='10px 10px 3px';sharedTools.innerHTML='<div style="height:1px;background:#2B3B54;margin:0 4px 10px"></div><div style="padding:0 8px 6px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)">Shared tools</div>';if(SuiteStore.mode()==='shared'){const noticeNav=button('Staff Notices','bell',()=>shared('notices','Staff Notices','Scheduling and staff messages'),'navitem staff-notices-nav'+(route==='shared/notices'?' active':''));noticeNav.id='staffNoticesNav';const count=document.createElement('strong');count.id='staffNoticeCount';count.className='staff-notice-count';count.hidden=true;noticeNav.append(count);sharedTools.append(noticeNav);}nav.append(sharedTools);if(SuiteStore.mode()==='shared')StaffNotices.updateNavBadge();
     const bottom=document.createElement('div');bottom.style.padding='5px 10px';if(Object.values(modules()).some(m=>m.NAV_ITEMS.some(n=>n.id.endsWith('-reports')&&allowedView(n.id))))bottom.append(button('Reports','chart',reports,'navitem'+(route==='reports'?' active':'')));if(adminDestinations().length)bottom.append(button('Administration','gear',administration,'navitem'+(route==='administration'?' active':'')));nav.append(bottom);
     document.getElementById('sidebar').querySelector('.nav-context')?.remove();
-    // Each module's submenu now renders inline inside its own accordion group above, so the old
-    // shared #navlist (previously repositioned under whichever category line was active) is no
-    // longer part of the visible tree. It's left empty/hidden rather than removed outright, since
-    // individual modules still populate it internally on their own view switches.
+    // Module dashboards provide workspace navigation. Keep the legacy submenu host hidden.
     const navlist=document.getElementById('navlist');
     navlist.classList.remove('navlist-nested');navlist.innerHTML='';navlist.style.display='none';
     // Collapse-to-icons is a desktop affordance for a persistent rail. Below the drawer
@@ -3766,7 +3737,27 @@ const SuiteUX = (()=>{
     node.before(field);field.append(label,node,help);
     if(wasFocused){ source.focus(); if(selStart!==null) source.setSelectionRange(selStart, selEnd); }
   });filters.querySelectorAll('.suite-filter-field').forEach(field=>{const label=field.querySelector('.suite-filter-label'),help=field.querySelector('.suite-filter-help'),source=field.querySelector('select,input:not(.searchable-select-input)'),visible=field.querySelector('.searchable-select-input')||source;if(!label||!visible)return;visible.setAttribute('aria-labelledby',label.id);visible.setAttribute('aria-describedby',help.id);if(source&&source!==visible){source.setAttribute('aria-labelledby',label.id);source.setAttribute('aria-describedby',help.id);}});});}
-  function enhance(){if(!CURRENT_USER_ID)return;associateLabels(document.getElementById('modalBox'));document.querySelectorAll('.view.active .form-row').forEach(row=>associateLabels(row));labelFilters(document.querySelector('.view.active')||document);formatVisibleDates(document.querySelector('.view.active'));formatVisibleDates(document.getElementById('modalBox'));formatVisibleDates(document.getElementById('notifPanel'));document.querySelectorAll('.navitem.active').forEach(n=>n.setAttribute('aria-current','page'));
+  function renderModuleHub(root,key,currentId){
+    if(!root)return;
+    root.querySelector('[data-module-workspace-hub]')?.remove();
+    const hub=document.createElement('div');hub.dataset.moduleWorkspaceHub=key;
+    hub.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;margin-bottom:20px';
+    for(const item of modules()[key].NAV_ITEMS.filter(n=>n.id!==currentId&&allowedView(n.id))){
+      const card=button(item.label,item.icon,()=>go(item.id),'module-card');
+      card.style.cssText='min-height:130px;text-align:left;padding:20px;color:inherit;font:inherit';
+      card.innerHTML=`<div style="width:30px;height:30px;color:var(--blue);margin-bottom:12px">${ICONS[item.icon]||ICONS.grid}</div><strong style="display:block;margin-bottom:8px">${esc(item.label)}</strong><span style="font-size:12px;color:var(--text-dim)">${esc(item.sub)}</span>`;
+      hub.append(card);
+    }
+    root.prepend(hub);
+  }
+  function ensureDashboardReturn(){
+    const root=document.querySelector('.view.active');
+    if(!root||!ACTIVE_MODULE||!route.startsWith('view/'))return;
+    const id=route.slice(5),dashboard=modules()[ACTIVE_MODULE]?.NAV_ITEMS.find(n=>n.id.endsWith('-dashboard')&&allowedView(n.id));
+    if(!dashboard||id===dashboard.id||root.querySelector('[data-module-dashboard-back]'))return;
+    const back=button('Back to Dashboard','',()=>go(dashboard.id),'btn btn-outline');back.dataset.moduleDashboardBack='1';back.style.marginBottom='16px';root.prepend(back);
+  }
+  function enhance(){if(!CURRENT_USER_ID)return;ensureDashboardReturn();associateLabels(document.getElementById('modalBox'));document.querySelectorAll('.view.active .form-row').forEach(row=>associateLabels(row));labelFilters(document.querySelector('.view.active')||document);formatVisibleDates(document.querySelector('.view.active'));formatVisibleDates(document.getElementById('modalBox'));formatVisibleDates(document.getElementById('notifPanel'));document.querySelectorAll('.navitem.active').forEach(n=>n.setAttribute('aria-current','page'));
     document.querySelectorAll('th.sortable').forEach(th=>{if(th.dataset.keyboardWired)return;th.dataset.keyboardWired='1';th.tabIndex=0;th.setAttribute('aria-sort',th.classList.contains('sort-active')?(th.textContent.includes('▼')?'descending':'ascending'):'none');th.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();th.click();}});});
     document.querySelectorAll('.civil-card,.photo-drop-zone,.role-list-item').forEach(el=>{if(el.dataset.keyboardWired)return;el.dataset.keyboardWired='1';el.tabIndex=0;el.setAttribute('role','button');el.addEventListener('keydown',e=>{if(e.target===el&&['Enter',' '].includes(e.key)){e.preventDefault();el.click();}});});
     document.querySelectorAll('.view.active table').forEach(table=>{if(table.dataset.enhanced)return;table.dataset.enhanced='1';const heads=[...table.querySelectorAll('thead th')];if(!heads.length)return;table.querySelectorAll('tbody tr').forEach(tr=>[...tr.children].forEach((td,i)=>td.dataset.columnLabel=heads[i]?.textContent.trim()||(i===heads.length-1?'Actions':'')));table.classList.add('field-card-table');if(heads.length<4)return;const parent=table.parentElement;if(!parent)return;const row=document.createElement('div');row.className='table-preferences';const ctrl=document.createElement('details');ctrl.className='column-control';const summary=document.createElement('summary');summary.textContent='Columns';summary.style.cursor='pointer';ctrl.append(summary);const menu=document.createElement('div');menu.className='column-menu';const key='columns.'+route+'.'+heads.map(h=>h.textContent.trim()).join('|');const hidden=preferences.get(key,[]);heads.forEach((h,i)=>{if(i===0||i===heads.length-1)return;const apply=hide=>{table.querySelectorAll('tr').forEach(tr=>{if(tr.children[i])tr.children[i].hidden=hide;});};apply(hidden.includes(i));const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=!hidden.includes(i);check.onchange=()=>{apply(!check.checked);preferences.set(key,heads.map((_,j)=>j).filter(j=>table.querySelector('thead tr')?.children[j]?.hidden));};label.append(check,document.createTextNode(h.textContent.trim()||'Column '+(i+1)));menu.append(label);});ctrl.append(menu);row.append(ctrl);parent.insertBefore(row,table);});
@@ -3848,7 +3839,7 @@ const SuiteUX = (()=>{
     window.addEventListener('beforeunload',e=>{if(modalDirty||SuiteStore.pending()){e.preventDefault();e.returnValue='';}});window.addEventListener('popstate',()=>{if(!CURRENT_USER_ID)return;if(!guard()){history.pushState({},'','#/'+route);return;}modalDirty=false;restoring=true;navigate(location.hash.replace(/^#\//,''));restoring=false;});document.addEventListener('click',e=>{if(!profile.contains(e.target)&&!profileToggleBtn.contains(e.target))profile.hidden=true;const notifPanel=document.getElementById('notifPanel');const path=e.composedPath?e.composedPath():[];if(notifPanel&&notifPanel.style.display!=='none'&&!path.includes(notifPanel)&&!e.target.closest('#btnNotifBell'))notifPanel.style.display='none';});
     uiObserver=new MutationObserver(()=>{if(observerQueued)return;observerQueued=true;queueMicrotask(()=>{observerQueued=false;uiObserver.disconnect();SuiteUX.enhance();uiObserver.observe(document.getElementById('content'),{childList:true,subtree:true});});});uiObserver.observe(document.getElementById('content'),{childList:true,subtree:true});
   }
-  return {init,openModal,closeModal,openRecord,beforeView,home,readinessView,workflowView,fieldTrainingView,navigation,go,visit,navigate,search,roleUI,isAdmin,previewing,recordAllowed,recordData,recordTypes,metaFor,allowedView,preferences,modules,tasks,dataSettings,guard,displayDate,displayInstant,displayOperationalTime,displayTimeOnly,normalizeDisplayText,userTimeZone,clearDirty:()=>{modalDirty=false;},hasDirty:()=>modalDirty,lastViews,enhance};
+  return {init,renderModuleHub,openModal,closeModal,openRecord,beforeView,home,readinessView,workflowView,fieldTrainingView,navigation,go,visit,navigate,search,roleUI,isAdmin,previewing,recordAllowed,recordData,recordTypes,metaFor,allowedView,preferences,modules,tasks,dataSettings,guard,displayDate,displayInstant,displayOperationalTime,displayTimeOnly,normalizeDisplayText,userTimeZone,clearDirty:()=>{modalDirty=false;},hasDirty:()=>modalDirty,lastViews,enhance};
 })();
 
 /* Record storage: local IndexedDB transactions plus optional authenticated server RPC.
@@ -4658,7 +4649,7 @@ const SuiteStore=(()=>{
 /* Install unified shell without duplicating domain workflows. */
 renderSuiteNav=()=>SuiteUX.navigation();
 showLauncher=()=>SuiteUX.home();
-enterModule=function(key){if(!MODULE_META[key]||!moduleAccess(key))return;const module=SuiteUX.modules()[key];const remembered=SuiteUX.lastViews[key];const dest=remembered&&SuiteUX.allowedView(remembered)?remembered:module.NAV_ITEMS.find(n=>SuiteUX.allowedView(n.id))?.id;if(dest)SuiteUX.go(dest);};
+enterModule=function(key){if(!MODULE_META[key]||!moduleAccess(key))return;const module=SuiteUX.modules()[key];const dest=module.NAV_ITEMS.find(n=>n.id.endsWith('-dashboard')&&SuiteUX.allowedView(n.id))?.id||module.NAV_ITEMS.find(n=>SuiteUX.allowedView(n.id))?.id;if(dest)SuiteUX.go(dest);};
 loadState=()=>SuiteStore.load();
 persist=()=>SuiteStore.persist();
 setSyncStatus=function(){}; // Status is owned by confirmed storage outcomes in SuiteStore.
