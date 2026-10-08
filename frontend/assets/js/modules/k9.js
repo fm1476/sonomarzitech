@@ -249,6 +249,11 @@ function recordFieldChangeK9(k9, field, oldVal, newVal){
     changedBy: (STATE.personnel.find(p=>p.id===CURRENT_USER_ID)||{}).name || 'System',
   });
 }
+function recordK9Event(k9, label, summary){
+  if(!k9) return;
+  k9.fieldHistory = k9.fieldHistory || [];
+  k9.fieldHistory.push({date:fmt(new Date()),field:label,before:null,after:summary,changedBy:(STATE.personnel.find(p=>p.id===CURRENT_USER_ID)||{}).name||'System'});
+}
 function monthlyTrainingHours(k9Id, monthsBack){
   monthsBack = monthsBack||1;
   const cutoff = addDays(new Date(), -30*monthsBack);
@@ -783,10 +788,24 @@ function openK9FormModal(existingId){
       retirementDisposition: status==='Retired' ? document.getElementById('fK9RetireDisposition').value : 'N/A',
     };
     if(editing){
-      recordFieldChangeK9(k, 'status', k.status, status);
-      recordFieldChangeK9(k, 'handlerId', k.handlerId, data.handlerId);
+      const changed = [];
+      const visibleFields = ['name','breed','sex','dob','dateAcquired','handlerId','backupHandlerId','status','tagId','skills','vendor','retirementDate','retirementDisposition'];
+      const restrictedFields = ['microchipNumber','gpsCollarId','notes'];
+      visibleFields.forEach(field=>{
+        if(JSON.stringify(k[field] ?? null)===JSON.stringify(data[field] ?? null)) return;
+        recordFieldChangeK9(k,field,k[field],data[field]);
+        changed.push(field);
+        logActivity(`Updated K9 ${name}: ${field} changed.`,"k9",k.id);
+      });
+      restrictedFields.forEach(field=>{
+        if(JSON.stringify(k[field] ?? null)===JSON.stringify(data[field] ?? null)) return;
+        changed.push(field);
+        recordK9Event(k,field+' updated','Restricted value changed');
+        logActivity(`Updated restricted K9 field ${field} for ${name} (values withheld).`,"k9",k.id);
+      });
+      if(k.photoDataUrl!==pendingPhoto){changed.push('photo');recordK9Event(k,'photo updated','Photo changed');logActivity(`Updated K9 photo for ${name}.`,"k9",k.id);}
       Object.assign(k, data, {photoDataUrl: pendingPhoto});
-      logActivity(`Updated K9 record for ${name}.`, "k9", k.id);
+      if(!changed.length) logActivity(`Saved K9 record for ${name} with no field changes.`,"k9",k.id);
       toast("K9 record saved.");
     } else {
       const newK = {id:'k9_'+Date.now(), photoDataUrl: pendingPhoto, agency:"Reno PD - Patrol Division", unit:"K9 Unit",
@@ -1019,7 +1038,7 @@ function renderK9DetailTabContent(k){
       <tr><td class="mono" style="font-size:12px;">${h.date}</td><td>${escapeHtml(h.field)}</td>
       <td style="font-size:12px;">${escapeHtml(JSON.stringify(h.before))}</td><td style="font-size:12px;">${escapeHtml(JSON.stringify(h.after))}</td><td>${escapeHtml(h.changedBy)}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No tracked field changes yet.</td></tr>`;
     body.innerHTML = `
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Every status and handler change is captured here. Every other action on this record is also in the Platform Audit Log under Admin.</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">K9 profile changes, training sessions, certifications and deployments are tracked here. The Platform Audit Log also records actions without exposing restricted values.</div>
       <table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 }
@@ -1182,7 +1201,8 @@ function openK9TrainingFormModal(k){
       passed: document.getElementById('fTrPassed').value==='true', narrative: document.getElementById('fTrNarrative').value.trim(),
     };
     STATE.k9.trainingSessions.push(newT);
-    logActivity(`Logged ${hours}hr ${newT.type} training session for ${actualK9.name}.`, "k9_training", newT.id);
+    recordK9Event(actualK9,'Training recorded',`${newT.date}: ${hours} hr ${newT.type} (${newT.passed?'Passed':'Not passed'})`);
+    logActivity(`Logged ${hours}hr ${newT.type} training session for ${actualK9.name} (training ID ${newT.id}).`, "k9_training", actualK9.id);
     persist();
     toast("Training session logged.");
     if(fromDetail){ renderK9DetailModal(); }
@@ -1226,7 +1246,8 @@ function openK9CertFormModal(k){
       notes: document.getElementById('fCertNotes').value.trim(),
     };
     STATE.k9.certifications.push(newC);
-    logActivity(`Recorded ${newC.certType} certification (${result}) for ${actualK9.name}.`, "k9_certification", newC.id);
+    recordK9Event(actualK9,'Certification recorded',`${newC.certType}: ${result} on ${certDate}, expires ${newC.expirationDate||'N/A'}`);
+    logActivity(`Recorded ${newC.certType} certification (${result}) for ${actualK9.name} (certification ID ${newC.id}).`, "k9_certification", actualK9.id);
     persist();
     toast("Certification recorded.");
     if(fromDetail){ renderK9DetailModal(); }
@@ -1280,7 +1301,8 @@ function openK9DeploymentFormModal(k){
       biteOccurred, subjectInjured: document.getElementById('fDepInjury').checked, duration: Number(document.getElementById('fDepDuration').value)||0,
     };
     STATE.k9.deployments.push(newD);
-    logActivity(`Logged ${newD.type} deployment for ${actualK9.name} at ${location}.`, "k9_deployment", newD.id);
+    recordK9Event(actualK9,'Deployment recorded',`${newD.date}: ${newD.type}; outcome ${newD.outcome}`);
+    logActivity(`Logged ${newD.type} deployment for ${actualK9.name} (deployment ID ${newD.id}).`, "k9_deployment", actualK9.id);
     persist();
     toast("Deployment logged.");
     if(biteOccurred){
