@@ -706,6 +706,7 @@ function renderDashboard(){
     <div class="pm-panel"><div class="pm-panel-head"><span>Recent Personnel Activity</span><span></span></div><div class="pm-panel-body">${recent.length?recent.map(a=>`<div class="pm-attention-row"><span>${ICONS.history}</span><span>${escapeHtml(a.message||a.action||'Personnel activity')}</span><span>${escapeHtml(a.ts||a.date||'')}</span></div>`).join(''):'<div style="color:var(--text-dim);font-size:12px;">No recent personnel activity.</div>'}</div></div>
     <div class="pm-panel"><div class="pm-panel-head"><span>Upcoming Expirations</span><span style="color:var(--blue);font-size:12px;">Next 30 days</span></div><div class="pm-panel-body">${expiring.slice(0,5).map(n=>`<div class="pm-attention-row"><span>${ICONS.alert}</span><span>${escapeHtml(n.message)}</span><span></span></div>`).join('')||'<div style="color:var(--text-dim);font-size:12px;">No upcoming expirations.</div>'}</div></div>
   </div>`;
+  root.querySelectorAll('.pm-panel').forEach(panel=>{const head=panel.querySelector('.pm-panel-head');const body=panel.querySelector('.pm-panel-body');if(!head||!body)return;const details=document.createElement('details');details.className=panel.className;details.style.cssText=panel.style.cssText;const summary=document.createElement('summary');summary.style.cssText='cursor:pointer;list-style:none;';summary.append(head);details.append(summary,body);panel.replaceWith(details);});
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.onclick=()=>switchView(b.dataset.navDest));
 }
 
