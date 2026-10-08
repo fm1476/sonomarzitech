@@ -595,7 +595,7 @@ export { applyChanges };
           const conflicts=subpoenas.filter(s=>s.personId===v.personId&&s.courtDate>=v.startDate&&s.courtDate<=v.endDate);
           if(conflicts.length){
             const override=v.courtConflictOverride;
-            if(!hasAbility('pm_leave_request_approve')||!override||typeof override.reason!=='string'||!override.reason.trim()||override.reason.trim().length<8||override.approvedBy!==workspaceAuth.personId){
+            if(!hasAbility('pm_leave_request_approve')||!override||typeof override.reason!=='string'||override.reason.trim().length<8||override.approvedBy!==workspaceAuth.personId||!Array.isArray(override.subpoenas)||!conflicts.every(s=>override.subpoenas.some(ref=>ref.id===s.id))){
               const err=new Error('Court conflict: leave approval requires an authorized approver and a documented override reason (8+ characters).');err.code='42501';throw err;
             }
           }
