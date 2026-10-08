@@ -382,7 +382,7 @@ function renderWidget(id){
   if(id==='list_magazine_inspection_status'){
     const rows = STATE.eod.magazines.map(m=>{
       const days = m.lastInspectionDate ? daysBetween(m.lastInspectionDate, fmt(new Date())) : null;
-      return `<tr><td>${magazineLink(m.id)}</td><td style="font-size:11.5px;">${escapeHtml(m.type)}</td><td style="${days>MAGAZINE_INSPECTION_DAYS?'color:var(--red);font-weight:700;':''}">${m.lastInspectionDate||'Never inspected'} (${days===null?'inspection required':days+'d ago'})</td></tr>`;
+      return `<tr><td>${magazineLink(m.id)}</td><td style="font-size:11.5px;">${escapeHtml(m.type)}</td><td style="${days===null||days>MAGAZINE_INSPECTION_DAYS?'color:var(--red);font-weight:700;':''}">${m.lastInspectionDate||'Never inspected'} (${days===null?'inspection required':days+'d ago'})</td></tr>`;
     }).join('');
     return `<div class="panel"><div class="panel-head"><h2>Magazine Inspection Status</h2></div><div class="panel-body" style="padding:0;"><table><thead><tr><th>Magazine</th><th>Type</th><th>Last Inspected</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
@@ -928,6 +928,8 @@ function openInspectionFormModal(magazineId){
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
     const unauthorized = document.getElementById('fInspUnauthorized').checked;
+    const inspectionDate = document.getElementById('fInspDate').value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(inspectionDate)){ toast("Enter a valid inspection date.",true); return; }
     const newInsp = { id:'insp'+Date.now(), magazineId, inspectorId: document.getElementById('fEodInspector').value, date: document.getElementById('fInspDate').value,
       unauthorizedEntry: unauthorized, notes: document.getElementById('fInspNotes').value.trim() };
     STATE.eod.magazineInspections.push(newInsp);
@@ -1218,7 +1220,7 @@ function renderReports(){
       <div class="panel-body">
         <div class="detail-grid">
           <div><div class="k">Technicians Current on HDS Cert</div><div class="v">${STATE.eod.technicians.filter(technicianCurrent).length} / ${STATE.eod.technicians.length}</div></div>
-          <div><div class="k">Magazines Within 7-Day Inspection Cycle</div><div class="v">${STATE.eod.magazines.filter(m=>daysBetween(m.lastInspectionDate,fmt(new Date()))<=MAGAZINE_INSPECTION_DAYS).length} / ${STATE.eod.magazines.length}</div></div>
+          <div><div class="k">Magazines Within 7-Day Inspection Cycle</div><div class="v">${STATE.eod.magazines.filter(m=>m.lastInspectionDate && daysBetween(m.lastInspectionDate,fmt(new Date()))<=MAGAZINE_INSPECTION_DAYS).length} / ${STATE.eod.magazines.length}</div></div>
           <div><div class="k">Theft/Loss Reports Filed Within 24h</div><div class="v">${STATE.eod.theftLossReports.filter(r=>r.reportedAtfDate && withinTheftReportWindow(r)).length} / ${STATE.eod.theftLossReports.filter(r=>r.reportedAtfDate).length}</div></div>
           <div><div class="k">Incidents Reported to BATS</div><div class="v">${STATE.eod.incidents.filter(i=>i.batsReported).length} / ${STATE.eod.incidents.length}</div></div>
         </div>
@@ -1253,7 +1255,7 @@ function renderReports(){
   if(exportSummaryBtn) exportSummaryBtn.onclick = ()=>{
     exportCsvEod(["Metric","Value"], [
       ["Technicians Current on HDS Cert", `${STATE.eod.technicians.filter(technicianCurrent).length} / ${STATE.eod.technicians.length}`],
-      ["Magazines Within 7-Day Cycle", `${STATE.eod.magazines.filter(m=>daysBetween(m.lastInspectionDate,fmt(new Date()))<=MAGAZINE_INSPECTION_DAYS).length} / ${STATE.eod.magazines.length}`],
+      ["Magazines Within 7-Day Cycle", `${STATE.eod.magazines.filter(m=>m.lastInspectionDate && daysBetween(m.lastInspectionDate,fmt(new Date()))<=MAGAZINE_INSPECTION_DAYS).length} / ${STATE.eod.magazines.length}`],
       ["Theft/Loss Reports Filed Within 24h", `${STATE.eod.theftLossReports.filter(r=>r.reportedAtfDate && withinTheftReportWindow(r)).length} / ${STATE.eod.theftLossReports.filter(r=>r.reportedAtfDate).length}`],
       ["Incidents Reported to BATS", `${STATE.eod.incidents.filter(i=>i.batsReported).length} / ${STATE.eod.incidents.length}`],
     ], "eod_compliance_summary.csv");
