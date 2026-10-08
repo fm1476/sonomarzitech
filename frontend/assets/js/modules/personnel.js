@@ -2538,6 +2538,7 @@ function renderComplianceSub(body){
 let SCHED_VIEW = 'calendar';
 let SCHED_CAL_YEAR = new Date().getFullYear(), SCHED_CAL_MONTH = new Date().getMonth();
 let SCHED_CAL_SHIFT = 'all';
+let SCHED_DRAFT_PREVIEW_ID = null; // Client-only scheduler preview; never persisted or published.
 let SCHED_CAL_WORKGROUPS = [];
 let SHOW_PAST_SHIFT_PATTERNS = false;
 let SCHED_SUBTAB = 'roster';
@@ -3124,7 +3125,7 @@ function renderRosterSub(){
     const published = s.published !== false;
     const statusBadge = !published ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Draft / Hidden</span>` : status==='future' ? `<span class="badge" style="background:var(--gold)22;color:var(--gold);margin-left:8px;">Upcoming</span>` : status==='past' ? `<span class="badge" style="background:var(--text-dim)22;color:var(--text-dim);margin-left:8px;">Past</span>` : '';
     return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shiftColor(s)};margin-right:8px;"></span>${escapeHtml(s.name)}${statusBadge}</td><td>${escapeHtml(describeShiftPattern(s))}</td><td>${SuiteUX.displayTimeOnly(s.hoursStart)} - ${SuiteUX.displayTimeOnly(s.hoursEnd)}</td><td>${s.minStaff||0}${(s.staffingRequirements||[]).map(r=>`<br><span class="hint">${escapeHtml(r.name)}: ${r.count}</span>`).join('')}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(formatShiftDateRange(s))}</td>
-    ${canManage?`<td><div class="cell-actions">${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
+    ${canManage?`<td><div class="cell-actions">${!published? `<button class="btn btn-sm btn-outline" data-preview-shift="${s.id}">View</button>`:''}${can('pm_schedule_publish')?`<button class="btn btn-sm btn-outline" data-publish-shift="${s.id}">${published?'Hide':'Publish'}</button>`:''}<button class="btn-icon" data-edit-shift="${s.id}" title="Edit">${ICONS.edit}</button><button class="btn-icon" data-del-shift="${s.id}" title="Delete">${ICONS.trash}</button></div></td>`:'<td></td>'}</tr>`;
   }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">${SHOW_PAST_SHIFT_PATTERNS ? 'No shift patterns defined yet.' : 'No current or upcoming shift patterns. '+(pastCount?'<button class="btn-sm btn btn-outline" id="btnShowPastShiftsInline">Show past patterns</button>':'')}</td></tr>`;
 
   const rosterRows = STATE.pm.scheduleAssignments.filter(a=>!a.endDate&&canViewScheduleShift(STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId))).map(a=>{
@@ -3270,6 +3271,14 @@ function renderRosterSub(){
     document.getElementById('btnAddShift').addEventListener('click', ()=>openShiftFormModal(null));
     document.getElementById('btnAddAssignment').addEventListener('click', ()=>openAssignmentFormModal(null));
     document.getElementById('btnAddOneOff').addEventListener('click', ()=>openOneOffCoverageModal());
+    document.querySelectorAll('[data-preview-shift]').forEach(b=>b.addEventListener('click', ()=>{
+      const shift=STATE.pm.scheduleShifts.find(s=>s.id===b.dataset.previewShift);
+      if(!shift||shift.published!==false||!canManageScheduleShift(shift)){toast('You cannot preview this draft pattern.',true);return;}
+      SCHED_DRAFT_PREVIEW_ID=shift.id;SCHED_CAL_SHIFT=shift.id;SCHED_CAL_WORKGROUPS=[shift.workGroupId];
+      const first=shift.startDate||shift.date;
+      if(first && /^\d{4}-\d{2}-\d{2}$/.test(first)){SCHED_CAL_YEAR=Number(first.slice(0,4));SCHED_CAL_MONTH=Number(first.slice(5,7))-1;}
+      SCHED_VIEW='calendar';renderScheduling();
+    }));
     document.querySelectorAll('[data-publish-shift]').forEach(b=>b.addEventListener('click', ()=>{
       if(!can('pm_schedule_publish')) return;
       const shift=STATE.pm.scheduleShifts.find(s=>s.id===b.dataset.publishShift); if(!shift||!canManageScheduleShift(shift))return;
@@ -4113,7 +4122,9 @@ function renderDutyCalendar(body){
   const allGroups=visibleScheduleWorkGroups();
   if(!SCHED_CAL_WORKGROUPS.length) SCHED_CAL_WORKGROUPS=allGroups.map(g=>g.id);
   const groupIds=new Set(selectedCalendarWorkGroups());
-  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>s.published!==false && groupIds.has(s.workGroupId)));
+  const preview=STATE.pm.scheduleShifts.find(s=>s.id===SCHED_DRAFT_PREVIEW_ID&&s.published===false&&canManageScheduleShift(s));
+  if(SCHED_DRAFT_PREVIEW_ID&&!preview)SCHED_DRAFT_PREVIEW_ID=null;
+  const shifts = sortShiftsForSelection(STATE.pm.scheduleShifts.filter(s=>groupIds.has(s.workGroupId)&&(s.published!==false||(preview&&s.id===preview.id))));
   const shiftOrder = new Map(shifts.map((s,i)=>[s.id,i]));
   if(SCHED_CAL_SHIFT!=='all' && !shifts.some(s=>s.id===SCHED_CAL_SHIFT)) SCHED_CAL_SHIFT = 'all';
   const year = SCHED_CAL_YEAR, month = SCHED_CAL_MONTH;
@@ -4181,6 +4192,7 @@ function renderDutyCalendar(body){
   }
 
   body.innerHTML = `
+    ${preview?`<div class="callout" style="margin-bottom:14px;border:1px solid var(--gold);"><strong>Draft preview: ${escapeHtml(preview.name)}</strong> — only you can see this unpublished pattern here. This preview does not publish it or change the live roster. <button class="btn btn-sm btn-outline" id="btnExitDraftPreview">Exit Preview</button></div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="prev">&larr;</button>
@@ -4205,6 +4217,7 @@ function renderDutyCalendar(body){
     <div class="cal-grid-head">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div>
     <div class="cal-grid">${cells}</div>
   `;
+  body.querySelector('#btnExitDraftPreview')?.addEventListener('click',()=>{SCHED_DRAFT_PREVIEW_ID=null;SCHED_CAL_SHIFT='all';renderDutyCalendar(body);});
   body.querySelectorAll('[data-sched-cal-nav]').forEach(b=>b.addEventListener('click', ()=>{
     const dir = b.dataset.schedCalNav;
     let y=SCHED_CAL_YEAR, m=SCHED_CAL_MONTH;
@@ -4218,10 +4231,10 @@ function renderDutyCalendar(body){
   body.querySelectorAll('[data-cal-workgroup]').forEach(cb=>cb.addEventListener('change',()=>{
     const chosen=[...body.querySelectorAll('[data-cal-workgroup]:checked')].map(x=>x.dataset.calWorkgroup);
     if(!chosen.length){ cb.checked=true; toast("Keep at least one work group visible.",true); return; }
-    SCHED_CAL_WORKGROUPS=chosen; SCHED_CAL_SHIFT='all'; renderDutyCalendar(body);
+    SCHED_CAL_WORKGROUPS=chosen; SCHED_CAL_SHIFT='all'; SCHED_DRAFT_PREVIEW_ID=null;renderDutyCalendar(body);
   }));
   const shiftSelect = document.getElementById('fSchedCalShift');
-  if(shiftSelect) shiftSelect.addEventListener('change', ()=>{ SCHED_CAL_SHIFT = shiftSelect.value; renderDutyCalendar(body); });
+  if(shiftSelect) shiftSelect.addEventListener('change', ()=>{ SCHED_CAL_SHIFT = shiftSelect.value; if(SCHED_CAL_SHIFT!==SCHED_DRAFT_PREVIEW_ID)SCHED_DRAFT_PREVIEW_ID=null;renderDutyCalendar(body); });
   body.querySelectorAll('[data-cal-special-event]').forEach(a=>a.addEventListener('click',(ev)=>{ev.preventDefault();openSpecialEventDetail((STATE.pm.specialEvents||[]).find(e=>e.id===a.dataset.calSpecialEvent));}));
   body.querySelectorAll('[data-cal-assign-event]').forEach(a=>a.addEventListener('click', (ev)=>{
     ev.preventDefault();
