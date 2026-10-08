@@ -697,7 +697,9 @@ function openAssignServerModal(paperId){
   document.getElementById('mClose').onclick = ()=>{ closeModal(); renderBoard(); };
   document.getElementById('mCancel').onclick = ()=>{ closeModal(); renderBoard(); };
   document.getElementById('mSave').onclick = ()=>{
-    p.assignedServerId = document.getElementById('fAssignServer').value;
+    const nextServerId = document.getElementById('fAssignServer').value;
+    recordFieldChangeCivil(p, 'assignedServerId', p.assignedServerId, nextServerId);
+    p.assignedServerId = nextServerId;
     recordFieldChangeCivil(p, 'stage', p.stage, 'Assigned');
     p.stage = 'Assigned';
     logActivity(`Assigned ${p.caseNumber} to ${personName(p.assignedServerId)}.`, "civil_paper", p.id);
@@ -1341,7 +1343,9 @@ function openAddAddressModal(p){
     const isPrimary = document.getElementById('fNewAddrPrimary').checked;
     if(!p.serviceAddresses) p.serviceAddresses = [];
     if(isPrimary) p.serviceAddresses.forEach(a=>a.isPrimary=false);
+    const previousAddresses = JSON.parse(JSON.stringify(p.serviceAddresses));
     p.serviceAddresses.push({id:'addr'+Date.now(), address, isPrimary});
+    recordFieldChangeCivil(p, 'serviceAddresses', previousAddresses, p.serviceAddresses);
     logActivity(`Added a service address to ${p.caseNumber}.`, "civil_paper", p.id);
     persist();
     toast("Address added.");
@@ -2238,10 +2242,14 @@ function openMarkServedModal(paperId, carryOverNotes){
   document.getElementById('mSave').onclick = ()=>{
     const servedOnName = document.getElementById('fSrvOnName').value.trim();
     if(!servedOnName){ toast("Enter who was served.", true); return; }
-    p.servedDate = document.getElementById('fSrvDate').value;
-    p.servedTime = document.getElementById('fSrvTime').value;
-    p.serviceMethod = document.getElementById('fSrvMethod').value;
-    p.servedOnName = servedOnName;
+    const servedFields = {
+      servedDate: document.getElementById('fSrvDate').value,
+      servedTime: document.getElementById('fSrvTime').value,
+      serviceMethod: document.getElementById('fSrvMethod').value,
+      servedOnName,
+    };
+    Object.keys(servedFields).forEach(field=>recordFieldChangeCivil(p,field,p[field],servedFields[field]));
+    Object.assign(p,servedFields);
     const notes = document.getElementById('fSrvNotes').value.trim();
     if(!p.attempts.some(a=>a.result==='Served')){
       p.attempts.push({id:'att'+Date.now(), date: p.servedDate, time: p.servedTime, deputyId: p.assignedServerId||CURRENT_USER_ID, result:'Served', notes});
@@ -2439,6 +2447,7 @@ function openIntakeModal(existingId){
       priority: PRIORITY_PAPER_TYPES.includes(paperType) ? "Immediate" : "Standard",
     };
     if(editing){
+      Object.keys(data).forEach(field=>recordFieldChangeCivil(p,field,p[field],data[field]));
       Object.assign(p, data);
       logActivity(`Updated civil paper ${caseNumber}.`, "civil_paper", p.id);
       toast("Paper updated.");
