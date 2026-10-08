@@ -721,8 +721,7 @@ function openDroneFormModal(existingId){
       retirementDate: status==='Retired' ? (d.retirementDate||fmt(new Date())) : null,
     };
     if(editing){
-      recordFieldChangeDrone(d, 'status', d.status, status);
-      recordFieldChangeDrone(d, 'assignedOperatorId', d.assignedOperatorId, data.assignedOperatorId);
+      Object.keys(data).forEach(field=>recordFieldChangeDrone(d, field, d[field], data[field]));
       Object.assign(d, data, {photoDataUrl: pendingPhoto});
       logActivity(`Updated drone record for ${name}.`, "drone", d.id);
       toast("Drone record saved.");
@@ -808,7 +807,7 @@ function renderOperators(){
 function openOperatorFormModal(personId){
   const editing = !!personId;
   const o = editing ? operatorFor(personId) : { certNumber:"", certIssueDate: fmt(new Date()), certExpiration: fmt(addDays(new Date(),730)), recurrentTrainingDate:"" };
-  const unassigned = STATE.personnel.filter(p=>!operatorFor(p.id));
+  const unassigned = STATE.personnel.filter(p=>p && p.id && !operatorFor(p.id) && !['inactive','terminated','separated','disabled'].includes(String(p.status||'').toLowerCase()));
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>${editing?'Edit':'Add'} Operator</h3><button class="modal-close" id="mClose">&times;</button></div>
@@ -832,14 +831,16 @@ function openOperatorFormModal(personId){
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
     const targetId = editing ? personId : document.getElementById('fOpPerson').value;
-    if(!targetId) return;
+    if(!targetId || (!editing && !unassigned.some(p=>p.id===targetId))){ toast("Select an eligible active personnel record first.", true); return; }
     const certNumber = document.getElementById('fOpCertNum').value.trim();
     if(!certNumber){ toast("Enter a certificate number.", true); return; }
     const oRec = ensureOperator(targetId);
-    Object.assign(oRec, {
+    const changes = {
       certNumber, certIssueDate: document.getElementById('fOpIssue').value, certExpiration: document.getElementById('fOpExpire').value,
       recurrentTrainingDate: document.getElementById('fOpRecurrent').value,
-    });
+    };
+    if(editing) Object.keys(changes).forEach(field=>recordFieldChangeDrone(oRec, field, oRec[field], changes[field]));
+    Object.assign(oRec, changes);
     logActivity(`${editing?'Updated':'Added'} operator record for ${personName(targetId)}.`, "drone_operator", targetId);
     persist();
     toast("Operator record saved.");
@@ -1027,11 +1028,15 @@ function renderMaintenance(){
     </div>
   `;
   const quickBtn = document.getElementById('btnLogMaintQuick');
-  if(quickBtn) quickBtn.addEventListener('click', ()=>openMaintFormModal(STATE.drone.drones[0]));
+  if(quickBtn) quickBtn.addEventListener('click', ()=>{
+    if(!STATE.drone.drones.length){ toast("Add an aircraft before logging maintenance.", true); return; }
+    openMaintFormModal(STATE.drone.drones[0]);
+  });
   wireDroneLinks();
 }
 
 function openMaintFormModal(drone){
+  if(!drone){ toast("Add an aircraft before logging maintenance.", true); return; }
   const fromDetail = !!document.getElementById('droneDetailBody');
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
@@ -1056,6 +1061,7 @@ function openMaintFormModal(drone){
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
     const actualDrone = fromDetail ? drone : droneFor(document.getElementById('fMxDrone').value);
+    if(!actualDrone){ toast("Select an existing aircraft before logging maintenance.", true); return; }
     const grounded = document.getElementById('fMxGrounded').checked;
     const newM = {
       id:'dmx'+Date.now(), droneId: actualDrone.id, date: document.getElementById('fMxDate').value, type: document.getElementById('fMxType').value,
