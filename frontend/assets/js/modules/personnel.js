@@ -3862,6 +3862,11 @@ function openRequestTimeOffModal(requestableCodes, me){
         personId:me.id,code,startDate,endDate,reason,status:'pending',
         submittedAt:new Date().toISOString(),submittedBy:CURRENT_USER_ID};
     }
+    const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(me.id,startDate,endDate)||[];
+    if(courtConflicts.length){
+      const summary=courtConflicts.map(s=>s.caseNumber+' ('+s.courtDate+' '+(s.courtTime||'')+')').join('; ');
+      if(!confirm('Court appearance conflict detected: '+summary+'. You may submit this request, but it cannot be approved until resolved. Continue submitting?'))return;
+    }
     const button=document.getElementById('mSave');button.disabled=true;
     const result=await SuiteStore.submitSelfServiceRecord('leaveRequests',pendingRecord);
     if(!result.ok){button.disabled=false;toast(result.error?.message||'The request could not be saved.',true);return;}
@@ -3884,6 +3889,11 @@ function decideLeaveRequest(id, decision){
     logActivity(`Denied a ${req.code} request for ${personName(req.personId)}.`, "schedule");
     toast('Request denied.');
   } else {
+    const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(req.personId,req.startDate,req.endDate)||[];
+    if(courtConflicts.length){
+      toast('Approval blocked: active subpoena(s) '+courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate).join(', ')+'. Resolve the court conflict before approving leave.',true);
+      return;
+    }
     // Approving isn't just a status flip -- it's the moment this becomes a real change to the
     // schedule. It's written as the same kind of schedule exception record the duty roster and
     // calendar views already read everywhere else, so it shows up as time off exactly the way a
