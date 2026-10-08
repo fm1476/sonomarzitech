@@ -2727,13 +2727,13 @@ function renderScheduling(){
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
-    ${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin()?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<div style="display:flex;gap:6px;align-items:center"><button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button><button type="button" class="btn btn-sm btn-outline" data-schedule-group-delete="${g.id}">Delete Calendar</button></div>`).join('')}</div></div>`:''}
+    ${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin()?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button>`).join('')}${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)?'<button type="button" class="btn btn-sm btn-danger" id="btnDeleteScheduleCalendar">Delete Calendar</button>':''}</div></div>`:''}
     <div id="schedSubBody"></div>
   `;
   document.getElementById('scheduleDashboardBack').onclick=()=>switchView('sched-dashboard');
   document.querySelectorAll('[data-sched-tab]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_SUBTAB=b.dataset.schedTab; renderScheduling(); }));
   document.getElementById('btnNewScheduleGroup')?.addEventListener('click',()=>openWorkGroupAccessModal({id:'wg'+Date.now()+Math.random().toString(36).slice(2,6),name:'',active:true,visibility:'unit',unitNames:[],viewerIds:[],managerIds:[]},true));
-  document.querySelectorAll('[data-schedule-group-delete]').forEach(button=>button.onclick=()=>deleteScheduleCalendar(button.dataset.scheduleGroupDelete));
+  document.getElementById('btnDeleteScheduleCalendar')?.addEventListener('click',openDeleteScheduleCalendarModal);
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
   else if(SCHED_SUBTAB==='events') renderSpecialEventsSub();
@@ -2883,26 +2883,53 @@ function openWorkGroupAccessModal(group,isNew=false){
 }
 function calendarDeletionLinks(id){
   const shiftIds=new Set((STATE.pm.scheduleShifts||[]).filter(s=>(s.workGroupId||'wg_patrol')===id).map(s=>s.id));
-  return Object.entries(STATE.pm).filter(([collection,rows])=>collection!=='scheduleWorkGroups'&&Array.isArray(rows)).flatMap(([collection,rows])=>rows.filter(row=>row&&typeof row==='object'&&(row.workGroupId===id||(row.eligibleWorkGroupIds||[]).includes(id)||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(shiftId=>shiftIds.has(shiftId)))).map(row=>({collection,id:row.id})));
+  return Object.entries(STATE.pm).filter(([collection,rows])=>collection!=='scheduleWorkGroups'&&collection!=='deletedCalendarArchives'&&Array.isArray(rows)).flatMap(([collection,rows])=>rows.filter(row=>row&&typeof row==='object'&&(row.workGroupId===id||(row.eligibleWorkGroupIds||[]).includes(id)||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(shiftId=>shiftIds.has(shiftId)))).map(row=>({collection,id:row.id})));
+}
+function openDeleteScheduleCalendarModal(){
+  const groups=(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup);
+  if(!groups.length){toast('You do not manage any calendars.',true);return;}
+  document.getElementById('modalBox').className='modal';
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Delete Calendar</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body">
+    <div class="form-row"><label>Select a calendar you are authorized to manage</label><select id="fDeleteCalendar">${groups.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}</option>`).join('')}</select></div>
+    <div id="calendarDeleteImpact" class="hint"></div>
+    <p class="hint">Deletion is permanent in the active workspace. A snapshot is retained in deleted calendar archives for administrators. Other work groups are preserved.</p>
+    </div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-danger" id="mSave">Review Deletion</button></div>`;
+  openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
+  const select=document.getElementById('fDeleteCalendar'),impact=document.getElementById('calendarDeleteImpact');
+  const update=()=>{const links=calendarDeletionLinks(select.value);impact.textContent=links.length+' linked scheduling records will be detached or removed from the active calendar. Any affected event history will be archived.';};
+  select.addEventListener('change',update);update();
+  document.getElementById('mSave').onclick=()=>deleteScheduleCalendar(select.value);
 }
 async function deleteScheduleCalendar(id){
   const group=(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id);
   if(!canManageWorkGroup(group))return;
-  const links=calendarDeletionLinks(id);
-  if(links.length){toast('This calendar has '+links.length+' linked shift patterns or scheduling records. Move or remove them before deleting it.',true);return;}
-  if(!confirm('Delete the '+group.name+' calendar? This removes the calendar and its access settings.'))return;
-  const before=STATE.pm.scheduleWorkGroups.slice();
-  STATE.pm.scheduleWorkGroups=before.filter(g=>g.id!==id);
+  const links=calendarDeletionLinks(id),shiftIds=new Set((STATE.pm.scheduleShifts||[]).filter(s=>(s.workGroupId||'wg_patrol')===id).map(s=>s.id));
+  if(!confirm('Delete calendar "'+group.name+'"? '+links.length+' linked scheduling records may be removed from the active workspace. This cannot be undone through the interface. Continue?'))return;
+  if(!confirm('FINAL CONFIRMATION: Delete "'+group.name+'" and its associated shift patterns/assignments?'))return;
+  const before=JSON.parse(JSON.stringify(STATE.pm));
+  const archivedAt=new Date().toISOString();
+  STATE.pm.deletedCalendarArchives=STATE.pm.deletedCalendarArchives||[];
+  STATE.pm.deletedCalendarArchives.push({id,group:before.scheduleWorkGroups.find(g=>g.id===id),archivedAt,deletedBy:CURRENT_USER_ID,linkedRecords:links.map(link=>({collection:link.collection,record:(before[link.collection]||[]).find(row=>row.id===link.id)}))});
+  STATE.pm.scheduleWorkGroups=STATE.pm.scheduleWorkGroups.filter(g=>g.id!==id);
+  STATE.pm.scheduleShifts=(STATE.pm.scheduleShifts||[]).filter(x=>!shiftIds.has(x.id));
+  STATE.pm.scheduleAssignments=(STATE.pm.scheduleAssignments||[]).filter(x=>!shiftIds.has(x.shiftId)&&x.workGroupId!==id);
+  // Shared events survive; remove just the deleted work-group eligibility. Sole-group events are cancelled.
+  (STATE.pm.specialEvents||[]).forEach(e=>{
+    if(!(e.eligibleWorkGroupIds||[]).includes(id))return;
+    e.eligibleWorkGroupIds=e.eligibleWorkGroupIds.filter(groupId=>groupId!==id);
+    if(!e.eligibleWorkGroupIds.length){e.status='cancelled';e.cancelledAt=archivedAt;e.cancelledBy=CURRENT_USER_ID;}
+  });
+  for(const [collection,rows] of Object.entries(STATE.pm)){
+    if(!Array.isArray(rows)||['scheduleWorkGroups','deletedCalendarArchives','scheduleShifts','scheduleAssignments','specialEvents'].includes(collection))continue;
+    STATE.pm[collection]=rows.filter(row=>!row||typeof row!=='object'||!(row.workGroupId===id||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(key=>shiftIds.has(key))));
+  }
   persist();
   if(!await SuiteStore.flush()){
-    STATE.pm.scheduleWorkGroups=before;
-    persist();
-    toast('Calendar deletion could not be saved. Reload to check for changes made by another user.',true);
-    renderScheduling();return;
+    STATE.pm=before;persist();toast('Calendar deletion could not be saved. Reload to check concurrent changes.',true);closeModal();renderScheduling();return;
   }
   SCHED_CAL_WORKGROUPS=SCHED_CAL_WORKGROUPS.filter(groupId=>groupId!==id);
-  logActivity('Deleted work group calendar '+group.name+'.','schedule');persist();
-  toast('Calendar deleted.');renderScheduling();
+  logActivity('Deleted work group calendar '+group.name+' with '+links.length+' linked records archived.','schedule');persist();
+  toast('Calendar deleted.');closeModal();renderScheduling();
 }
 function selectedCalendarWorkGroups(){
   const active=visibleScheduleWorkGroups();
