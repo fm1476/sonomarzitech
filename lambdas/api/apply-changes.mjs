@@ -370,6 +370,13 @@ async function applyChanges(client, auth, body) {
         const prior=existing.rows[0]?.value;
         if(prior?.status==='pending'){
           const override=change.value.courtConflictOverride;
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS suite_activity_log (
+              id BIGSERIAL PRIMARY KEY, tenant_id UUID NOT NULL, agency_id UUID NOT NULL,
+              actor_user_id UUID NOT NULL, actor_person_id TEXT, actor_email TEXT,
+              actor_name TEXT, module TEXT NOT NULL, entity_type TEXT NOT NULL DEFAULT 'general',
+              description TEXT NOT NULL, ip_address TEXT, occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )`);
           await client.query(
             `INSERT INTO suite_activity_log
                (tenant_id,agency_id,actor_user_id,actor_person_id,actor_email,actor_name,module,entity_type,description)
