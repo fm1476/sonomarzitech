@@ -1442,6 +1442,7 @@ function openEquipmentModal(id){
       } : null,
     };
     if(editing){
+      const photoChanged = item.photoDataUrl!==data.photoDataUrl;
       const changes = Object.keys(data).filter(key=>key!=='photoDataUrl' && JSON.stringify(item[key] ?? null)!==JSON.stringify(data[key] ?? null));
       const prior = Object.fromEntries(changes.map(key=>[key,item[key]]));
       Object.assign(item, data);
@@ -1454,7 +1455,7 @@ function openEquipmentModal(id){
           : `${item.name} (${item.assetId}): ${display} changed from "${valueText(prior[key])}" to "${valueText(data[key])}".`,
           key==='status' && needsDisposal ? 'disposal' : 'equipment', item.id);
       });
-      if(changes.length===0 && item.photoDataUrl!==data.photoDataUrl) logActivity(`${item.name} (${item.assetId}): equipment photo updated.`, 'equipment', item.id);
+      if(photoChanged) logActivity(`${item.name} (${item.assetId}): equipment photo updated.`, 'equipment', item.id);
       toast("Equipment updated.");
     }else{
       const newItem = {id:"e"+(Date.now()), assignedTo:null, assignedToType:null, ...data};
