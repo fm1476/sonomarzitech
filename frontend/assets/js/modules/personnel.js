@@ -3894,7 +3894,7 @@ function decideLeaveRequest(id, decision){
       const summary=courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate+(s.courtTime?' at '+s.courtTime:'')).join('; ');
       if(!confirm('COURT CONFLICT: '+personName(req.personId)+' has an active subpoena: '+summary+'.\\n\\nPress OK to continue to an override explanation, or Cancel to leave the request pending.'))return;
       const overrideReason=(prompt('Required: explain why time off is being approved despite the court conflict:','')||'').trim();
-      if(!overrideReason){toast('Approval not completed. A conflict override explanation is required.',true);return;}
+      if(overrideReason.length<8){toast('Approval not completed. Enter an override explanation of at least 8 characters.',true);return;}
       req.courtConflictOverride={
         reason:overrideReason,approvedBy:CURRENT_USER_ID,approvedAt:new Date().toISOString(),
         subpoenas:courtConflicts.map(s=>({id:s.id,caseNumber:s.caseNumber,courtDate:s.courtDate,courtTime:s.courtTime}))
