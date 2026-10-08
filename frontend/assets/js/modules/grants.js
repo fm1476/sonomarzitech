@@ -975,9 +975,20 @@ function openGrantFormModal(existingId){
       notes: document.getElementById('fGrNotes').value.trim(),
     };
     if(editing){
-      recordFieldChangeGrants(g, 'status', g.status, status);
+      const trackedFields = ['grantName','grantNumber','fundingAgency','programArea','awardAmount','awardStartDate','awardEndDate','matchRequired','matchAmount','grantManagerId','status','reportingFrequency','nextReportDue','cageCode'];
+      const confidentialFields = ['notes'];
+      const changes = trackedFields.filter(field=>JSON.stringify(g[field] ?? null)!==JSON.stringify(data[field] ?? null));
+      changes.forEach(field=>{
+        recordFieldChangeGrants(g,field,g[field],data[field]);
+        logActivity(`Updated grant "${grantName}" field ${field}.`, "grant", g.id);
+      });
+      confidentialFields.forEach(field=>{
+        if(JSON.stringify(g[field] ?? null)===JSON.stringify(data[field] ?? null)) return;
+        g.fieldHistory.push({date:fmt(new Date()),field,before:'(withheld)',after:'(withheld)',changedBy:personName(CURRENT_USER_ID)});
+        logActivity(`Updated grant "${grantName}" restricted field ${field} (values withheld).`, "grant", g.id);
+      });
       Object.assign(g, data);
-      logActivity(`Updated grant award "${grantName}".`, "grant", g.id);
+      if(!changes.length && confidentialFields.every(field=>JSON.stringify(g[field] ?? null)===JSON.stringify(data[field] ?? null))) logActivity(`Saved grant award "${grantName}".`, "grant", g.id);
       toast("Grant award saved.");
     } else {
       const newG = {id:'gr'+Date.now(), samRegistrationCurrent:true, fundedEquipment:[], fieldHistory:[], ...data};
@@ -1017,7 +1028,7 @@ function openGrantDetail(id){
       <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Grant-Funded Equipment</h2></div>
         <div class="panel-body" style="padding:0;"><table><thead><tr><th>Item</th><th>Cost</th><th>Purchase Date</th><th>Prior Approval</th></tr></thead><tbody>
         ${g.fundedEquipment.map(e=>`<tr><td>${escapeHtml(e.description)}</td><td>${money(e.cost)}</td><td>${e.purchaseDate}</td>
-          <td>${e.requiresPriorApproval ? `<span class="badge badge-available">Approved ${e.approvalDate||''}</span>` : '<span style="color:var(--text-dim);">N/A</span>'}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:14px;">No funded equipment logged yet.</td></tr>`}
+          <td>${e.requiresPriorApproval ? (e.approvalDate && e.approvalReference ? `<span class="badge badge-available">Approved ${escapeHtml(e.approvalDate)}</span>` : '<span class="badge badge-missing">Approval pending</span>') : '<span style="color:var(--text-dim);">N/A</span>'}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:14px;">No funded equipment logged yet.</td></tr>`}
         </tbody></table></div>
       </div>
       ${canManage ? `<button class="btn btn-sm btn-outline" id="btnAddEquipment" style="margin-top:10px;">${ICONS.plus} Add Funded Equipment</button>` : ''}
@@ -1044,6 +1055,7 @@ function openAddFundedEquipmentModal(g){
         <div class="form-row"><label>Purchase Date</label><input type="date" id="fEqDate" value="${fmt(new Date())}"></div>
       </div>
       <div class="form-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="fEqApproval" style="width:auto;">Requires prior funding-agency approval (e.g. UAS/counter-UAS under current BJA guidance)</label></div>
+      <div class="form-2col"><div class="form-row"><label>Approval date (only if actually granted)</label><input type="date" id="fEqApprovalDate"></div><div class="form-row"><label>Approval reference / authorization</label><input type="text" id="fEqApprovalRef"></div></div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Add Equipment</button></div>
   `;
@@ -1054,9 +1066,13 @@ function openAddFundedEquipmentModal(g){
     const desc = document.getElementById('fEqDesc').value.trim();
     if(!desc){ toast("Enter an item description.", true); return; }
     const requiresApproval = document.getElementById('fEqApproval').checked;
+    const approvalDate = document.getElementById('fEqApprovalDate').value;
+    const approvalReference = document.getElementById('fEqApprovalRef').value.trim();
+    if(requiresApproval && !!approvalDate!==!!approvalReference){toast('Enter both approval date and authorization reference, or leave both blank if approval is pending.',true);return;}
+    if(!requiresApproval && (approvalDate||approvalReference)){toast('Mark prior approval required before entering authorization details.',true);return;}
     g.fundedEquipment.push({id:'ge'+Date.now(), description:desc, cost:Number(document.getElementById('fEqCost').value)||0,
       purchaseDate: document.getElementById('fEqDate').value, requiresPriorApproval: requiresApproval,
-      approvalDate: requiresApproval ? fmt(new Date()) : null, approvalReference: requiresApproval ? "Pending reference #" : null});
+      approvalDate: requiresApproval ? (approvalDate||null) : null, approvalReference: requiresApproval ? (approvalReference||null) : null});
     logActivity(`Added funded equipment "${desc}" to grant "${g.grantName}".`, "grant", g.id);
     persist();
     toast("Equipment added.");
