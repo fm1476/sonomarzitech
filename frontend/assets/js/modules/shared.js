@@ -3598,13 +3598,13 @@ function renderPlatformAuditLogTab(body){
 /* Cross-module court/leave conflict checks. Advisory UI only: server must independently enforce. */
 window.SonoMarziCourtLeaveConflicts = Object.freeze({
   subpoenasForLeave(personId,startDate,endDate,excludeId){
-    const rows=window.STATE?.subpoena?.subpoenas||[];
+    const rows=(typeof STATE!=='undefined'?STATE.subpoena?.subpoenas:[])||[];
     return rows.filter(s=>String(s.personId)===String(personId)&&s.id!==excludeId&&
       !['cancelled','canceled','quashed','completed','withdrawn'].includes(String(s.status||'').toLowerCase())&&
       s.courtDate>=startDate&&s.courtDate<=endDate);
   },
   approvedLeaveForCourt(personId,courtDate){
-    const rows=window.STATE?.pm?.scheduleExceptions||[];
+    const rows=(typeof STATE!=='undefined'?STATE.pm?.scheduleExceptions:[])||[];
     return rows.filter(e=>String(e.personId)===String(personId)&&e.startDate<=courtDate&&e.endDate>=courtDate&&
       !['RDO','TDO'].includes(String(e.code||'').toUpperCase()));
   }
