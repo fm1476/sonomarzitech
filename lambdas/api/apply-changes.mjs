@@ -606,8 +606,8 @@ export { applyChanges };
         const v=ch.value||{};
         if(collection==='subpoena.subpoenas'&&v.personId&&v.courtDate){
           const overlaps=exceptions.filter(e=>e.personId===v.personId&&e.startDate<=v.courtDate&&e.endDate>=v.courtDate&&!['RDO','TDO'].includes(String(e.code||'').toUpperCase()));
-          if(overlaps.length){
-            const err=new Error('Court assignment conflicts with approved leave. Resolve leave before assigning this subpoena.');err.code='42501';throw err;
+          if(overlaps.length && v.assignmentConflictPending!==true){
+            const err=new Error('Court assignment conflicts with approved leave. Record the subpoena as pending conflict resolution.');err.code='42501';throw err;
           }
         }
         if(collection==='pm.leaveRequests'&&v.status==='approved'){
