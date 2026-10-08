@@ -35,12 +35,13 @@ assert(!personnel.includes("tabs.push(['schedulingSettings'"));assert(!personnel
 console.log('Standalone Scheduling access, HR isolation, existing tenant compatibility, disabled licensing, module navigation, and saved URL routing checks passed.');
 
 let permitted=true,saved=true,confirmed=true;
-const deleteContext={STATE:{pm:{scheduleWorkGroups:[{id:'deleteMe',name:'Delete Me'}],scheduleShifts:[]}},SCHED_CAL_WORKGROUPS:['deleteMe','other'],canManageWorkGroup:()=>permitted,confirm:()=>confirmed,persist:()=>{},SuiteStore:{flush:async()=>saved},toast:()=>{},logActivity:()=>{},renderScheduling:()=>{}};
+const deleteContext={CURRENT_USER_ID:'tester',STATE:{pm:{scheduleWorkGroups:[{id:'deleteMe',name:'Delete Me'}],scheduleShifts:[],scheduleAssignments:[],specialEvents:[]}},SCHED_CAL_WORKGROUPS:['deleteMe','other'],canManageWorkGroup:()=>permitted,confirm:()=>confirmed,persist:()=>{},SuiteStore:{flush:async()=>saved},toast:()=>{},logActivity:()=>{},renderScheduling:()=>{},closeModal:()=>{}};
 vm.createContext(deleteContext);
 vm.runInContext(personnel.slice(personnel.indexOf('function calendarDeletionLinks(id){'),personnel.indexOf('function selectedCalendarWorkGroups(){')),deleteContext);
 permitted=false;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,1);
-permitted=true;deleteContext.STATE.pm.scheduleShifts=[{id:'linked',workGroupId:'deleteMe'}];await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,1);
-deleteContext.STATE.pm.scheduleShifts=[];confirmed=false;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,1);
+permitted=true;deleteContext.STATE.pm.scheduleShifts=[{id:'linked',workGroupId:'deleteMe'}];deleteContext.STATE.pm.scheduleAssignments=[{id:'assigned',shiftId:'linked'}];
+confirmed=false;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,1);
 confirmed=true;saved=false;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,1);
-saved=true;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,0);assert.deepEqual(Array.from(deleteContext.SCHED_CAL_WORKGROUPS),['other']);
-console.log('Calendar delete action: permission denial, linked record protection, cancellation, save failure restoration, and successful filter cleanup passed.');
+saved=true;await deleteContext.deleteScheduleCalendar('deleteMe');assert.equal(deleteContext.STATE.pm.scheduleWorkGroups.length,0);assert.equal(deleteContext.STATE.pm.scheduleShifts.length,0);assert.equal(deleteContext.STATE.pm.scheduleAssignments.length,0);
+assert.equal(deleteContext.STATE.pm.deletedCalendarArchives.length,1);assert.deepEqual(Array.from(deleteContext.SCHED_CAL_WORKGROUPS),['other']);
+console.log('Calendar delete action: permission denial, linked record warning, cancellation, save failure restoration, archived cleanup and filter cleanup passed.');
