@@ -516,19 +516,7 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 
-function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
-}
-
+function renderNav(){ document.getElementById('navlist').innerHTML=''; }
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
@@ -541,6 +529,18 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
+  if(id!=='qm-dashboard'){
+    const root=document.getElementById('view-'+id);
+    if(root && !root.querySelector('[data-module-dashboard-back]')){
+      const back=document.createElement('button');
+      back.type='button'; back.className='btn btn-outline';
+      back.dataset.moduleDashboardBack='1';
+      back.innerHTML='&#8592; Back to Dashboard';
+      back.style.marginBottom='16px';
+      back.onclick=()=>switchView('qm-dashboard');
+      root.prepend(back);
+    }
+  }
 }
 
 function renderRoleSwitcher(){
@@ -1006,6 +1006,25 @@ function renderDashboard(){
       ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
     </div>
   `;
+  // Navigation hub follows the other dashboard-first modules.
+  const destinations=NAV_ITEMS.filter(item=>item.id!=='qm-dashboard' && navItemVisible(item));
+  const hub=document.createElement('div');
+  hub.className='qm-hub-grid';
+  hub.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;margin-bottom:20px;';
+  hub.innerHTML=destinations.map((item,i)=>`<button class="qm-hub-card" data-qm-destination="${item.id}" style="min-height:140px;text-align:left;padding:19px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:inherit;cursor:pointer;font:inherit;"><div style="color:${['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#20C7D9'][i%5]};width:30px;height:30px;margin-bottom:12px;">${ICONS[item.icon]||ICONS.box}</div><strong style="display:block;color:var(--heading);font-size:16px;margin-bottom:8px;">${escapeHtml(item.label)}</strong><span style="font-size:12px;color:var(--text-dim);line-height:1.45;">${escapeHtml(item.sub)}</span></button>`).join('');
+  root.prepend(hub);
+  hub.querySelectorAll('[data-qm-destination]').forEach(btn=>btn.onclick=()=>switchView(btn.dataset.qmDestination));
+  // Keep existing customizable widgets, but collapse the lower section by default.
+  const extras=root.querySelector('#dashExtrasZone');
+  if(extras){
+    const details=document.createElement('details');
+    details.style.cssText='border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:14px;';
+    const summary=document.createElement('summary');
+    summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800;';
+    summary.textContent='Quartermaster Status & Activity';
+    extras.parentNode.insertBefore(details,extras);
+    details.append(summary,extras);
+  }
   wireEqLinks();
   // Every one of these is scoped to `root`, this module's own dashboard container, rather than
   // searched for across the whole document. Every module's dashboard uses the same internal ids
