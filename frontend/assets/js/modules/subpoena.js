@@ -216,22 +216,31 @@ function myWidgetPrefs(){
   p.extras = p.extras.filter(e=>e && extraIds.includes(e.id));
   return p;
 }
+function dashboardSubpoenas(){
+  if(can('subpoena_view_all')) return STATE.subpoena.subpoenas;
+  if(can('subpoena_view_own')) return STATE.subpoena.subpoenas.filter(s=>s.personId===CURRENT_USER_ID);
+  return [];
+}
+function dashboardListDestination(){
+  return can('subpoena_view_all') ? 'subpoena-list' : 'subpoena-mine';
+}
 function renderWidget(id){
-  const active = STATE.subpoena.subpoenas.filter(s=>s.status==="Active");
+  const subpoenas = dashboardSubpoenas();
+  const active = subpoenas.filter(s=>s.status==="Active");
   const upcoming30 = active.filter(s=>{ const d = daysBetween(fmt(new Date()), s.courtDate); return d>=0 && d<=30; });
   if(id==='stat_active_subpoenas'){
-    return `<button class="stat-card dash-clickable" data-nav-dest="subpoena-list"><div class="label">Active Subpoenas</div><div class="value">${active.length}</div><div class="delta neutral">${upcoming30.length} in the next 30 days</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="${dashboardListDestination()}"><div class="label">Active Subpoenas</div><div class="value">${active.length}</div><div class="delta neutral">${upcoming30.length} in the next 30 days</div></button>`;
   }
   if(id==='stat_unacknowledged'){
     const unacknowledged = active.filter(s=>!s.acknowledgedDate);
-    return `<button class="stat-card dash-clickable" data-nav-dest="subpoena-list"><div class="label">Unacknowledged</div><div class="value" style="color:${unacknowledged.length?'var(--red)':'var(--heading)'}">${unacknowledged.length}</div><div class="delta ${unacknowledged.length?'warn':'ok'}">Awaiting receipt confirmation</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="${dashboardListDestination()}"><div class="label">Unacknowledged</div><div class="value" style="color:${unacknowledged.length?'var(--red)':'var(--heading)'}">${unacknowledged.length}</div><div class="delta ${unacknowledged.length?'warn':'ok'}">Awaiting receipt confirmation</div></button>`;
   }
   if(id==='stat_not_notified'){
     const notNotified = active.filter(s=>!s.notifiedDate);
-    return `<button class="stat-card dash-clickable" data-nav-dest="subpoena-list"><div class="label">Not Yet Notified</div><div class="value" style="color:${notNotified.length?'var(--red)':'var(--heading)'}">${notNotified.length}</div><div class="delta neutral">Staff not yet contacted</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="${dashboardListDestination()}"><div class="label">Not Yet Notified</div><div class="value" style="color:${notNotified.length?'var(--red)':'var(--heading)'}">${notNotified.length}</div><div class="delta neutral">Staff not yet contacted</div></button>`;
   }
   if(id==='stat_total_on_file'){
-    return `<button class="stat-card dash-clickable" data-nav-dest="subpoena-list"><div class="label">Total on File</div><div class="value">${STATE.subpoena.subpoenas.length}</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="${dashboardListDestination()}"><div class="label">Total on File</div><div class="value">${subpoenas.length}</div></button>`;
   }
   if(id==='list_upcoming_court_dates'){
     const rows = upcoming30.slice().sort((a,b)=>a.courtDate.localeCompare(b.courtDate)).map(s=>`<tr><td>${escapeHtml(personName(s.personId))}</td><td>${subpoenaLink(s.id)}</td><td>${s.courtDate} ${s.courtTime}</td><td>${s.acknowledgedDate ? '<span class="badge badge-available">Acknowledged</span>' : '<span class="badge badge-missing">Not Acknowledged</span>'}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No court dates in the next 30 days.</td></tr>`;
@@ -365,6 +374,9 @@ function renderDashboard(){
     const summary=document.createElement('summary');
     summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800';
     summary.textContent='Court Dates & Subpoena Status';
+    details.addEventListener('toggle',()=>{
+      if(details.open && CHART_REFS_SUBPOENA.status) CHART_REFS_SUBPOENA.status.resize();
+    });
     extras.parentNode.insertBefore(details,extras);details.append(summary,extras);
   }
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
@@ -372,7 +384,7 @@ function renderDashboard(){
   if(prefs.extras.some(e=>e.id==='chart_by_status')){
     const byStatus = {};
     SUBPOENA_STATUSES.forEach(s=>byStatus[s]=0);
-    STATE.subpoena.subpoenas.forEach(s=>byStatus[s.status]=(byStatus[s.status]||0)+1);
+    dashboardSubpoenas().forEach(s=>byStatus[s.status]=(byStatus[s.status]||0)+1);
     CHART_REFS_SUBPOENA.status = safeChart('chartSubpoenaStatus', {
       type:'bar',
       data:{ labels:Object.keys(byStatus), datasets:[{label:'Subpoenas', data:Object.values(byStatus), backgroundColor:'#134DD1'}] },

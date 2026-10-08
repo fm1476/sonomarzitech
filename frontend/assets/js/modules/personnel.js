@@ -384,14 +384,19 @@ const NAV_ITEMS = [
   {id:"pm-records", label:"Personnel Records", icon:"idcard", title:"Personnel Records", sub:"Complete HR record for every employee", requiredAbility:"pm_records_view"},
   {id:"pm-disciplinary", label:"Disciplinary", icon:"alert", title:"Disciplinary Actions", sub:"Track disciplinary actions and pending expirations", requiredAbility:"pm_discipline_view"},
   {id:"pm-training", label:"Training", icon:"award", title:"Training & Certifications", sub:"Courses, records, requests, and instructors", requiredAbility:["pm_training_view_own","pm_training_manage","pm_training_request","pm_instructor_manage"]},
-  {id:"pm-scheduling", label:"Scheduling", icon:"calendar", title:"Scheduling & Duty Roster", sub:"Shift patterns, coverage, bidding, extra duty, and roll call", requiredAbility:["pm_schedule_view","pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view","pm_leave_request_submit","pm_leave_request_approve"]},
   {id:"pm-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Configurable reporting across the personnel record", requiredAbility:"pm_reports_view"},
   {id:"pm-admin", label:"Admin", icon:"gear", title:"Administration", sub:"Reference data and the system audit log", requiredAbility:["pm_admin_categories","pm_admin_audit"]},
+];
+const SCHEDULING_NAV_ITEMS = [
+  {id:'sched-dashboard',label:'Dashboard',icon:'calendar',title:'Scheduling',sub:'Calendars, staffing, court conflicts, and duty assignments',requiredAbility:null},
+  {id:"pm-scheduling", label:"Scheduling", icon:"calendar", title:"Scheduling & Duty Roster", sub:"Shift patterns, coverage, bidding, extra duty, and roll call", requiredAbility:["pm_schedule_view","pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view","pm_leave_request_submit","pm_leave_request_approve"]},
+  {id:'sched-settings',label:'Administration',icon:'gear',title:'Scheduling Administration',sub:'Time off codes and scheduling settings',requiredAbility:'pm_admin_categories'},
 ];
 let ACTIVE_VIEW = "pm-dashboard";
 
 function navItemVisible(item){
-  if(!can('module_personnel')) return false;
+  const schedulingItem = SCHEDULING_NAV_ITEMS.some(n=>n.id===item?.id);
+  if(schedulingItem ? !schedulingModuleAccess() : !can('module_personnel')) return false;
   if(!item) return false;
   if(!item.requiredAbility) return true;
   if(Array.isArray(item.requiredAbility)) return item.requiredAbility.some(a=>can(a));
@@ -399,27 +404,29 @@ function navItemVisible(item){
 }
 function renderNav(){ document.getElementById('navlist').innerHTML=''; }
 function switchView(id){
-  const target = NAV_ITEMS.find(n=>n.id===id);
+  const target = [...NAV_ITEMS,...SCHEDULING_NAV_ITEMS].find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
   if(!SuiteUX.beforeView(id)) return;
   ACTIVE_VIEW = id;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+id).classList.add('active');
-  const meta = NAV_ITEMS.find(n=>n.id===id);
+  const meta = target;
   document.getElementById('page-title').textContent = meta.title;
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
-  if(id!=="pm-dashboard"){
+  if(id!=="pm-dashboard" && id!=="sched-dashboard"){
     const root=document.getElementById('view-'+id);
     if(root && !root.querySelector('[data-module-dashboard-back]')){
       const back=document.createElement('button'); back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
-      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px'; back.onclick=()=>switchView('pm-dashboard'); root.prepend(back);
+      back.innerHTML='&#8592; Back to Dashboard'; back.style.marginBottom='16px'; back.onclick=()=>switchView(SCHEDULING_NAV_ITEMS.some(n=>n.id===id)?'sched-dashboard':'pm-dashboard'); root.prepend(back);
     }
   }
 }
 function renderView(id){
-  if(id==="pm-dashboard") renderDashboard();
+  if(id==='sched-dashboard') renderSchedulingDashboard();
+  else if(id==='sched-settings') renderSchedulingAdministration();
+  else if(id==="pm-dashboard") renderDashboard();
   else if(id==="pm-records") renderRecords();
   else if(id==="pm-disciplinary") renderDisciplinary();
   else if(id==="pm-training") renderTraining();
@@ -2702,14 +2709,17 @@ function renderScheduling(){
   }
   if(!visibleTabs.some(t=>t.key===SCHED_SUBTAB)) SCHED_SUBTAB = visibleTabs[0].key;
   document.getElementById('view-pm-scheduling').innerHTML = `
+    <button type="button" class="btn btn-outline" data-module-dashboard-back="1" id="scheduleDashboardBack" style="margin-bottom:16px">&#8592; Back to Scheduling Dashboard</button>
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
-    ${isGlobalScheduleAdmin()?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2><button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button></div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).map(g=>`<button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}">${escapeHtml(g.name)}${g.active===false?' (Inactive)':''} · Access & Settings</button>`).join('')}</div></div>`:''}
+    ${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin()?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<div style="display:flex;gap:6px;align-items:center"><button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button><button type="button" class="btn btn-sm btn-outline" data-schedule-group-delete="${g.id}">Delete Calendar</button></div>`).join('')}</div></div>`:''}
     <div id="schedSubBody"></div>
   `;
+  document.getElementById('scheduleDashboardBack').onclick=()=>switchView('sched-dashboard');
   document.querySelectorAll('[data-sched-tab]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_SUBTAB=b.dataset.schedTab; renderScheduling(); }));
   document.getElementById('btnNewScheduleGroup')?.addEventListener('click',()=>openWorkGroupAccessModal({id:'wg'+Date.now()+Math.random().toString(36).slice(2,6),name:'',active:true,visibility:'unit',unitNames:[],viewerIds:[],managerIds:[]},true));
+  document.querySelectorAll('[data-schedule-group-delete]').forEach(button=>button.onclick=()=>deleteScheduleCalendar(button.dataset.scheduleGroupDelete));
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
   else if(SCHED_SUBTAB==='events') renderSpecialEventsSub();
@@ -2856,6 +2866,29 @@ function openWorkGroupAccessModal(group,isNew=false){
   <div class="form-row"><label>Scheduling Managers</label><div class="access-person-list">${people.map(p=>`<label><input type="checkbox" data-wg-manager="${p.id}" ${(group.managerIds||[]).includes(p.id)?'checked':''}><span>${escapeHtml(p.name)}</span></label>`).join('')}</div><div class="hint">Managers may modify only this Work Group's schedule, subject to their scheduling abilities.</div></div></div></div>
   <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Save Access</button></div>`;
   openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;document.getElementById('mSave').onclick=()=>{if(!isGlobalScheduleAdmin())return;const name=document.getElementById('fWgName').value.trim();if(!name||(STATE.pm.scheduleWorkGroups||[]).some(g=>g.id!==group.id&&g.name.trim().toLowerCase()===name.toLowerCase())){toast('Enter a unique calendar name.',true);return;}group.name=name;group.active=document.getElementById('fWgActive').checked;group.visibility=document.getElementById('fWgVisibility').value;group.unitNames=[...document.querySelectorAll('[data-wg-unit]:checked')].map(x=>x.dataset.wgUnit);group.viewerIds=[...document.querySelectorAll('[data-wg-viewer]:checked')].map(x=>x.dataset.wgViewer);group.managerIds=[...document.querySelectorAll('[data-wg-manager]:checked')].map(x=>x.dataset.wgManager);if(isNew)STATE.pm.scheduleWorkGroups.push(group);logActivity(`Updated calendar access for ${group.name}.`,'schedule');persist();closeModal();renderScheduling();};
+}
+function calendarDeletionLinks(id){
+  const shiftIds=new Set((STATE.pm.scheduleShifts||[]).filter(s=>(s.workGroupId||'wg_patrol')===id).map(s=>s.id));
+  return Object.entries(STATE.pm).filter(([collection,rows])=>collection!=='scheduleWorkGroups'&&Array.isArray(rows)).flatMap(([collection,rows])=>rows.filter(row=>row&&typeof row==='object'&&(row.workGroupId===id||(row.eligibleWorkGroupIds||[]).includes(id)||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(shiftId=>shiftIds.has(shiftId)))).map(row=>({collection,id:row.id})));
+}
+async function deleteScheduleCalendar(id){
+  const group=(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===id);
+  if(!canManageWorkGroup(group))return;
+  const links=calendarDeletionLinks(id);
+  if(links.length){toast('This calendar has '+links.length+' linked shift patterns or scheduling records. Move or remove them before deleting it.',true);return;}
+  if(!confirm('Delete the '+group.name+' calendar? This removes the calendar and its access settings.'))return;
+  const before=STATE.pm.scheduleWorkGroups.slice();
+  STATE.pm.scheduleWorkGroups=before.filter(g=>g.id!==id);
+  persist();
+  if(!await SuiteStore.flush()){
+    STATE.pm.scheduleWorkGroups=before;
+    persist();
+    toast('Calendar deletion could not be saved. Reload to check for changes made by another user.',true);
+    renderScheduling();return;
+  }
+  SCHED_CAL_WORKGROUPS=SCHED_CAL_WORKGROUPS.filter(groupId=>groupId!==id);
+  logActivity('Deleted work group calendar '+group.name+'.','schedule');persist();
+  toast('Calendar deleted.');renderScheduling();
 }
 function selectedCalendarWorkGroups(){
   const active=visibleScheduleWorkGroups();
@@ -3123,7 +3156,7 @@ function renderRosterSub(){
   wireCollapsibleCards(document.getElementById('schedSubBody'));
   document.getElementById('btnPrintRoster').addEventListener('click', ()=>window.print());
   document.getElementById('btnRosterStaffNotice')?.addEventListener('click', ()=>{
-    sessionStorage.setItem('sonomarzi.staffNotice.return','personnel/scheduling');
+    sessionStorage.setItem('sonomarzi.staffNotice.return','scheduling');
     SuiteUX.navigate('shared/notices');
   });
   document.getElementById('btnRequestSwap').addEventListener('click', ()=>openSwapRequestModal());
@@ -3865,7 +3898,7 @@ function openRequestTimeOffModal(requestableCodes, me){
     const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(me.id,startDate,endDate)||[];
     if(courtConflicts.length){
       const summary=courtConflicts.map(s=>s.caseNumber+' ('+s.courtDate+' '+(s.courtTime||'')+')').join('; ');
-      if(!confirm('Court appearance conflict detected: '+summary+'. You may submit this request, but it cannot be approved until resolved. Continue submitting?'))return;
+      if(!confirm('Court appearance conflict detected: '+summary+'. You may submit this request. Approval requires resolving the conflict or an authorized, documented override. Continue submitting?'))return;
     }
     const button=document.getElementById('mSave');button.disabled=true;
     const result=await SuiteStore.submitSelfServiceRecord('leaveRequests',pendingRecord);
@@ -4718,9 +4751,7 @@ function renderAdmin(){
   if(canManage){
     Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label]));
     tabs.push(['trainingLocations','Training Locations']);
-    tabs.push(['exceptionCodes','Time Off Codes']);
     tabs.push(['personnelSettings','Personnel Settings']);
-    tabs.push(['schedulingSettings','Scheduling Settings']);
     tabs.push(['notifications','Notification Routing']);
   }
   if(can('personnel_bulk_import')) tabs.push(['bulkImportPersonnel','Data Migration: Personnel']);
@@ -4912,23 +4943,23 @@ function renderExceptionCodesTab(body){
     logActivity(`Added time off code "${code} \u2014 ${name}".`, "admin");
     persist();
     toast("Code added.");
-    renderAdminTabBody();
+    renderExceptionCodesTab(body);
   });
-  document.querySelectorAll('[data-toggle-code]').forEach(b=>b.addEventListener('click', ()=>{
+  body.querySelectorAll('[data-toggle-code]').forEach(b=>b.addEventListener('click', ()=>{
     const item = list[Number(b.dataset.toggleCode)];
     item.active = item.active===false ? true : false;
     logActivity(`${item.active?'Reactivated':'Expired'} time off code "${item.code}".`, "admin");
     persist();
-    renderAdminTabBody();
+    renderExceptionCodesTab(body);
   }));
-  document.querySelectorAll('[data-remove-code]').forEach(b=>b.addEventListener('click', ()=>{
+  body.querySelectorAll('[data-remove-code]').forEach(b=>b.addEventListener('click', ()=>{
     const idx = Number(b.dataset.removeCode); const item = list[idx];
     if(usageCount(item.code)>0){ toast(`Can't remove "${item.code}" \u2014 it's in use.`, true); return; }
     if(!confirm(`Delete the "${item.code}" code entirely? This can't be undone.`)) return;
     list.splice(idx,1);
     logActivity(`Deleted time off code "${item.code}".`, "admin");
     persist();
-    renderAdminTabBody();
+    renderExceptionCodesTab(body);
   }));
 }
 
@@ -5047,10 +5078,33 @@ function renderNotificationRoutingTab(body){
 /* =========================================================================
    MODULE ENTRY POINT
    ========================================================================= */
+function schedulingModuleAccess(){
+  return SCHED_TABS.some(tab=>(Array.isArray(tab.ability)?tab.ability:[tab.ability]).some(can));
+}
+function schedulingTabVisible(tab){
+  return (Array.isArray(tab.ability)?tab.ability:[tab.ability]).some(can);
+}
+function renderSchedulingDashboard(){
+  const root=document.getElementById('view-sched-dashboard');
+  const tabs=SCHED_TABS.filter(schedulingTabVisible);
+  root.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">${tabs.map(tab=>`<button type="button" class="panel" data-schedule-area="${tab.key}" style="padding:22px;text-align:left;cursor:pointer;color:var(--heading);font:inherit"><div style="width:30px;height:30px;color:var(--blue);margin-bottom:12px">${ICONS.calendar}</div><strong>${escapeHtml(tab.label)}</strong><div style="font-size:12px;color:var(--text-dim);margin-top:10px">Open ${escapeHtml(tab.label.toLowerCase())}</div></button>`).join('')}${can('pm_admin_categories')&&isGlobalScheduleAdmin()?'<button type="button" class="panel" id="scheduleAdmin" style="padding:22px;text-align:left;cursor:pointer;color:var(--heading);font:inherit"><strong>Administration</strong><div style="font-size:12px;color:var(--text-dim);margin-top:10px">Time off codes and scheduling settings</div></button>':''}</div>`;
+  root.querySelectorAll('[data-schedule-area]').forEach(button=>button.onclick=()=>{SCHED_SUBTAB=button.dataset.scheduleArea;switchView('pm-scheduling');});
+  root.querySelector('#scheduleAdmin')?.addEventListener('click',()=>switchView('sched-settings'));
+}
+function renderSchedulingAdministration(){
+  const root=document.getElementById('view-sched-settings');
+  if(!isGlobalScheduleAdmin()||!can('pm_admin_categories')){root.innerHTML=lockedNote('An agency or platform administrator manages scheduling configuration.');return;}
+  root.innerHTML='<div class="toolbar"><button type="button" class="btn btn-outline" id="scheduleSettings">Scheduling Settings</button><button type="button" class="btn btn-outline" id="scheduleCodes">Time Off Codes</button></div><div id="scheduleAdminBody"></div>';
+  const body=root.querySelector('#scheduleAdminBody');
+  root.querySelector('#scheduleSettings').onclick=()=>renderSchedulingSettingsTab(body);
+  root.querySelector('#scheduleCodes').onclick=()=>renderExceptionCodesTab(body);
+  renderSchedulingSettingsTab(body);
+}
 function startPmModule(){
   renderNav();
   switchView('pm-dashboard');
 }
+window.SCHEDULING = {start:()=>switchView('sched-dashboard'),NAV_ITEMS:SCHEDULING_NAV_ITEMS,switchView,refresh:()=>renderView(ACTIVE_VIEW),hasAccess:schedulingModuleAccess};
 window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openRecordDetail, openSessionDetailModal, openCheckinFlow, renderCalendarSub, readinessCoverageGaps: (days=7)=>computeCoverageGaps(days).filter(g=>canViewScheduleShift(g.shift)) };
 
 })();

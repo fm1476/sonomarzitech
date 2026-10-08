@@ -1014,17 +1014,30 @@ function renderDashboard(){
   hub.innerHTML=destinations.map((item,i)=>`<button class="qm-hub-card" data-qm-destination="${item.id}" style="min-height:140px;text-align:left;padding:19px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:inherit;cursor:pointer;font:inherit;"><div style="color:${['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#20C7D9'][i%5]};width:30px;height:30px;margin-bottom:12px;">${ICONS[item.icon]||ICONS.box}</div><strong style="display:block;color:var(--heading);font-size:16px;margin-bottom:8px;">${escapeHtml(item.label)}</strong><span style="font-size:12px;color:var(--text-dim);line-height:1.45;">${escapeHtml(item.sub)}</span></button>`).join('');
   root.prepend(hub);
   hub.querySelectorAll('[data-qm-destination]').forEach(btn=>btn.onclick=()=>switchView(btn.dataset.qmDestination));
-  // Keep existing customizable widgets, but collapse the lower section by default.
-  const extras=root.querySelector('#dashExtrasZone');
-  if(extras){
-    const details=document.createElement('details');
-    details.style.cssText='border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:14px;';
-    const summary=document.createElement('summary');
-    summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800;';
-    summary.textContent='Quartermaster Status & Activity';
-    extras.parentNode.insertBefore(details,extras);
-    details.append(summary,extras);
-  }
+  const equipment = visibleEquipment();
+  const categories = [...new Set(equipment.map(item=>item.category))].sort();
+  const categoryRows = categories.map(category=>{
+    const items = equipment.filter(item=>item.category===category);
+    return `<tr><td>${escapeHtml(category || 'Uncategorized')}</td><td>${items.length}</td><td>${money(items.reduce((sum,item)=>sum+(Number(item.value)||0),0))}</td></tr>`;
+  }).join('') || '<tr><td colspan="3">No inventory available.</td></tr>';
+  const panels = [
+    ['Inventory by Category', `<div class="panel-body" style="overflow:auto"><table><thead><tr><th>Category</th><th>Assets</th><th>Value</th></tr></thead><tbody>${categoryRows}</tbody></table></div>`],
+    ['Upcoming Maintenance/Inspections', renderWidget('list_open_maintenance')],
+    ['Recent Quartermaster Activity', renderWidget('list_recent_activity')],
+    ['Low Stock Items', renderWidget('list_low_stock')],
+  ];
+  const status = document.createElement('div');
+  status.className = 'qm-status-panels';
+  status.innerHTML = panels.map(([title,content])=>`<details style="border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-bottom:14px"><summary style="padding:16px 20px;cursor:pointer;font-weight:800">${title}</summary><div style="overflow:auto">${content}</div></details>`).join('');
+  const extras = root.querySelector('#dashExtrasZone');
+  extras.before(status);
+  const details = document.createElement('details');
+  details.style.cssText='border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:14px';
+  const summary = document.createElement('summary');
+  summary.style.cssText='padding:16px 20px;cursor:pointer;font-weight:800';
+  summary.textContent='My Customizable Widgets';
+  extras.before(details);
+  details.append(summary,extras);
   wireEqLinks();
   // Every one of these is scoped to `root`, this module's own dashboard container, rather than
   // searched for across the whole document. Every module's dashboard uses the same internal ids

@@ -15,7 +15,12 @@ const MODULE_META = {
   },
   personnel: {
     name:"Personnel Administration", ability:"module_personnel", icon:"idcard",
-    tagline:"HR records, disciplinary tracking, training, scheduling, and workforce analytics.",
+    tagline:"HR records, disciplinary tracking, training, and workforce analytics.",
+  },
+  scheduling: {
+    name:"Scheduling", ability:"pm_schedule_view", icon:"calendar",
+    accessAbilities:["pm_schedule_view","pm_overtime_view","pm_bidding_view","pm_extraduty_view","pm_rollcall_view","pm_leave_request_submit","pm_leave_request_approve"],
+    tagline:"Work group calendars, duty rosters, time off, overtime, bidding, and roll call.",
   },
   k9: {
     name:"K9 Management", ability:"module_k9", icon:"pawprint",
@@ -47,11 +52,16 @@ const MODULE_META = {
   },
 };
 
+function moduleAccess(key){
+  const meta=MODULE_META[key];
+  if(key==='scheduling' && typeof TenantPlatform!=='undefined' && !TenantPlatform.moduleEnabled(key)) return false;
+  return !!meta&&(meta.accessAbilities?meta.accessAbilities.some(can):can(meta.ability));
+}
 function accessibleModules(){
   const enabled = Array.isArray(STATE.enabledModules) ? STATE.enabledModules : [];
   return Object.keys(MODULE_META)
-    .filter(key => can(MODULE_META[key].ability))
-    .filter(key => enabled.length===0 || enabled.includes(key))
+    .filter(key => moduleAccess(key))
+    .filter(key => enabled.length===0 || enabled.includes(key) || (key==='scheduling' && enabled.includes('personnel')))
     .sort((a,b)=>MODULE_META[a].name.localeCompare(MODULE_META[b].name));
 }
 
@@ -607,8 +617,8 @@ const StaffNotices=(()=>{
       root.querySelector('#noticeReturn')?.addEventListener('click',()=>{
         const destination=sessionStorage.getItem('sonomarzi.staffNotice.return');
         sessionStorage.removeItem('sonomarzi.staffNotice.return');
-        if(destination==='personnel/scheduling'){
-          enterModule('personnel');
+        if(destination==='personnel/scheduling'||destination==='scheduling'){
+          enterModule('scheduling');
           PM.switchView('pm-scheduling');
         }
       });
@@ -728,7 +738,7 @@ function showLauncher(){
 }
 
 function enterModule(key){
-  if(!can(MODULE_META[key].ability)){ toast("This role doesn't have access to that module.", true); showLauncher(); return; }
+  if(!moduleAccess(key)){ toast("This role doesn't have access to that module.", true); showLauncher(); return; }
   ACTIVE_MODULE = key;
   document.getElementById('moduleSwitchBar').style.display = '';
   const activeModuleName = document.getElementById('activeModuleName');
@@ -736,13 +746,14 @@ function enterModule(key){
   const dashboardModule = key==='fleet' || key==='drone' || key==='k9' || key==='eod' || key==='personnel';
   activeModuleName.style.cursor = dashboardModule ? 'pointer' : '';
   activeModuleName.title = key==='fleet' ? 'Open Fleet Dashboard' : (key==='drone' ? 'Open Drone Dashboard' : (key==='k9' ? 'Open K9 Dashboard' : (key==='eod' ? 'Open EOD Dashboard' : (key==='personnel' ? 'Open Personnel Dashboard' : ''))));
-  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : (key==='drone' ? ()=>DRONE.switchView('drone-dashboard') : (key==='k9' ? ()=>K9.switchView('k9-dashboard') : (key==='eod' ? ()=>EOD.switchView('eod-dashboard') : (key==='personnel' ? ()=>PERSONNEL.switchView('pm-dashboard') : null))));
+  activeModuleName.onclick = key==='fleet' ? ()=>FLEET.switchView('fleet-dashboard') : (key==='drone' ? ()=>DRONE.switchView('drone-dashboard') : (key==='k9' ? ()=>K9.switchView('k9-dashboard') : (key==='eod' ? ()=>EOD.switchView('eod-dashboard') : (key==='personnel' ? ()=>PM.switchView('pm-dashboard') : null))));
   document.getElementById('qmTenantFooter').style.display = key==='qm' ? '' : 'none';
   document.getElementById('defaultFooter').style.display = key==='qm' ? 'none' : '';
   document.getElementById('navSeparator').style.display = '';
   if(key==='qm') QM.start();
   else if(key==='fleet') FLEET.start();
   else if(key==='personnel') PM.start();
+  else if(key==='scheduling') SCHEDULING.start();
   else if(key==='k9') K9.start();
   else if(key==='drone') DRONE.start();
   else if(key==='eod') EOD.start();
@@ -756,7 +767,7 @@ function enterModule(key){
    ========================================================================= */
 function renderModuleGate(){
   // called after an ability change affecting the currently-active role, to react live
-  if(ACTIVE_MODULE && !can(MODULE_META[ACTIVE_MODULE].ability)){
+  if(ACTIVE_MODULE && !moduleAccess(ACTIVE_MODULE)){
     toast("This role no longer has access to that module.", true);
     showLauncher();
   }
@@ -829,12 +840,13 @@ function renderRoleSwitcherPanel(){
     renderSuiteNav();
     const SHARED_VIEW_ABILITY = { roles:'admin_roles', personnel:'personnel_view', fieldlabels:'manage_field_labels', branding:'manage_branding',
       audit: ()=>can('qm_admin_audit')||can('fleet_admin_audit')||can('pm_admin_audit')||can('k9_admin_audit')||can('drone_admin_audit')||can('eod_admin_audit')||can('subpoena_admin_audit')||can('grants_admin_audit')||can('civil_admin_audit') };
-    if(ACTIVE_MODULE && !can(MODULE_META[ACTIVE_MODULE].ability)){
+    if(ACTIVE_MODULE && !moduleAccess(ACTIVE_MODULE)){
       toast("Switched to a role combination without access to this module.");
       showLauncher();
     } else if(ACTIVE_MODULE==='qm'){ QM.start(); }
     else if(ACTIVE_MODULE==='fleet'){ FLEET.start(); }
     else if(ACTIVE_MODULE==='personnel'){ PM.start(); }
+    else if(ACTIVE_MODULE==='scheduling'){ SCHEDULING.start(); }
     else if(ACTIVE_MODULE==='k9'){ K9.start(); }
     else if(ACTIVE_MODULE==='drone'){ DRONE.start(); }
     else if(ACTIVE_MODULE==='eod'){ EOD.start(); }

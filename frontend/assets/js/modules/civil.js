@@ -3564,7 +3564,7 @@ const FieldTraining=(()=>{
 const SuiteUX = (()=>{
   let route='home', restoring=false, record=null, modalDirty=false, focusReturn=null, lastViews={}, viewScroll={}, activeTab='mine', dashboardCalendar='mine';
   let uiObserver, observerQueued=false, tableSequence=0;
-  const modules=()=>({qm:QM,fleet:FLEET,personnel:PM,k9:K9,drone:DRONE,eod:EOD,subpoena:SUBPOENA,grants:GRANTS,civil:CIVIL,permits:PERMITS});
+  const modules=()=>({qm:QM,fleet:FLEET,personnel:PM,scheduling:SCHEDULING,k9:K9,drone:DRONE,eod:EOD,subpoena:SUBPOENA,grants:GRANTS,civil:CIVIL,permits:PERMITS});
   const esc=escapeHtml;
   const userTimeZone=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch{return 'UTC';}})();
   const pad=n=>String(n).padStart(2,'0');
@@ -3581,7 +3581,7 @@ const SuiteUX = (()=>{
   const isAdmin=()=>!!CURRENT_USER_ID && (SuiteStore.mode()==='shared'?(HOME_ROLE_IDS||[]):(STATE.personnel.find(p=>p.id===CURRENT_USER_ID)?.roleIds||[])).some(id=>['role_admin','role_platform_admin'].includes(id));
   const assignedRoles=()=>SuiteStore.mode()==='shared'?(HOME_ROLE_IDS||[]):(STATE.personnel.find(p=>p.id===CURRENT_USER_ID)?.roleIds||[]);
   const previewing=()=>isAdmin() && [...(STATE.currentRoleIds||[])].sort().join('|')!==[...assignedRoles()].sort().join('|');
-  const permits=(mod,ability)=>can(MODULE_META[mod].ability)&&(!ability||(Array.isArray(ability)?ability.some(can):can(ability)));
+  const permits=(mod,ability)=>moduleAccess(mod)&&(!ability||(Array.isArray(ability)?ability.some(can):can(ability)));
   function metaFor(id){for(const [mod,m] of Object.entries(modules())){const meta=m.NAV_ITEMS.find(n=>n.id===id);if(meta)return {mod,...meta};}return null;}
   function allowedView(id){const m=metaFor(id);return m&&permits(m.mod,m.requiredAbility);}
   function currentPerson(){return STATE.personnel.find(p=>p.id===CURRENT_USER_ID)||{name:'Staff member',unit:''};}
@@ -3593,7 +3593,7 @@ const SuiteUX = (()=>{
   function showCustom(id,title,subtitle){if(!guard())return false;modalDirty=false;leaveRecord();document.getElementById('modalOverlay').classList.remove('open');ACTIVE_MODULE=null;ACTIVE_SHARED_VIEW=id;document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));let el=document.getElementById('view-'+id);if(!el){el=document.createElement('div');el.id='view-'+id;el.className='view';document.getElementById('content').appendChild(el);}el.classList.add('active');document.getElementById('page-title').textContent=title;document.getElementById('page-sub').textContent=subtitle;document.getElementById('navlist').innerHTML='';rememberRoute(id);renderSuiteNav();return el;}
   function button(label,icon,action,cls='quick-action'){const b=document.createElement('button');b.className=cls;b.type='button';b.title=label;b.innerHTML=(ICONS[icon]||'')+'<span>'+esc(label)+'</span>';b.onclick=action;return b;}
   const navGroups=[
-    ['People & Readiness',[['Personnel Administration','pm-records','idcard'],['Training & Qualifications','pm-training','award'],['Schedule','pm-scheduling','calendar']]],
+    ['People & Readiness',[['Personnel Administration','pm-records','idcard'],['Training & Qualifications','pm-training','award'],['Scheduling','scheduling','calendar']]],
     ['Equipment & Fleet',[['Quartermaster','qm-inventory','box'],['Fleet','fleet-vehicles','truck']]],
     ['Specialized Units',[['K9','k9-roster','pawprint'],['UAS','drone-fleet','drone'],['EOD','eod-technicians','bomb']]],
     ['Court & Civil',[['Subpoenas','subpoena','gavel'],['Civil Process','civil','scale']]],
@@ -3707,8 +3707,8 @@ const SuiteUX = (()=>{
     if(permits('qm','qm_equip_view'))for(const a of STATE.qm.assignments.filter(a=>(a.targetId||a.personId)===p.id&&a.status!=='Returned')){const e=STATE.qm.equipment.find(e=>e.id===a.equipmentId);if(e)add('Equipment return · '+e.name,p.name,a.dueDate,'mine',()=>QM.openEquipmentDetail(e.id),'Assigned equipment · '+e.assetId);}
     if(permits('qm','qm_request_approve'))for(const r of STATE.qm.requests.filter(r=>r.status==='Pending'&&(STATE.currentRoleIds.includes(r.approverRoleId)||STATE.currentRoleIds.includes('role_admin'))))add('Review equipment request',personName(r.requesterId||r.personId),r.createdDate,'approvals',()=>go('qm-requests'),r.itemDescription||r.justification||'Approval required');
     if(permits('personnel','pm_training_manage'))for(const r of STATE.pm.trainingRequests.filter(r=>r.status==='Pending'))add('Review training request',personName(r.personId),r.requestDate,'approvals',()=>go('pm-training'),'Course participation approval');
-    if(permits('personnel','pm_leave_request_approve'))for(const r of (STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'))add('Review time-off request',personName(r.personId),r.startDate,'approvals',()=>go('pm-scheduling'),'Requested time off · '+r.code);
-    if(permits('personnel','pm_schedule_manage'))for(const r of (STATE.pm.shiftSwapRequests||[]).filter(r=>r.status==='pending'))add('Review shift swap',personName(r.requesterId),r.date,'approvals',()=>go('pm-scheduling'),'Proposed cover · '+personName(r.coveringId));
+    if(permits('scheduling','pm_leave_request_approve'))for(const r of (STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'))add('Review time-off request',personName(r.personId),r.startDate,'approvals',()=>go('pm-scheduling'),'Requested time off · '+r.code);
+    if(permits('scheduling','pm_schedule_manage'))for(const r of (STATE.pm.shiftSwapRequests||[]).filter(r=>r.status==='pending'))add('Review shift swap',personName(r.requesterId),r.date,'approvals',()=>go('pm-scheduling'),'Proposed cover · '+personName(r.coveringId));
     if(permits('personnel','pm_training_request'))for(const r of (STATE.pm.trainingRequests||[]).filter(r=>r.personId===p.id&&r.status==='Pending'))add('Training request pending',p.name,null,'mine',()=>go('pm-training'),'Awaiting training approval');
     const names={Quartermaster:'qm',Fleet:'fleet',Personnel:'personnel',K9:'k9',Drone:'drone',EOD:'eod',Subpoena:'subpoena',Grants:'grants',Civil:'civil','Licensing & Permits':'permits'};
     for(const n of window.__SUITE_NOTIFS||[]){const mod=names[n.module];if(!mod||!accessibleModules().includes(mod)||(n.readBy||[]).includes(CURRENT_USER_ID))continue;add(n.message,n.module,n.dueDate||n.date||null,'attention',()=>enterModule(mod),'Role-routed notification');}
@@ -3867,7 +3867,7 @@ function pmCollectionCanPersist(collection,roles,roleIds){
   if(roleIds.some(id=>id==='role_admin'||id==='role_platform_admin'))return true;
   const has=ability=>roleIds.some(id=>roles.find(r=>r.id===id)?.abilities?.[ability]===true);
   const schedulingAbilities={
-    scheduleWorkGroups:[],schedulingSettings:[],
+    scheduleWorkGroups:['pm_schedule_manage'],schedulingSettings:[],
     scheduleShifts:['pm_schedule_manage'],scheduleAssignments:['pm_schedule_manage','pm_bidding_manage'],
     scheduleCoverages:['pm_schedule_manage','pm_overtime_manage','pm_leave_request_approve'],
     scheduleExceptions:['pm_schedule_manage','pm_leave_request_approve','pm_bidding_manage'],
@@ -4658,7 +4658,7 @@ const SuiteStore=(()=>{
 /* Install unified shell without duplicating domain workflows. */
 renderSuiteNav=()=>SuiteUX.navigation();
 showLauncher=()=>SuiteUX.home();
-enterModule=function(key){if(!MODULE_META[key]||!can(MODULE_META[key].ability))return;const module=SuiteUX.modules()[key];const remembered=SuiteUX.lastViews[key];const dest=remembered&&SuiteUX.allowedView(remembered)?remembered:module.NAV_ITEMS.find(n=>SuiteUX.allowedView(n.id))?.id;if(dest)SuiteUX.go(dest);};
+enterModule=function(key){if(!MODULE_META[key]||!moduleAccess(key))return;const module=SuiteUX.modules()[key];const remembered=SuiteUX.lastViews[key];const dest=remembered&&SuiteUX.allowedView(remembered)?remembered:module.NAV_ITEMS.find(n=>SuiteUX.allowedView(n.id))?.id;if(dest)SuiteUX.go(dest);};
 loadState=()=>SuiteStore.load();
 persist=()=>SuiteStore.persist();
 setSyncStatus=function(){}; // Status is owned by confirmed storage outcomes in SuiteStore.
@@ -4763,8 +4763,8 @@ async function maybeForcePasswordChange(){ return; }
 const TenantPlatform=(()=>{
   const CATALOG_KEY='pss.platform.catalog.v1';
   const CONTEXT_KEY='pss.platform.context.v1';
-  const MODULE_KEYS=['qm','fleet','personnel','k9','drone','eod','subpoena','grants','civil','permits'];
-  const MODULE_LABELS={qm:'Quartermaster',fleet:'Fleet',personnel:'Personnel',k9:'K9',drone:'UAS',eod:'EOD',subpoena:'Subpoenas',grants:'Grants & Forfeiture',civil:'Civil Process',permits:'Licensing & Permits'};
+  const MODULE_KEYS=['qm','fleet','personnel','scheduling','k9','drone','eod','subpoena','grants','civil','permits'];
+  const MODULE_LABELS={qm:'Quartermaster',fleet:'Fleet',personnel:'Personnel',scheduling:'Scheduling',k9:'K9',drone:'UAS',eod:'EOD',subpoena:'Subpoenas',grants:'Grants & Forfeiture',civil:'Civil Process',permits:'Licensing & Permits'};
   const STATUS_LABELS={provisioning:'Provisioning',setup:'Setup',active:'Active',suspended:'Suspended'};
   let catalog=null,current=null,wizard=null,detailTenantId=null;
   const esc=s=>escapeHtml(s??'');
@@ -4817,7 +4817,7 @@ const TenantPlatform=(()=>{
     // catalog genuinely isn't available to this user, defer to their role instead of denying.
     const t = tenant();
     if(!t || !Array.isArray(t.enabledModules) || !t.enabledModules.length) return true;
-    return t.enabledModules.includes(key);
+    return t.enabledModules.includes(key)||(key==='scheduling'&&t.enabledModules.includes('personnel'));
   }
   function audit(t,action){t.audit.unshift({id:uuid('ta'),at:now(),actor:STATE?.personnel?.find(p=>p.id===CURRENT_USER_ID)?.name||'Platform Admin',action});t.updatedAt=now();save();}
   function contextLabel(){const t=tenant(),a=agency();return a?`${a.abbreviation||a.name} · ${t?.name||''}`:'No agency selected'}

@@ -6,7 +6,7 @@ const key=(collection,id)=>JSON.stringify([collection.split('.'),id]);
 const record=(collection,value,version=1)=>({key:key(collection,value.id),value,version,deleted:false});
 const groups=[{id:'patrol',visibility:'unit',unitNames:['Patrol'],managerIds:['scheduler']},{id:'dispatch',visibility:'unit',unitNames:['Dispatch'],managerIds:['dispatcherScheduler']}];
 const seed=[...groups.map(g=>record('pm.scheduleWorkGroups',g)),record('personnel',{id:'officer',unit:'Patrol'}),record('personnel',{id:'dispatcher',unit:'Dispatch'}),record('pm.scheduleShifts',{id:'p',workGroupId:'patrol',daysOn:4,daysOff:4}),record('pm.scheduleShifts',{id:'d',workGroupId:'dispatch',daysOn:4,daysOff:4}),record('pm.overtimeOpportunities',{id:'ot',shiftId:'p',date:'2026-10-10',status:'open',requests:[]}),record('pm.extraDutyJobs',{id:'job',workGroupId:'patrol',status:'open',slots:1}),record('pm.extraDutySignups',{id:'s1',jobId:'job',personId:'officer',status:'pending'}),record('pm.extraDutySignups',{id:'s2',jobId:'job',personId:'dispatcher',status:'pending'})];
-let database=new Map(seed.map(r=>[r.key,r])),working=null,workspace,abilities,commands=[];
+let database=new Map(seed.map(r=>[r.key,r])),working=null,workspace,abilities,commands=[],auditEntries=[];
 const clone=rows=>new Map([...rows].map(([k,v])=>[k,structuredClone(v)]));
 const client={query:async(sql,parameters=[])=>{
   commands.push(sql);
@@ -14,6 +14,9 @@ const client={query:async(sql,parameters=[])=>{
   if(sql==='COMMIT'){database=working;working=null;return {rows:[]};}
   if(sql==='ROLLBACK'){working=null;return {rows:[]};}
   if(sql.includes('pg_advisory_xact_lock'))return {rows:[]};
+  if(sql.includes('SELECT key,value FROM suite_records'))return {rows:[...working.values()].filter(r=>!r.deleted)};
+  if(sql.includes('CREATE TABLE IF NOT EXISTS suite_activity_log'))return {rows:[]};
+  if(sql.includes('INSERT INTO suite_activity_log')){auditEntries.push(parameters);return {rows:[]};}
   if(sql.includes('SELECT key, value, deleted'))return {rows:[...working.values()].filter(r=>!r.deleted)};
   if(sql.includes('SELECT version, deleted, value'))return {rows:working.has(parameters[2])?[working.get(parameters[2])]:[]};
   if(sql.includes('INSERT INTO suite_records')||sql.includes('UPDATE suite_records')){
@@ -104,3 +107,40 @@ result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportuniti
 result=await act('officer',['pm_overtime_optin'],[change('pm.records',{id:'officerSkills',personId:'officer',specialSkills:['Fire Dispatch']}),change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);
 assert.equal(result.status,403);assert.deepEqual(Array.from(database.get(key('pm.records','officerSkills')).value.specialSkills),['Law Dispatch','Call Taking']);assert.equal(database.get(key('pm.overtimeOpportunities',typedOt.id)).value.requests.length,0);
 console.log('API category assignments, multi-skill eligibility, skill-write locking, ineligible overtime, and forged skill-grant rollback passed.');
+
+// Court/leave validation executes inside the real API transaction.
+const court={id:'court1',personId:'officer',courtDate:'2105-04-10',status:'Active'};
+const leave={id:'leave1',personId:'officer',startDate:'2105-04-10',endDate:'2105-04-11',code:'VAC',status:'pending'};
+database.set(key('subpoena.subpoenas',court.id),record('subpoena.subpoenas',court));
+database.set(key('pm.leaveRequests',leave.id),record('pm.leaveRequests',leave));
+result=await act('admin',[],[change('pm.leaveRequests',{...leave,status:'approved'})],true);
+assert.equal(result.status,403);assert.equal(database.get(key('pm.leaveRequests',leave.id)).value.status,'pending');
+const exception={id:'courtLeaveException',personId:'officer',code:'VAC',startDate:leave.startDate,endDate:leave.endDate};
+const override={reason:'Court coordinator approved alternate coverage',approvedBy:'admin',subpoenas:[{id:court.id}]};
+result=await act('admin',[],[change('pm.leaveRequests',{...leave,status:'approved',exceptionId:exception.id,courtConflictOverride:{...override,approvedBy:'forged'}}),change('pm.scheduleExceptions',exception)],true);
+assert.equal(result.status,403);assert(!database.has(key('pm.scheduleExceptions',exception.id)));
+result=await act('admin',[],[change('pm.leaveRequests',{...leave,status:'approved',exceptionId:exception.id,courtConflictOverride:override}),change('pm.scheduleExceptions',exception)],true);
+assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(auditEntries.length,1);assert(auditEntries[0][8].includes(court.id));assert(auditEntries[0][8].includes(override.reason));
+assert(commands.findIndex(c=>c.includes('court-leave')||c.includes('pg_advisory_xact_lock'))<commands.findIndex(c=>c.includes('SELECT key,value')));
+const newCourt={...court,id:'court2'};
+result=await act('admin',[],[change('subpoena.subpoenas',newCourt)],true);assert.equal(result.status,403);assert(!database.has(key('subpoena.subpoenas',newCourt.id)));
+result=await act('admin',[],[change('subpoena.subpoenas',{...newCourt,assignmentConflictPending:true})],true);assert.equal(result.status,200,JSON.stringify(result.body));
+result=await act('admin',[],[change('pm.scheduleExceptions',{...exception,id:'bypass'})],true);assert.equal(result.status,403);assert(!database.has(key('pm.scheduleExceptions','bypass')));
+console.log('Court conflict rejection, documented approval override, audit recording, subpoena intake flag, and direct exception bypass checks passed.');
+
+// Calendar deletion is scoped to assigned managers and rejects linked history.
+const emptyCalendar={id:'emptyCalendar',name:'Unused',active:true,managerIds:['scheduler'],visibility:'selected'};
+const inactiveCalendar={...emptyCalendar,id:'inactiveCalendar',active:false};
+for(const calendar of [emptyCalendar,inactiveCalendar])database.set(key('pm.scheduleWorkGroups',calendar.id),record('pm.scheduleWorkGroups',calendar));
+const removeCalendar=calendar=>({...change('pm.scheduleWorkGroups',calendar),deleted:true});
+result=await act('dispatcherScheduler',['pm_schedule_manage'],[removeCalendar(emptyCalendar)]);assert.equal(result.status,403);assert(database.has(key('pm.scheduleWorkGroups',emptyCalendar.id)));
+result=await act('scheduler',[],[removeCalendar(emptyCalendar)]);assert.equal(result.status,403);
+result=await act('scheduler',['pm_schedule_manage'],[removeCalendar(groups[0])]);assert.equal(result.status,403);assert(!database.get(key('pm.scheduleWorkGroups','patrol')).deleted);
+database.set(key('pm.scheduleWorkGroups','$order'),{key:key('pm.scheduleWorkGroups','$order'),value:['patrol','dispatch','emptyCalendar','inactiveCalendar'],version:1,deleted:false});
+result=await act('scheduler',['pm_schedule_manage'],[removeCalendar(emptyCalendar),{key:key('pm.scheduleWorkGroups','$order'),value:['patrol','inactiveCalendar'],deleted:false}]);
+assert.equal(result.status,200,JSON.stringify(result.body));assert(database.get(key('pm.scheduleWorkGroups',emptyCalendar.id)).deleted);assert(database.get(key('pm.scheduleWorkGroups','$order')).value.includes('dispatch'));
+result=await act('scheduler',['pm_schedule_manage'],[removeCalendar(inactiveCalendar)]);assert.equal(result.status,200,JSON.stringify(result.body));
+const adminCalendar={...emptyCalendar,id:'adminCalendar',managerIds:[]};database.set(key('pm.scheduleWorkGroups',adminCalendar.id),record('pm.scheduleWorkGroups',adminCalendar));
+result=await act('admin',[],[removeCalendar(adminCalendar)],true);assert.equal(result.status,200,JSON.stringify(result.body));
+result=await act('admin',[],[change('pm.scheduleShifts',{id:'lateShift',workGroupId:adminCalendar.id})],true);assert.equal(result.status,403);assert(!database.has(key('pm.scheduleShifts','lateShift')));
+console.log('Calendar deletion: assigned manager and admin access, other-manager denial, linked-history protection, inactive calendars, hidden order preservation, and stale calendar reference rejection passed.');

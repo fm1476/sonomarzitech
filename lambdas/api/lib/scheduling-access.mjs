@@ -90,7 +90,17 @@ export function recordGroupIds(collection, value, snapshot) {
 }
 export const scopedScheduleCollections = new Set(['pm.scheduleShifts', 'pm.scheduleAssignments', 'pm.scheduleCoverages', 'pm.overtimeOpportunities', 'pm.specialEvents','pm.leaveRequests','pm.scheduleExceptions','pm.shiftSwapRequests','pm.rollCalls','pm.otCallbackOptIns','pm.bidCycles','pm.extraDutyJobs','pm.extraDutySignups']);
 export function scheduleWriteDecision(collection, change, before, snapshot, personId, hasAbility, batch = []) {
-  if (['pm.scheduleWorkGroups','pm.schedulingSettings'].includes(collection)) return {allowed:false, error:'Only an agency or platform administrator can configure calendar access.'};
+  if(collection==='pm.scheduleWorkGroups') {
+    if(change.itemId==='$order') {
+      if(change.deleted||!Array.isArray(change.value))return {allowed:false};
+      const prior=Array.isArray(before)?before:[];
+      const removed=prior.filter(id=>!change.value.includes(id)&&batch.some(c=>c.path.join('.')===collection&&c.itemId===id&&c.deleted));
+      const permitted=id=>{const group=(snapshot[collection]||[]).find(g=>g.id===id);return group&&(group.managerIds||[]).includes(personId)&&hasAbility('pm_schedule_manage')&&batch.some(c=>c.path.join('.')===collection&&c.itemId===id&&c.deleted);};
+      return {allowed:removed.length>0&&removed.every(permitted)&&change.value.every(id=>prior.includes(id))};
+    }
+    return {allowed:!!before&&change.deleted&&hasAbility('pm_schedule_manage')&&(before.managerIds||[]).includes(personId),error:'Only administrators configure calendar access; assigned schedulers may delete their calendars.'};
+  }
+  if(collection==='pm.schedulingSettings')return {allowed:false,error:'Only an agency or platform administrator can configure scheduling settings.'};
   if (!scopedScheduleCollections.has(collection)) return null;
   const groups = snapshot['pm.scheduleWorkGroups'] || [];
   if(collection==='pm.otCallbackOptIns') {
@@ -294,6 +304,18 @@ export function validateSchedulingBatch(snapshot,changes) {
   }
   const fail=message=>{const error=new Error(message);error.code='42501';throw error;};
   const uniquePeople=rows=>new Set(rows.map(r=>r.personId)).size===rows.length;
+  const deletedGroups=changes.filter(c=>c.path.join('.')==='pm.scheduleWorkGroups'&&c.deleted&&!c.itemId.startsWith('$')).map(c=>c.itemId);
+  for(const id of deletedGroups){
+    const shiftIds=new Set((snapshot['pm.scheduleShifts']||[]).filter(s=>(s.workGroupId||'wg_patrol')===id).map(s=>s.id));
+    const linked=Object.entries(final).some(([collection,rows])=>collection.startsWith('pm.')&&collection!=='pm.scheduleWorkGroups'&&rows.some(row=>row.workGroupId===id||(row.eligibleWorkGroupIds||[]).includes(id)||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(shiftId=>shiftIds.has(shiftId))));
+    if(linked)fail('Calendar still has linked shift patterns or scheduling records. Move or remove those records before deleting the calendar.');
+  }
+  for(const change of changes){
+    if(change.deleted||change.itemId.startsWith('$')||!scopedScheduleCollections.has(change.path.join('.')))continue;
+    const ids=[...(change.value?.workGroupId?[change.value.workGroupId]:[]),...(change.value?.eligibleWorkGroupIds||[])];
+    if(ids.some(id=>!(final['pm.scheduleWorkGroups']||[]).some(g=>g.id===id)))fail('The selected calendar no longer exists. Reload before saving.');
+  }
+
   for(const change of changes) {
     const collection=change.path.join('.'),value=change.value;
     if(collection==='pm.bidCycles' && !change.itemId.startsWith('$')) {
