@@ -982,13 +982,14 @@ function openGrantFormModal(existingId){
         recordFieldChangeGrants(g,field,g[field],data[field]);
         logActivity(`Updated grant "${grantName}" field ${field}.`, "grant", g.id);
       });
+      const restrictedChanged = confidentialFields.some(field=>JSON.stringify(g[field] ?? null)!==JSON.stringify(data[field] ?? null));
       confidentialFields.forEach(field=>{
         if(JSON.stringify(g[field] ?? null)===JSON.stringify(data[field] ?? null)) return;
         g.fieldHistory.push({date:fmt(new Date()),field,before:'(withheld)',after:'(withheld)',changedBy:personName(CURRENT_USER_ID)});
         logActivity(`Updated grant "${grantName}" restricted field ${field} (values withheld).`, "grant", g.id);
       });
       Object.assign(g, data);
-      if(!changes.length && confidentialFields.every(field=>JSON.stringify(g[field] ?? null)===JSON.stringify(data[field] ?? null))) logActivity(`Saved grant award "${grantName}".`, "grant", g.id);
+      if(!changes.length && !restrictedChanged) logActivity(`Saved grant award "${grantName}".`, "grant", g.id);
       toast("Grant award saved.");
     } else {
       const newG = {id:'gr'+Date.now(), samRegistrationCurrent:true, fundedEquipment:[], fieldHistory:[], ...data};
