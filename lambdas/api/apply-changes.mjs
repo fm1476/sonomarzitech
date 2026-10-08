@@ -365,6 +365,25 @@ async function applyChanges(client, auth, body) {
         );
       }
 
+      if(change.path.join('.')==='pm.leaveRequests' && !change.deleted &&
+         change.value?.status==='approved' && change.value?.courtConflictOverride?.reason){
+        const prior=existing.rows[0]?.value;
+        if(prior?.status==='pending'){
+          const override=change.value.courtConflictOverride;
+          await client.query(
+            `INSERT INTO suite_activity_log
+               (tenant_id,agency_id,actor_user_id,actor_person_id,actor_email,actor_name,module,entity_type,description)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [tenantId,agencyId,auth.userId,workspaceAuth.personId||null,auth.email||null,auth.displayName||auth.email||'Authorized approver',
+             'Scheduling','court_leave_override',
+             ('Court conflict override for leave request '+String(change.value.id||change.itemId)+
+             '; employee '+String(change.value.personId)+
+             '; subpoena IDs '+(override.subpoenas||[]).map(s=>String(s.id)).join(', ')+
+             '; reason: '+String(override.reason)).slice(0,4000)]
+          );
+        }
+      }
+
       results.push({
         key: change.key,
         version: nextVersion
