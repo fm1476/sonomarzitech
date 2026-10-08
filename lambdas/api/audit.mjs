@@ -174,6 +174,20 @@ async function auditLogApi(client, auth, body, event) {
 
   await ensureAuditSchema(client);
 
+  if (action === 'auth_event') {
+    const eventType = String(body?.eventType || '');
+    if (!['login_success', 'logout'].includes(eventType)) {
+      return response(400,{success:false,error:'Unsupported authentication audit event.'});
+    }
+    const inserted = await appendAuditEvent(client,auth,{
+      tenantId,agencyId,personId:workspaceAuth.personId,
+      module:'Authentication',entityType:eventType,
+      description:eventType==='login_success'?'Successful sign-in':'User signed out',
+      ipAddress:requestSourceIp(event)
+    });
+    return response(200,{success:true,data:inserted});
+  }
+
   if (action === 'log') {
     const moduleName = String(body?.module || 'Shared').trim().slice(0, 100);
     const entityType = String(body?.entityType || body?.entity_type || 'general')
