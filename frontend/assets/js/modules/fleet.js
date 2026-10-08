@@ -889,10 +889,10 @@ function renderDashboard(){
       ${dashboardDestinations.map((item,index)=>`<button class="fleet-hub-card" data-nav-dest="${item.id}"><div class="fleet-hub-icon" style="color:${hubColors[index%hubColors.length]};">${ICONS[item.icon]||ICONS.truck}</div><div class="fleet-hub-title">${escapeHtml(item.label)}</div><div class="fleet-hub-sub">${escapeHtml(item.sub)}</div></button>`).join('')}
     </div>
     <div class="fleet-kpi-grid" id="dashTopZone">${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}</div>
-    <div class="fleet-status-board">
-      <div class="fleet-status-head"><div><div style="font-size:16px;font-weight:800;color:var(--heading);">Fleet Status Board</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:3px;">Live operational status of every vehicle</div></div><div style="font-size:12px;color:var(--text-dim);">${vehicles.length} vehicles</div></div>
+    <details class="fleet-status-board">
+      <summary class="fleet-status-head" style="cursor:pointer;list-style:none;"><div><div style="font-size:16px;font-weight:800;color:var(--heading);">Fleet Status Board</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:3px;">Live operational status of every vehicle</div></div><div style="font-size:12px;color:var(--text-dim);">${vehicles.length} vehicles · Click to expand ▾</div></summary>
       <div class="fleet-status-grid">${statusCards||'<div style="color:var(--text-dim);padding:8px;">No vehicles available.</div>'}</div>
-    </div>
+    </details>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Additional dashboard widgets can be rearranged and customized for your account.</div>
       <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
