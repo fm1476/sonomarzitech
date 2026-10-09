@@ -568,7 +568,7 @@ function renderDashboard(){
     </div>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
-      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
+      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout||""} Add / Remove Widgets</button>
     </div>
     <div class="stat-grid" id="dashTopZone">
       ${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}
@@ -685,7 +685,6 @@ function renderRoster(){
           <option value="status" ${s.key==='status'?'selected':''}>Sort: Status</option>
         </select>
       </div>
-      <button type="button" class="btn btn-outline" id="btnK9DefaultView">Default View</button>
       ${canEdit ? `<button class="btn btn-primary" id="btnAddK9">${ICONS.plus} Add K9</button>` : ''}
     </div>
     <div class="k9-card-grid">${cards}</div>
@@ -695,11 +694,6 @@ function renderRoster(){
   document.getElementById('rosterStatus').addEventListener('change', e=>{ROSTER_FILTER.status=e.target.value; renderRoster();});
   document.getElementById('rosterSkill').addEventListener('change', e=>{ROSTER_FILTER.skill=e.target.value; renderRoster();});
   document.getElementById('rosterSortKey').addEventListener('change', e=>{ROSTER_SORT.key=e.target.value; ROSTER_SORT.dir='asc'; renderRoster();});
-  document.getElementById('btnK9DefaultView')?.addEventListener('click',()=>{
-    ROSTER_FILTER={q:'',status:'All',skill:'All'};
-    ROSTER_SORT={key:'name',dir:'asc'};
-    renderRoster();
-  });
   const addBtn = document.getElementById('btnAddK9');
   if(addBtn) addBtn.addEventListener('click', ()=>openK9FormModal(null));
   document.querySelectorAll('[data-edit-k9]').forEach(b=>b.addEventListener('click', ()=>openK9FormModal(b.dataset.editK9)));
