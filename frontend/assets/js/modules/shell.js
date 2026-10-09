@@ -760,6 +760,7 @@ function enterModule(key){
   else if(key==='subpoena') SUBPOENA.start();
   else if(key==='grants') GRANTS.start();
   else if(key==='civil') CIVIL.start();
+  else if(key==='permits') PERMITS.start();
 }
 
 /* =========================================================================

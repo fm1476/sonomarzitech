@@ -509,7 +509,7 @@ function renderDashboard(){
     </div>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Drag the handle on any card to rearrange it. This layout is saved to your account only.</div>
-      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
+      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout||""} Add / Remove Widgets</button>
     </div>
     <div class="stat-grid" id="dashTopZone">
       ${prefs.topOrder.map(id=>renderTopWidget(id)).join('')}
