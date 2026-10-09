@@ -64,8 +64,8 @@ const before=JSON.stringify(ui.STATE.pm);
 assert.equal(ui.runBidAward(ui.STATE.pm.bidCycles[0]),false);assert.equal(JSON.stringify(ui.STATE.pm),before);
 console.log('Actual browser award action: linked roster application, no duplicate rerun, and unchanged state on scope failure passed.');
 
-const civil=fs.readFileSync('frontend/assets/js/modules/civil.js','utf8');
-const save={};vm.createContext(save);vm.runInContext(civil.slice(civil.indexOf('function schedulingSaveBatches('),civil.indexOf('function pmCollectionCanPersist(')),save);
+const store=fs.readFileSync('frontend/assets/js/modules/suite-store.js','utf8');
+const save={};vm.createContext(save);vm.runInContext(store.slice(store.indexOf('function schedulingSaveBatches('),store.indexOf('function pmCollectionCanPersist(')),save);
 const large=Array.from({length:150},(_,i)=>({key:key('pm.scheduleAssignments','a'+i)}));
 const mixed=[...Array.from({length:70},(_,i)=>({key:key('fleet.vehicles','v'+i)})),...large,{key:key('pm.bidCycles','cycle')}];
 const batches=save.schedulingSaveBatches(mixed);

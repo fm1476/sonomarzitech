@@ -157,7 +157,7 @@ for(const pattern of [{daysOn:3,daysOff:4},{daysOn:4,daysOff:4},{patternType:'we
 }
 assert.equal(decision('pm.schedulingSettings',{fatigueThresholdHours:8},null,'scheduler',['pm_schedule_manage']).allowed,false);
 console.log('Bidding, extra duty, atomic approval, race replay, and rotation parity checks passed.');
-const storeSource=fs.readFileSync('frontend/assets/js/modules/civil.js','utf8');
+const storeSource=fs.readFileSync('frontend/assets/js/modules/suite-store.js','utf8');
 vm.runInContext(storeSource.slice(storeSource.indexOf('function pmCollectionCanPersist('),storeSource.indexOf('const SuiteStore=')),context);
 const roleFixtures=[{id:'officer',abilities:{pm_overtime_optin:true,pm_leave_request_submit:true,pm_bidding_submit:true,pm_extraduty_signup:true}},{id:'namedScheduler',abilities:{pm_schedule_manage:true}},{id:'personnelManager',abilities:{personnel_manage:true}},{id:'viewer',abilities:{pm_schedule_view:true}}];
 for(const collection of ['overtimeOpportunities','otCallbackOptIns','leaveRequests','shiftSwapRequests','bidCycles','extraDutySignups'])assert.equal(context.pmCollectionCanPersist(collection,roleFixtures,['officer']),true);

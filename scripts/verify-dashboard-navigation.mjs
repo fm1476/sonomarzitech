@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-const source=fs.readFileSync('frontend/assets/js/modules/civil.js','utf8');
+const source=fs.readFileSync('frontend/assets/js/modules/suite-ux.js','utf8');
+const suiteShell=fs.readFileSync('frontend/assets/js/modules/suite-shell.js','utf8');
 class Element {
   constructor(tag){this.tagName=tag;this.children=[];this.style={};this.dataset={};this.className='';this.parentElement=null;this.classList={add:()=>{},remove:()=>{},contains:()=>false};}
   append(...children){for(const child of children){child.parentElement=this;this.children.push(child);}}
@@ -40,7 +41,7 @@ context.route='shared/notices';context.navigation();assert(nodes.suiteNav.childr
 context.SuiteStore.mode=()=> 'local';context.navigation();assert(!descendants(nodes.suiteNav).some(n=>n.id==='staffNoticesNav'));
 console.log('Staff Notices first-position, unread badge, inbox navigation, active state, and removed Shared tools heading checks passed.');
 // Module entry always opens the permitted dashboard, even with an old remembered subview.
-const entryLine=source.split('\n').find(line=>line.startsWith('enterModule=function(key)'));
+const entryLine=suiteShell.split('\n').find(line=>line.startsWith('enterModule=function(key)'));
 let destination=null;
 context.moduleAccess=()=>true;context.SuiteUX={modules:()=>views,lastViews:{fleet:'fleet-vehicles'},allowedView:()=>true,go:id=>{destination=id;}};
 vm.runInContext(entryLine,context);context.enterModule('fleet');assert.equal(destination,'fleet-dashboard');context.enterModule('scheduling');assert.equal(destination,'sched-dashboard');
