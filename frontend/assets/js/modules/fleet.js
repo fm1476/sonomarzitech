@@ -895,7 +895,7 @@ function renderDashboard(){
     </details>
     <div class="toolbar">
       <div style="font-size:12px;color:var(--text-dim);">Additional dashboard widgets can be rearranged and customized for your account.</div>
-      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout} Add / Remove Widgets</button>
+      <button class="btn btn-primary btn-sm" id="btnCustomizeDashboard">${ICONS.layout||""} Add / Remove Widgets</button>
     </div>
     <div class="dash-extras-zone" id="dashExtrasZone">${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}</div>
   `;
