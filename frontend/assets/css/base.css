@@ -435,7 +435,9 @@
     display:none;align-items:flex-start;justify-content:center;z-index:100;
     padding:18px 16px;overflow-y:auto;
   }
-  .modal-overlay.open{display:flex;}
+  .modal-overlay.open{display:flex;align-items:center;}
+  .modal-overlay.open .modal{max-height:calc(100dvh - 36px);overflow-y:auto;}
+  
   .modal{
     background:var(--surface);border-radius:8px;width:100%;max-width:640px;
     box-shadow:0 10px 40px rgba(0,0,0,0.25);
