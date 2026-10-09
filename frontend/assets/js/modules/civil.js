@@ -4758,6 +4758,7 @@ async function maybeForcePasswordChange(){ return; }
 
 /* Saved filter views and table paging use device preferences, never agency records. */
 (()=>{
+ const selectedViews=new Map();
  const base=SuiteUX.enhance;
  SuiteUX.enhance=function(){base();const active=document.querySelector('.view.active');if(!active)return;
   const filters=[...active.querySelectorAll('.toolbar .filters input[id]:not(.searchable-select-input),.toolbar .filters select[id]')];
@@ -4803,8 +4804,12 @@ async function maybeForcePasswordChange(){ return; }
     remove.title='Delete selected saved view';
     remove.hidden=true;
     const updateRemove=()=>{remove.hidden=select.value==='';};
+    const previous=selectedViews.get(active.id);
+    if(previous!==undefined&&previous!==''&&saved[Number(previous)])select.value=previous;
+    updateRemove();
     select.onchange=()=>{
-      if(select.value===''){applyValues(defaults);updateRemove();return;}
+      selectedViews.set(active.id,select.value);
+      if(select.value===''){updateRemove();applyValues(defaults);return;}
       const view=saved[Number(select.value)];
       if(view?.values)applyValues(view.values);
       updateRemove();
@@ -4818,17 +4823,15 @@ async function maybeForcePasswordChange(){ return; }
       if(!view)return;
       const box=document.getElementById('modalBox');
       box.className='modal';
-      box.innerHTML='<div class="modal-head"><h3>Delete saved view?</h3><button type="button" class="modal-close" id="savedViewDeleteClose" aria-label="Close">×</button></div><div class="modal-body"><p id="savedViewDeleteMessage"></p><p>This removes only the saved filter preset. No agency records will be deleted.</p></div><div class="modal-foot"><button type="button" class="btn btn-outline" id="savedViewDeleteCancel">Cancel</button><button type="button" class="btn btn-danger" id="savedViewDeleteConfirm">Delete view</button></div>';
+      box.innerHTML='<style>.modal-overlay:has(#savedViewDeleteConfirm){align-items:center}</style><div class="modal-head"><h3>Delete saved view?</h3><button type="button" class="modal-close" id="savedViewDeleteClose" aria-label="Close">×</button></div><div class="modal-body"><p id="savedViewDeleteMessage"></p><p>This removes only the saved filter preset. No agency records will be deleted.</p></div><div class="modal-foot"><button type="button" class="btn btn-outline" id="savedViewDeleteCancel">Cancel</button><button type="button" class="btn btn-danger" id="savedViewDeleteConfirm">Delete view</button></div>';
       document.getElementById('savedViewDeleteMessage').textContent='Delete "'+view.name+'"?';
-      const overlay=document.getElementById('modalOverlay');
-      const priorAlignment=overlay.style.alignItems;
-      overlay.style.alignItems='center';
       SuiteUX.openModal();
-      const dismiss=()=>{SuiteUX.clearDirty();closeModal();overlay.style.alignItems=priorAlignment;};
+      const dismiss=()=>{SuiteUX.clearDirty();closeModal();};
       document.getElementById('savedViewDeleteClose').onclick=dismiss;
       document.getElementById('savedViewDeleteCancel').onclick=dismiss;
       document.getElementById('savedViewDeleteConfirm').onclick=()=>{
         SuiteUX.preferences.set(key,saved.filter((_,i)=>i!==index));
+        selectedViews.delete(active.id);
         dismiss();
         bar.remove();
         SuiteUX.enhance();
@@ -4850,6 +4853,7 @@ async function maybeForcePasswordChange(){ return; }
         const name=document.getElementById('savedViewName').value.trim();
         if(!name){document.getElementById('savedViewName').focus();return;}
         SuiteUX.preferences.set(key,[{name,values},...saved.filter(view=>view.name!==name)].slice(0,12));
+        selectedViews.delete(active.id);
         SuiteUX.clearDirty();closeModal();bar.remove();SuiteUX.enhance();
         toast('Filter view saved on this device.');
       };
