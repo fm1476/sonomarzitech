@@ -737,6 +737,17 @@ function showLauncher(){
   });
 }
 
+function resetModuleDashboardScroll(){
+  // #content owns the desktop/mobile workspace scroll; reset it when switching modules.
+  const content=document.getElementById('content');
+  if(content){
+    content.scrollTo({top:0,left:0,behavior:'instant'});
+    content.scrollTop=0;
+  }
+  // Also clear document scrolling for narrow-screen layouts.
+  window.scrollTo({top:0,left:0,behavior:'instant'});
+}
+
 function enterModule(key){
   if(!moduleAccess(key)){ toast("This role doesn't have access to that module.", true); showLauncher(); return; }
   ACTIVE_MODULE = key;
@@ -761,6 +772,7 @@ function enterModule(key){
   else if(key==='grants') GRANTS.start();
   else if(key==='civil') CIVIL.start();
   else if(key==='permits') PERMITS.start();
+  resetModuleDashboardScroll();
 }
 
 /* =========================================================================
