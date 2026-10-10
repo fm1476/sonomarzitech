@@ -2908,7 +2908,10 @@ function applyTheme(theme){
     icon.innerHTML = theme === 'dark' ? ICONS.moon : ICONS.sun;
     label.textContent = theme === 'dark' ? 'Night mode' : 'Day mode';
     knob.style.left = theme === 'dark' ? '20px' : '2px';
-    toggleBtn.style.background = theme === 'dark' ? 'var(--blue)' : 'rgba(255,255,255,0.15)';
+    toggleBtn.style.background = theme === 'dark' ? 'var(--blue)' : '#aebed3';
+    toggleBtn.style.boxShadow = theme === 'dark' ? 'inset 0 0 0 1px rgba(255,255,255,0.2)' : 'inset 0 0 0 1px #7388a7';
+    knob.style.background = '#ffffff';
+    knob.style.boxShadow = '0 1px 3px rgba(0,0,0,0.28)';
     toggleBtn.setAttribute('aria-checked', theme === 'dark');
   }
   // charts read colors live from CSS variables at render time, but already-drawn
