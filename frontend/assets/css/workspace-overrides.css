@@ -147,3 +147,30 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
   width:19px !important;
   height:19px !important;
 }
+
+
+/* Keep all top-right toolbar controls the same rendered height as the bell.
+   Height is fixed at 44px CSS pixels, including borders and padding, at all zoom levels. */
+#topbar .role-switch .suite-search,
+#topbar .role-switch #btnRoleSwitcher,
+#topbar .role-switch #btnProfileToggle {
+  box-sizing:border-box;
+  height:44px;
+  min-height:44px;
+  max-height:44px;
+  margin-top:0;
+  margin-bottom:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+#topbar .role-switch .suite-search {
+  justify-content:space-between;
+  padding-top:0;
+  padding-bottom:0;
+}
+#topbar .role-switch #btnRoleSwitcher,
+#topbar .role-switch #btnProfileToggle {
+  padding-top:0;
+  padding-bottom:0;
+}
