@@ -176,7 +176,7 @@ const SuiteUX = (()=>{
         if(!recordAllowed(r))continue;
         const title=recordTitle(r);
         const haystack=[title,d.assetId,d.serialNumber,d.vin,d.licensePlate,d.badgeNumber,d.employeeId,d.caseNumber].filter(Boolean).join(' ').toLowerCase();
-        if(haystack.includes(q))entries.push({title,sub:MODULE_META[mod].name+' · '+(d.assetId||d.badgeNumber||d.caseNumber||id),action:()=>dispatchRecord(r)});
+        if(haystack.includes(q))entries.push({title,sub:MODULE_META[mod].name+' · '+(d.assetId||d.badgeNumber||d.caseNumber||id),recordKey:mod+'|'+kind+'|'+id,action:()=>dispatchRecord(r)});
       }
     }
     return entries.slice(0,20);
