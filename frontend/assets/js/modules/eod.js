@@ -518,6 +518,9 @@ function renderDashboard(){
       ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
     </div>
   `;
+  // Show operational metrics and analytics before module navigation.
+  const navHub=root.querySelector('.eod-hub-grid');
+  if(navHub)root.append(navHub);
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
   destroyChartsEod();
   if(prefs.extras.some(e=>e.id==='chart_incidents_by_type')){
