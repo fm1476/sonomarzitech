@@ -366,7 +366,7 @@ function renderDashboard(){
   const hub=document.createElement('div');
   hub.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;margin-bottom:20px';
   hub.innerHTML=destinations.map((item,i)=>`<button data-nav-dest="${item.id}" style="min-height:132px;padding:18px;text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:inherit;font:inherit;cursor:pointer"><div style="color:${['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#20C7D9'][i%5]};width:28px;height:28px;margin-bottom:12px">${ICONS[item.icon]||ICONS.filetext}</div><strong style="display:block;color:var(--heading);font-size:16px;margin-bottom:8px">${escapeHtml(item.label)}</strong><span style="font-size:12px;color:var(--text-dim)">${escapeHtml(item.sub)}</span></button>`).join('');
-  root.prepend(hub);
+  root.append(hub);
   const extras=root.querySelector('#dashExtrasZone');
   if(extras){
     const details=document.createElement('details');

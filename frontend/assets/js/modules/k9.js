@@ -577,6 +577,9 @@ function renderDashboard(){
       ${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}
     </div>
   `;
+  // Show operational metrics and analytics before module navigation.
+  const navHub=root.querySelector('.k9-hub-grid');
+  if(navHub)root.append(navHub);
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.navDest)));
   destroyChartsK9();
   if(prefs.extras.some(e=>e.id==='chart_deployments_by_type')){

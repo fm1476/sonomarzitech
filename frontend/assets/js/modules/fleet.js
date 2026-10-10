@@ -900,6 +900,9 @@ function renderDashboard(){
     <div class="dash-extras-zone" id="dashExtrasZone">${prefs.extras.map(e=>renderExtraWidget(e.id,e.size)).join('')}</div>
   `;
   wireVehicleLinks();
+  // Show operational metrics and analytics before module navigation.
+  const navHub=root.querySelector('.fleet-hub-grid');
+  if(navHub)root.append(navHub);
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.navDest)));
   wireDashDragDrop(root.querySelector('#dashTopZone'),prefs.topOrder,false);
   wireDashDragDrop(root.querySelector('#dashExtrasZone'),prefs.extras,true);
