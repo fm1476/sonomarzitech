@@ -200,3 +200,22 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .work-metrics>.permit-metric-link>.work-metric{height:100%;box-sizing:border-box;cursor:pointer;}
 .work-metrics>.permit-metric-link:hover>.work-metric{border-color:var(--blue);}
 .work-metrics>.permit-metric-link:focus-visible{outline:2px solid var(--blue);outline-offset:3px;}
+
+/* Application actions must remain reachable at narrow viewport widths. */
+.permit-application-modal #aActions{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.permit-application-modal #aActions>.btn{
+  flex:0 1 auto;
+  max-width:100%;
+  white-space:normal;
+  text-align:center;
+}
+@media(max-width:640px){
+  .permit-application-modal #aActions>.btn{flex:1 1 auto;}
+}
