@@ -2732,7 +2732,27 @@ function renderScheduling(){
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
-    ${SCHED_SUBTAB==='roster' && ((STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin())?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;"><h2 style="margin:0;">Work Group Calendars</h2><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><button type="button" class="btn btn-sm btn-outline" id="btnManageScheduleGroups" aria-expanded="false" aria-controls="scheduleGroupManager">Manage Calendars ▾</button>${isGlobalScheduleAdmin()?'<button type="button" class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div></div><div class="panel-body" id="scheduleGroupManager" hidden style="padding:12px 16px;"><div style="width:320px;max-width:100%;display:flex;flex-direction:column;gap:6px;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid var(--border);"><span style="font-size:12px;min-width:0;overflow-wrap:anywhere;">${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}</span><div style="display:flex;gap:5px;flex-shrink:0;">${isGlobalScheduleAdmin()?`<button type="button" class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" aria-label="Edit ${escapeHtml(g.name)} calendar">Edit</button>`:''}<button type="button" class="btn btn-sm btn-danger" data-schedule-group-delete="${g.id}" aria-label="Delete ${escapeHtml(g.name)} calendar">Delete</button></div></div>`).join('')}</div></div></div>`:''}
+    ${SCHED_SUBTAB==='roster' && ((STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin())?`
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;overflow:visible;">
+          <h2 style="margin:0;">Work Group Calendars</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="position:relative;">
+              <button type="button" class="btn btn-sm btn-outline" id="btnManageScheduleGroups" aria-expanded="false" aria-controls="scheduleGroupManager">Manage Calendars ▾</button>
+              <div id="scheduleGroupManager" hidden style="position:absolute;right:0;top:calc(100% + 8px);width:320px;max-width:calc(100vw - 32px);z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 32px rgba(0,0,0,.25);padding:10px;max-height:360px;overflow-y:auto;">
+                ${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid var(--border);">
+                  <span style="font-size:12px;min-width:0;overflow-wrap:anywhere;">${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}</span>
+                  <div style="display:flex;gap:5px;flex-shrink:0;">
+                    ${isGlobalScheduleAdmin()?`<button type="button" class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" aria-label="Edit ${escapeHtml(g.name)} calendar">Edit</button>`:''}
+                    <button type="button" class="btn btn-sm btn-danger" data-schedule-group-delete="${g.id}" aria-label="Delete ${escapeHtml(g.name)} calendar" title="Delete ${escapeHtml(g.name)} calendar" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 9px;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v7m4-7v7"/></svg></button>
+                  </div>
+                </div>`).join('')}
+              </div>
+            </div>
+            ${isGlobalScheduleAdmin()?'<button type="button" class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}
+          </div>
+        </div>
+      </div>`:''}
     <div id="schedSubBody"></div>
     ${can('pm_admin_categories')&&isGlobalScheduleAdmin()?'<div style="margin-top:28px;padding-top:16px;border-top:1px solid var(--border);"><button type="button" class="panel" id="scheduleAdmin" style="display:block;width:100%;max-width:330px;padding:20px;text-align:left;cursor:pointer;color:var(--heading);font:inherit;"><strong>Administration</strong><div style="font-size:12px;color:var(--text-dim);margin-top:10px">Time off codes and scheduling settings</div></button></div>':''}
   `;
@@ -2745,6 +2765,14 @@ function renderScheduling(){
     btn.setAttribute('aria-expanded',String(!panel.hidden));
     btn.textContent=panel.hidden?'Manage Calendars ▾':'Manage Calendars ▴';
   });
+  document.getElementById('scheduleGroupManager')?.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',function closeScheduleManager(e){
+    const menu=document.getElementById('scheduleGroupManager');
+    const toggle=document.getElementById('btnManageScheduleGroups');
+    if(menu&&!menu.hidden&&toggle&&!toggle.contains(e.target)&&!menu.contains(e.target)){
+      menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.textContent='Manage Calendars ▾';
+    }
+  },{signal:typeof AbortSignal!=='undefined'&&AbortSignal.timeout?undefined:undefined});
   document.querySelectorAll('[data-schedule-group-delete]').forEach(b=>b.addEventListener('click',()=>openDeleteScheduleCalendarModal(b.dataset.scheduleGroupDelete)));
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
