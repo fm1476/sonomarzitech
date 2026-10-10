@@ -2544,6 +2544,7 @@ let SCHED_CAL_YEAR = new Date().getFullYear(), SCHED_CAL_MONTH = new Date().getM
 let SCHED_CAL_SHIFT = 'all';
 let SCHED_DRAFT_PREVIEW_ID = null; // Client-only scheduler preview; never persisted or published.
 let SCHED_CAL_WORKGROUPS = [];
+let SCHED_CAL_PICKER_OPEN = false;
 let SHOW_PAST_SHIFT_PATTERNS = false;
 let SCHED_SUBTAB = 'roster';
 let OT_LOOKAHEAD_DAYS = 14;
@@ -4205,7 +4206,15 @@ function renderDutyCalendar(body){
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="today">Today</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div class="sched-workgroup-filter">${allGroups.map(g=>`<label class="sched-filter-chip"><input type="checkbox" data-cal-workgroup="${g.id}" ${groupIds.has(g.id)?'checked':''}> ${escapeHtml(g.name)}</label>${isGlobalScheduleAdmin()?`<button class="btn btn-sm btn-outline" data-cal-access="${g.id}" title="Configure ${escapeHtml(g.name)} calendar access">Access</button>`:''}`).join('')}</div>
+        <details id="schedCalendarPicker" ${SCHED_CAL_PICKER_OPEN?'open':''} style="position:relative;width:290px;max-width:100%;">
+          <summary class="btn btn-outline" style="height:40px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;list-style:none;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>Calendar Selection</strong> <span style="color:var(--text-dim);font-size:11px;">(${groupIds.size} selected)</span></span><span aria-hidden="true">▾</span>
+          </summary>
+          <div style="position:absolute;top:calc(100% + 5px);left:0;width:290px;max-width:calc(100vw - 40px);z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.19);padding:8px;max-height:320px;overflow-y:auto;">
+            ${allGroups.map(g=>`<div style="display:flex;align-items:center;gap:6px;justify-content:space-between;padding:5px 4px;border-bottom:1px solid var(--border);"><label style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;font-size:12px;cursor:pointer;"><input type="checkbox" data-cal-workgroup="${g.id}" ${groupIds.has(g.id)?'checked':''}><span style="overflow-wrap:anywhere;">${escapeHtml(g.name)}</span></label>${isGlobalScheduleAdmin()?`<button type="button" class="btn btn-sm btn-outline" data-cal-access="${g.id}" title="Configure ${escapeHtml(g.name)} calendar access" style="flex-shrink:0;">Access</button>`:''}</div>`).join('')}
+            <div style="display:flex;justify-content:flex-end;padding-top:8px;"><button type="button" class="btn btn-sm btn-primary" id="schedCalendarPickerDone">Done</button></div>
+          </div>
+        </details>
         <div class="form-row" style="margin:0;min-width:220px;">
         <select id="fSchedCalShift">
           <option value="all" ${SCHED_CAL_SHIFT==='all'?'selected':''}>All Shifts</option>
@@ -4231,7 +4240,10 @@ function renderDutyCalendar(body){
     SCHED_CAL_YEAR=y; SCHED_CAL_MONTH=m;
     renderDutyCalendar(body);
   }));
-  body.querySelectorAll('[data-cal-access]').forEach(b=>b.addEventListener('click',()=>openWorkGroupAccessModal(allGroups.find(g=>g.id===b.dataset.calAccess))));
+  const calPicker=body.querySelector('#schedCalendarPicker');
+  calPicker?.addEventListener('toggle',()=>{SCHED_CAL_PICKER_OPEN=calPicker.open;});
+  body.querySelector('#schedCalendarPickerDone')?.addEventListener('click',()=>{SCHED_CAL_PICKER_OPEN=false;calPicker.open=false;});
+    body.querySelectorAll('[data-cal-access]').forEach(b=>b.addEventListener('click',()=>openWorkGroupAccessModal(allGroups.find(g=>g.id===b.dataset.calAccess))));
   body.querySelectorAll('[data-cal-workgroup]').forEach(cb=>cb.addEventListener('change',()=>{
     const chosen=[...body.querySelectorAll('[data-cal-workgroup]:checked')].map(x=>x.dataset.calWorkgroup);
     if(!chosen.length){ cb.checked=true; toast("Keep at least one work group visible.",true); return; }
