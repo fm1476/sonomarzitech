@@ -174,3 +174,22 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
   padding-top:0;
   padding-bottom:0;
 }
+
+/* Header sizing final override: normalize all four action controls, including
+   the bell's browser-specific default button sizing, at a single fixed height. */
+#topbar .role-switch #btnNotifBell,
+#topbar .role-switch .suite-search,
+#topbar .role-switch #btnRoleSwitcher,
+#topbar .role-switch #btnProfileToggle {
+  box-sizing:border-box !important;
+  height:44px !important;
+  min-height:44px !important;
+  max-height:44px !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+  margin-top:0 !important;
+  margin-bottom:0 !important;
+  align-self:center;
+  line-height:normal;
+}
+#topbar .role-switch #btnNotifBell{width:44px !important;min-width:44px !important;max-width:44px !important;}
