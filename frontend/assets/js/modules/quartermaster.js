@@ -1012,7 +1012,7 @@ function renderDashboard(){
   hub.className='qm-hub-grid';
   hub.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;margin-bottom:20px;';
   hub.innerHTML=destinations.map((item,i)=>`<button class="qm-hub-card" data-qm-destination="${item.id}" style="min-height:140px;text-align:left;padding:19px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:inherit;cursor:pointer;font:inherit;"><div style="color:${['#4D8DFF','#43D59B','#B47CFF','#FF9F43','#20C7D9'][i%5]};width:30px;height:30px;margin-bottom:12px;">${ICONS[item.icon]||ICONS.box}</div><strong style="display:block;color:var(--heading);font-size:16px;margin-bottom:8px;">${escapeHtml(item.label)}</strong><span style="font-size:12px;color:var(--text-dim);line-height:1.45;">${escapeHtml(item.sub)}</span></button>`).join('');
-  root.prepend(hub);
+  root.append(hub);
   hub.querySelectorAll('[data-qm-destination]').forEach(btn=>btn.onclick=()=>switchView(btn.dataset.qmDestination));
   const equipment = visibleEquipment();
   const categories = [...new Set(equipment.map(item=>item.category))].sort();
