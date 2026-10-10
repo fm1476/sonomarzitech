@@ -24,7 +24,7 @@ export async function searchWorkspaceRecords(client,auth,body){
   const tenantId=String(body?.tenant_id||""),agencyId=String(body?.agency_id||"");
   const q=String(body?.query||"").trim().toLowerCase();
   if(q.length<3||q.length>100)return response(400,{success:false,error:"Search requires 3–100 characters."});
-  if(!/^[\w\s.@#/-]+$/u.test(q))return response(400,{success:false,error:"Invalid search characters."});
+  if(/[\u0000-\u001f\u007f]/u.test(q))return response(400,{success:false,error:"Invalid search characters."});
   const membership=await resolveWorkspaceMembership(client,auth,tenantId,agencyId);
   if(membership.error)return membership.error;
   // Search only explicitly whitelisted collections, tenant-scoped and agency-scoped.
@@ -49,7 +49,9 @@ export async function searchWorkspaceRecords(client,auth,body){
     // Search terms must still match the post-authorization/redacted record.
     if(!type.fields.some(f=>String(value[f]??"").toLowerCase().includes(q)))continue;
     const title=type.fields.map(f=>value[f]).find(v=>typeof v==="string"&&v.trim())||key.id;
-    results.push({kind:type.kind,mod:type.mod,id:key.id,title:String(title).slice(0,180),sub:type.label});
+    const recordId=["person","operator","technician"].includes(type.kind)?value.personId:key.id;
+    if(typeof recordId!=="string"||!recordId)continue;
+    results.push({kind:type.kind,mod:type.mod,id:recordId,title:String(title).slice(0,180),sub:type.label});
     if(results.length>=20)break;
   }
   return response(200,{success:true,results});
