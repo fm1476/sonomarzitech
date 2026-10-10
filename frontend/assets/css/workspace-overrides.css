@@ -127,3 +127,23 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
     margin-left:auto !important;
   }
 }
+
+
+/* Keep the notification control level with adjacent header action buttons. */
+#topbar .role-switch #btnNotifBell{
+  box-sizing:border-box;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
+  padding:0;
+  flex:0 0 44px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+#topbar .role-switch #btnNotifBell svg{
+  display:block;
+  width:19px !important;
+  height:19px !important;
+}
