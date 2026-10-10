@@ -279,5 +279,5 @@ function switchView(id){
   renderView(id);
 }
 function start(){switchView('permits-dashboard')}
-window.PERMITS={start,buildData,migrateData,recalcNotifications,NAV_ITEMS,switchView,renderView,refresh:()=>renderView(ACTIVE_VIEW||'permits-dashboard'),openApplication,openLicense};
+window.PERMITS={start,buildData,migrateData,recalcNotifications,NAV_ITEMS,switchView,renderView,refresh:()=>renderView(ACTIVE_VIEW||'permits-dashboard'),openApplication,openLicense,openApplicant:applicantModal,openLocation:locationModal};
 })();

@@ -5578,5 +5578,6 @@ export {
   deleteAttachment,
   getMe,
   getWorkspace,
-  getWorkspaceRevision
+  getWorkspaceRevision,
+  filterOfficerWorkspaceRecords
 };
