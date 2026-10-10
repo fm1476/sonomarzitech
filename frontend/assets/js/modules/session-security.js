@@ -136,6 +136,25 @@ const SonoMarziSecurity=(()=>{
   }
   document.getElementById('loginLoading').style.display = 'none';
   document.getElementById('loginFormFields').style.display = '';
+  // Local UI preview uses only browser demo records; no Cognito token or agency API.
+  // This control is never added on hosted SonoMarzi domains.
+  if((location.hostname==='localhost'||location.hostname==='127.0.0.1') && SuiteStore.mode()==='local'){
+    const preview=document.createElement('div');
+    preview.id='localPreviewAccess';
+    preview.style.cssText='margin:16px 0 4px;padding:14px;border:1px solid var(--border);border-radius:9px;';
+    preview.innerHTML='<button type="button" class="btn btn-primary" id="btnLocalPreview" style="width:100%;justify-content:center;">Open Local Demo Preview</button><div style="font-size:12px;color:var(--text-dim);margin-top:9px;">Uses demo data saved on this Mac. No Cognito login or AWS changes.</div>';
+    document.getElementById('loginFormFields').append(preview);
+    preview.querySelector('#btnLocalPreview').addEventListener('click',()=>{
+      const person=STATE?.personnel?.find(p=>(p.roleIds||[]).includes('role_admin'))||STATE?.personnel?.[0];
+      if(!person){const err=document.getElementById('loginError');err.textContent='Demo records are not ready. Reload the page and try again.';err.style.display='';return;}
+      CURRENT_USER_ID=person.id;
+      HOME_ROLE_IDS=[...(person.roleIds||[])];
+      STATE.currentRoleIds=[...HOME_ROLE_IDS];
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('app').classList.add('authenticated');
+      startShell();
+    });
+  }
   if(STATE.ssoConfig && STATE.ssoConfig.enabled && STATE.ssoConfig.connectionName){
     const ssoBox = document.getElementById('ssoLoginOption');
     ssoBox.innerHTML = `<button type="button" class="btn btn-outline" id="btnSsoLogin" style="width:100%;justify-content:center;">Sign in with ${escapeHtml(STATE.ssoConfig.connectionName)}</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--text-dim);font-size:11px;"><div style="flex:1;height:1px;background:var(--border);"></div>or sign in with a password<div style="flex:1;height:1px;background:var(--border);"></div></div>`;
