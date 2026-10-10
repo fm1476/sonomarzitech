@@ -46,6 +46,8 @@ export async function searchWorkspaceRecords(client,auth,body){
     const key=parseKey(row.key);if(!key||key.id==='$order'||key.id==='$value')continue;
     const type=TYPES[key.collection];if(!type)continue;
     const value=row.value||{};
+    // Search terms must still match the post-authorization/redacted record.
+    if(!type.fields.some(f=>String(value[f]??"").toLowerCase().includes(q)))continue;
     const title=type.fields.map(f=>value[f]).find(v=>typeof v==="string"&&v.trim())||key.id;
     results.push({kind:type.kind,mod:type.mod,id:key.id,title:String(title).slice(0,180),sub:type.label});
     if(results.length>=20)break;
