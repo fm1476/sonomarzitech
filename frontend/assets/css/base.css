@@ -781,3 +781,26 @@ button,a,input,select,textarea{-webkit-tap-highlight-color:transparent;}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important;}
 }
+
+
+/* Dashboard extras: consistent card geometry with independent content scrolling.
+   Preserve the existing per-widget column-span controls and drag/reorder behavior. */
+.dash-extras-zone{align-items:stretch;grid-auto-rows:300px;grid-template-columns:repeat(4,minmax(0,1fr));}
+.dash-extras-zone>.dash-widget{height:300px;min-height:0;min-width:0;overflow:hidden;}
+.dash-extras-zone>.dash-widget>.panel{height:100%;min-height:0;margin-bottom:0;display:flex;flex-direction:column;overflow:hidden;}
+.dash-extras-zone>.dash-widget>.panel>.panel-head{flex:0 0 auto;min-width:0;padding-right:86px;}
+.dash-extras-zone>.dash-widget>.panel>.panel-body{flex:1 1 auto;min-height:0;min-width:0;overflow:auto;overscroll-behavior:auto;}
+.dash-extras-zone>.dash-widget>.panel>.panel-body table{margin-bottom:0;}
+.dash-extras-zone>.dash-widget>.panel>.panel-body table thead th{position:sticky;top:0;z-index:1;}
+.dash-extras-zone .dash-widget-toolbar{opacity:1;top:10px;right:10px;}
+@media(max-width:860px){.dash-extras-zone{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:600px){
+ .dash-extras-zone{grid-template-columns:minmax(0,1fr);}
+ .dash-extras-zone>.dash-widget[data-size]{grid-column:span 1;}
+}
+
+
+/* Keep the agency branding mark legible on iPad portrait and other narrow layouts.
+   The generic .brand-mark white tile should not sit behind a transparent agency logo. */
+#sidebar #brandMark{background:transparent;border:0;padding:0;overflow:hidden;}
+#sidebar #brandMark img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;filter:none;opacity:1;mix-blend-mode:normal;}

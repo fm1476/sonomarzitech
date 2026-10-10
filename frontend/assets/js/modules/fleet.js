@@ -43,6 +43,7 @@ const ABILITY_CATALOG = {
   "Vehicle Inspections": [
     ["fleet_inspection_conduct","Conduct vehicle inspections"],
     ["fleet_inspection_view_all","View all inspections agency-wide"],
+    ["fleet_dashboard_inspections_overdue","View Fleet dashboard overdue inspections widget"],
     ["fleet_inspection_delete","Delete inspection records"],
   ],
   "Maintenance": [
@@ -675,11 +676,13 @@ const EXTRA_WIDGETS = [
   {id:"list_missing_equipment", label:"Missing Equipment", defaultSize:"half"},
 ];
 const DEFAULT_EXTRAS = EXTRA_WIDGETS.map(w=>({id:w.id, size:w.defaultSize}));
+function canSeeOverdueInspectionsWidget(){ return can("fleet_dashboard_inspections_overdue"); }
+function availableExtraWidgets(){ return EXTRA_WIDGETS.filter(w=>w.id!=="list_inspections_overdue" || canSeeOverdueInspectionsWidget()); }
 function myWidgetPrefs(){
   let p = STATE.fleet.dashboardPrefs[CURRENT_USER_ID];
-  const topIds = TOP_WIDGETS.map(w=>w.id), extraIds = EXTRA_WIDGETS.map(w=>w.id);
+  const topIds = TOP_WIDGETS.map(w=>w.id), extraIds = availableExtraWidgets().map(w=>w.id);
   if(!p || (!p.topOrder && !p.extras)){
-    p = { topOrder:[...topIds], extras: DEFAULT_EXTRAS.map(e=>({...e})) };
+    p = { topOrder:[...topIds], extras: DEFAULT_EXTRAS.filter(e=>extraIds.includes(e.id)).map(e=>({...e})) };
     STATE.fleet.dashboardPrefs[CURRENT_USER_ID] = p;
   }
   if(!Array.isArray(p.topOrder)) p.topOrder = [...topIds];
@@ -707,6 +710,7 @@ function renderWidget(id){
     return `<button class="stat-card dash-clickable" data-nav-dest="fleet-inspections"><div class="label">${ICONS.checklist} <span>Inspections Due</span></div><div class="value" style="color:${inspectionDue.length?'var(--red)':'var(--heading)'}">${inspectionDue.length}</div><div class="delta ${inspectionDue.length?'warn':'ok'}">${inspectionDue.length?'Follow up needed':'All inspections current'}</div></button>`;
   }
   if(id==='list_inspections_overdue'){
+    if(!canSeeOverdueInspectionsWidget()) return '';
     const inspOverdue = STATE.fleet.notifications.filter(n=>n.type==="inspection_overdue");
     const rows = inspOverdue.map(n=>{
       const v = vehicleById(n.entityId);
@@ -809,7 +813,7 @@ function openCustomizeDashboardModal(){
     <div class="modal-head"><h3>Add / Remove Widgets</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Check the widgets you want on your dashboard. Once added, drag any widget's handle to reposition it, and use its resize button to change how much room it takes up.</div>
-      ${EXTRA_WIDGETS.map(w=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+      ${availableExtraWidgets().map(w=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
         <input type="checkbox" class="widgetCheck" data-widget-id="${w.id}" ${enabled.has(w.id)?'checked':''} style="width:auto;">
         <span style="flex:1;font-size:13px;">${escapeHtml(w.label)}</span>
       </div>`).join('')}

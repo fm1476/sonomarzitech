@@ -404,6 +404,7 @@ function navItemVisible(item){
 }
 function renderNav(){ document.getElementById('navlist').innerHTML=''; }
 function switchView(id){
+  if(id==='sched-dashboard') id='pm-scheduling';
   const target = [...NAV_ITEMS,...SCHEDULING_NAV_ITEMS].find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
   if(!SuiteUX.beforeView(id)) return;
@@ -415,7 +416,7 @@ function switchView(id){
   document.getElementById('page-sub').textContent = meta.sub;
   renderNav();
   renderView(id);
-  if(id!=="pm-dashboard" && id!=="sched-dashboard"){
+  if(id!=="pm-dashboard" && id!=="sched-dashboard" && id!=="pm-scheduling" && id!=="sched-settings"){
     const root=document.getElementById('view-'+id);
     if(root && !root.querySelector('[data-module-dashboard-back]')){
       const back=document.createElement('button'); back.type='button'; back.className='btn btn-outline'; back.dataset.moduleDashboardBack='1';
@@ -2727,15 +2728,15 @@ function renderScheduling(){
   }
   if(!visibleTabs.some(t=>t.key===SCHED_SUBTAB)) SCHED_SUBTAB = visibleTabs[0].key;
   document.getElementById('view-pm-scheduling').innerHTML = `
-    <button type="button" class="btn btn-outline" data-module-dashboard-back="1" id="scheduleDashboardBack" style="margin-bottom:16px">&#8592; Back to Scheduling Dashboard</button>
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
-    ${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin()?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button>`).join('')}${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)?'<button type="button" class="btn btn-sm btn-danger" id="btnDeleteScheduleCalendar">Delete Calendar</button>':''}</div></div>`:''}
+    ${SCHED_SUBTAB==='roster' && ((STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin())?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button>`).join('')}${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)?'<button type="button" class="btn btn-sm btn-danger" id="btnDeleteScheduleCalendar">Delete Calendar</button>':''}</div></div>`:''}
     <div id="schedSubBody"></div>
+    ${can('pm_admin_categories')&&isGlobalScheduleAdmin()?'<div style="margin-top:28px;padding-top:16px;border-top:1px solid var(--border);"><button type="button" class="panel" id="scheduleAdmin" style="display:block;width:100%;max-width:330px;padding:20px;text-align:left;cursor:pointer;color:var(--heading);font:inherit;"><strong>Administration</strong><div style="font-size:12px;color:var(--text-dim);margin-top:10px">Time off codes and scheduling settings</div></button></div>':''}
   `;
-  document.getElementById('scheduleDashboardBack').onclick=()=>switchView('sched-dashboard');
   document.querySelectorAll('[data-sched-tab]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_SUBTAB=b.dataset.schedTab; renderScheduling(); }));
+  document.getElementById('scheduleAdmin')?.addEventListener('click',()=>switchView('sched-settings'));
   document.getElementById('btnNewScheduleGroup')?.addEventListener('click',()=>openWorkGroupAccessModal({id:'wg'+Date.now()+Math.random().toString(36).slice(2,6),name:'',active:true,visibility:'unit',unitNames:[],viewerIds:[],managerIds:[]},true));
   document.getElementById('btnDeleteScheduleCalendar')?.addEventListener('click',openDeleteScheduleCalendarModal);
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
@@ -5201,7 +5202,7 @@ function startPmModule(){
   renderNav();
   switchView('pm-dashboard');
 }
-window.SCHEDULING = {start:()=>switchView('sched-dashboard'),NAV_ITEMS:SCHEDULING_NAV_ITEMS,switchView,refresh:()=>renderView(ACTIVE_VIEW),hasAccess:schedulingModuleAccess};
+window.SCHEDULING = {start:()=>switchView('pm-scheduling'),NAV_ITEMS:SCHEDULING_NAV_ITEMS,switchView,refresh:()=>renderView(ACTIVE_VIEW),hasAccess:schedulingModuleAccess};
 window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openRecordDetail, openSessionDetailModal, openCheckinFlow, renderCalendarSub, readinessCoverageGaps: (days=7)=>computeCoverageGaps(days).filter(g=>canViewScheduleShift(g.shift)) };
 
 })();
