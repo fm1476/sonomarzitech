@@ -714,6 +714,9 @@ function renderDashboard(){
     <div class="pm-panel"><div class="pm-panel-head"><span>Upcoming Expirations</span><span style="color:var(--blue);font-size:12px;">Next 30 days</span></div><div class="pm-panel-body">${expiring.slice(0,5).map(n=>`<div class="pm-attention-row"><span>${ICONS.alert}</span><span>${escapeHtml(n.message)}</span><span></span></div>`).join('')||'<div style="color:var(--text-dim);font-size:12px;">No upcoming expirations.</div>'}</div></div>
   </div>`;
   root.querySelectorAll('.pm-panel').forEach(panel=>{const head=panel.querySelector('.pm-panel-head');const body=panel.querySelector('.pm-panel-body');if(!head||!body)return;const details=document.createElement('details');details.className=panel.className;details.style.cssText=panel.style.cssText;const summary=document.createElement('summary');summary.style.cssText='cursor:pointer;list-style:none;';summary.append(head);details.append(summary,body);panel.replaceWith(details);});
+  // Show operational metrics and analytics before module navigation.
+  const navHub=root.querySelector('.pm-hub');
+  if(navHub)root.append(navHub);
   root.querySelectorAll('[data-nav-dest]').forEach(b=>b.onclick=()=>switchView(b.dataset.navDest));
 }
 
