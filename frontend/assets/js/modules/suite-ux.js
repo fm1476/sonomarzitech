@@ -181,30 +181,84 @@ const SuiteUX = (()=>{
     }
     return entries.slice(0,20);
   }
+  function serverSearchAction(hit){
+    if(hit.mod==='permits'){
+      if(!can('permits_view'))return null;
+      const specs={
+        permitApplication:['applications','openApplication'],
+        permitLicense:['licenses','openLicense'],
+        permitApplicant:['applicants','openApplicant'],
+        permitLocation:['locations','openLocation']
+      };
+      const spec=specs[hit.kind];if(!spec)return null;
+      if(!(STATE.permits?.[spec[0]]||[]).some(r=>r.id===hit.id))return null;
+      return ()=>PERMITS[spec[1]](hit.id);
+    }
+    const r={mod:hit.mod,kind:hit.kind,id:hit.id};
+    return recordAllowed(r)?()=>dispatchRecord(r):null;
+  }
   function initLiveSearch(toolbar){
     const wrap=document.createElement('div');
     wrap.className='suite-live-search';
     wrap.innerHTML='<div class="suite-live-search-box"><input id="suiteSearchInput" type="text" autocomplete="off" aria-label="Search records and workspaces" aria-controls="suiteSearchResults" aria-expanded="false" placeholder="Find records…"><kbd>Ctrl K</kbd></div><div id="suiteSearchResults" class="suite-live-search-results" role="listbox" hidden></div>';
     toolbar.prepend(wrap);
     const field=wrap.querySelector('input'),results=wrap.querySelector('#suiteSearchResults');
-    let entries=[],active=-1,pending=null;
-    const hide=()=>{results.hidden=true;field.setAttribute('aria-expanded','false');active=-1;};
-    const draw=()=>{
+    let entries=[],active=-1,pending=null,requestVersion=0,remoteItems=[],remoteError=false;
+    const hide=()=>{requestVersion++;clearTimeout(pending);results.hidden=true;field.setAttribute('aria-expanded','false');active=-1;};
+    const paint=()=>{
       const q=field.value.trim().toLowerCase();
-      entries=liveSearchEntries(q);active=-1;
-      results.replaceChildren();
       if(!q){hide();return;}
-      if(!entries.length){const empty=document.createElement('div');empty.className='suite-live-search-empty';empty.textContent=q.length<2?'Type another character to search records.':'No matching permitted records in the loaded workspace.';results.append(empty);}
+      const unique=new Set();
+      entries=[];
+      for(const entry of [...liveSearchEntries(q),...remoteItems]){
+        const key=entry.recordKey||entry.title+'|'+entry.sub;
+        if(unique.has(key))continue;
+        unique.add(key);entries.push(entry);
+        if(entries.length>=20)break;
+      }
+      active=-1;results.replaceChildren();
+      if(!entries.length){
+        const empty=document.createElement('div');empty.className='suite-live-search-empty';
+        empty.textContent=remoteError?'Agency search is unavailable. Showing loaded workspace results only.':q.length<3?'Keep typing to search agency records.':'No matching permitted records.';
+        results.append(empty);
+      }
       for(const [i,item] of entries.entries()){
         const b=document.createElement('button');b.type='button';b.className='search-result';b.setAttribute('role','option');
         b.innerHTML=esc(item.title)+'<small>'+esc(item.sub)+'</small>';
-        b.addEventListener('click',()=>{hide();field.value='';item.action();});
+        b.addEventListener('click',()=>{hide();field.value='';remoteItems=[];item.action();});
         results.append(b);
       }
       results.hidden=false;field.setAttribute('aria-expanded','true');
     };
-    field.addEventListener('input',()=>{clearTimeout(pending);pending=setTimeout(draw,180);});
-    field.addEventListener('focus',()=>{if(field.value.trim())draw();});
+    const searchRemote=async(q,version)=>{
+      if(q.length<3||SuiteStore.mode()!=='shared'||typeof SuiteStore.api!=='function')return;
+      const ctx=SuiteStore.remoteContext?.()||{};
+      if(!ctx.tenantId||!ctx.agencyId)return;
+      try{
+        const data=await SuiteStore.api('/global-search',{
+          method:'POST',
+          body:JSON.stringify({tenant_id:ctx.tenantId,agency_id:ctx.agencyId,query:q})
+        });
+        if(version!==requestVersion||field.value.trim().toLowerCase()!==q)return;
+        remoteError=false;
+        remoteItems=(data?.results||[]).map(hit=>{
+          const action=serverSearchAction(hit);
+          if(!action)return null;
+          return {title:hit.title,sub:hit.sub,recordKey:hit.mod+'|'+hit.kind+'|'+hit.id,action};
+        }).filter(Boolean);
+        paint();
+      }catch(error){
+        if(version!==requestVersion)return;
+        remoteError=true;remoteItems=[];paint();
+      }
+    };
+    field.addEventListener('input',()=>{
+      clearTimeout(pending);requestVersion++;
+      const version=requestVersion,q=field.value.trim().toLowerCase();
+      remoteItems=[];remoteError=false;paint();
+      if(q.length>=3)pending=setTimeout(()=>searchRemote(q,version),450);
+    });
+    field.addEventListener('focus',()=>{if(field.value.trim())paint();});
     field.addEventListener('keydown',e=>{
       if(e.key==='Escape'){hide();field.blur();return;}
       if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -212,7 +266,9 @@ const SuiteUX = (()=>{
         e.preventDefault();active=(active+(e.key==='ArrowDown'?1:-1)+entries.length)%entries.length;
         results.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('suite-live-search-active',i===active));
       }
-      if(e.key==='Enter'&&entries.length&&!results.hidden){e.preventDefault();const chosen=entries[active<0?0:active];hide();field.value='';chosen.action();}
+      if(e.key==='Enter'&&entries.length&&!results.hidden){
+        e.preventDefault();const chosen=entries[active<0?0:active];hide();field.value='';remoteItems=[];chosen.action();
+      }
     });
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))hide();});
   }
