@@ -200,3 +200,29 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
 .work-metrics>.permit-metric-link>.work-metric{height:100%;box-sizing:border-box;cursor:pointer;}
 .work-metrics>.permit-metric-link:hover>.work-metric{border-color:var(--blue);}
 .work-metrics>.permit-metric-link:focus-visible{outline:2px solid var(--blue);outline-offset:3px;}
+
+
+/* Permit application actions must remain fully visible at every viewport width. */
+#modalBox .modal-foot#aActions{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  overflow-x:visible;
+}
+#modalBox .modal-foot#aActions>.btn{
+  flex:0 1 auto;
+  min-width:0;
+  max-width:100%;
+  margin:0;
+  white-space:normal;
+  text-align:center;
+}
+@media(max-width:760px){
+  #modalBox .modal-foot#aActions{justify-content:stretch;}
+  #modalBox .modal-foot#aActions>.btn{flex:1 1 160px;}
+}
