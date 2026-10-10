@@ -2766,13 +2766,16 @@ function renderScheduling(){
     btn.textContent=panel.hidden?'Manage Calendars ▾':'Manage Calendars ▴';
   });
   document.getElementById('scheduleGroupManager')?.addEventListener('click',e=>e.stopPropagation());
-  document.addEventListener('click',function closeScheduleManager(e){
+  if(!document.documentElement.dataset.scheduleManagerCloseBound){
+    document.documentElement.dataset.scheduleManagerCloseBound='true';
+    document.addEventListener('click',function closeScheduleManager(e){
     const menu=document.getElementById('scheduleGroupManager');
     const toggle=document.getElementById('btnManageScheduleGroups');
     if(menu&&!menu.hidden&&toggle&&!toggle.contains(e.target)&&!menu.contains(e.target)){
       menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.textContent='Manage Calendars ▾';
     }
-  },{signal:typeof AbortSignal!=='undefined'&&AbortSignal.timeout?undefined:undefined});
+    });
+  }
   document.querySelectorAll('[data-schedule-group-delete]').forEach(b=>b.addEventListener('click',()=>openDeleteScheduleCalendarModal(b.dataset.scheduleGroupDelete)));
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
