@@ -135,28 +135,47 @@ function openLicense(id){const l=STATE.permits.licenses.find(x=>x.id===id);if(!l
     +(p?'<button type="button" class="btn btn-outline btn-sm" id="lRelatedApplicant">View applicant record</button>':'')
     +(place?'<button type="button" class="btn btn-outline btn-sm" id="lRelatedLocation">View location record</button>':'')
     +'</div></details>';
-  box.innerHTML='<div class="modal-head"><h3>'+esc(l.licenseNumber)+'</h3><button class="modal-close">×</button></div><div class="modal-body"><p><strong>'+esc(t?.name||'')+'</strong> · '+esc(p?.name||'')+'</p><p>Status: '+esc(l.status)+' · Issued '+esc(l.issuedOn)+' · Expires '+esc(l.expiresOn||'No fixed expiration')+'</p><div class="form-row"><label>Conditions / restrictions</label><textarea id="lCond" readonly>'+esc(l.conditions||'')+'</textarea></div>'+detailHtml+'<div class="panel" style="margin-top:16px"><div class="panel-head"><h4>Renewal notice history</h4></div><div class="panel-body">'+((STATE.permits.renewalNotices||[]).filter(n=>n.licenseId===l.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(n=>'<div class="readiness-line"><div><strong>'+esc(n.method)+' · '+esc(n.status)+'</strong><br><small>'+esc(new Date(n.createdAt).toLocaleString())+' · '+esc(n.createdBy)+(n.recipient?' · '+esc(n.recipient):'')+'</small></div></div>').join('')||'<div class="hint">No renewal notices recorded.</div>')+'</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="lClose">Close</button>'+(can('permits_edit')?'<button class="btn btn-outline" id="lEdit">Edit License</button>':'')+'<button class="btn btn-outline" id="lExport">Export license</button><button class="btn btn-outline" id="lPrint">Print / PDF</button><button class="btn btn-outline" id="lRenewPrint">Print Renewal Notice</button><button class="btn btn-primary" id="lRenewEmail">Email Renewal Notice</button></div>';SuiteUX.openModal();box.querySelector('#lRelatedApp')?.addEventListener('click',()=>openApplication(linked.id));
+  box.innerHTML='<div class="modal-head"><h3>'+esc(l.licenseNumber)+'</h3><button class="modal-close">×</button></div><div class="modal-body"><p><strong>'+esc(t?.name||'')+'</strong> · '+esc(p?.name||'')+'</p><p>Status: '+esc(l.status)+' · Issued '+esc(l.issuedOn)+' · Expires '+esc(l.expiresOn||'No fixed expiration')+'</p><div class="form-row"><label>Conditions / restrictions</label><textarea id="lCond" readonly>'+esc(l.conditions||'')+'</textarea></div>'+detailHtml+'<div class="panel" style="margin-top:16px"><div class="panel-head"><h4>Renewal notice history</h4></div><div class="panel-body">'+((STATE.permits.renewalNotices||[]).filter(n=>n.licenseId===l.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(n=>'<div class="readiness-line"><div><strong>'+esc(n.method)+' · '+esc(n.status)+'</strong><br><small>'+esc(new Date(n.createdAt).toLocaleString())+' · '+esc(n.createdBy)+(n.recipient?' · '+esc(n.recipient):'')+'</small></div></div>').join('')||'<div class="hint">No renewal notices recorded.</div>')+'</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="lClose">Close</button>'+(can('permits_license_edit')?'<button class="btn btn-outline" id="lEdit">Edit License / Permit</button>':'')+'<button class="btn btn-outline" id="lExport">Export license</button><button class="btn btn-outline" id="lPrint">Print / PDF</button><button class="btn btn-outline" id="lRenewPrint">Print Renewal Notice</button><button class="btn btn-primary" id="lRenewEmail">Email Renewal Notice</button></div>';SuiteUX.openModal();box.querySelector('#lRelatedApp')?.addEventListener('click',()=>openApplication(linked.id));
   box.querySelector('#lRelatedApplicant')?.addEventListener('click',()=>applicantModal(p.id));
   box.querySelector('#lRelatedLocation')?.addEventListener('click',()=>locationModal(place.id));
   box.querySelector('#lEdit')?.addEventListener('click',()=>editIssuedLicense(l.id));
   box.querySelector('.modal-close').onclick=box.querySelector('#lClose').onclick=()=>SuiteUX.closeModal();box.querySelector('#lExport').onclick=()=>{const blob=new Blob([licenseDoc(l)],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=l.licenseNumber+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),500)};box.querySelector('#lPrint').onclick=()=>{const w=window.open('','_blank');if(w){w.document.write(licenseDoc(l));w.document.close()}else toast('Pop-up blocked.',true)};box.querySelector('#lRenewPrint').onclick=()=>printRenewalNotice(l);box.querySelector('#lRenewEmail').onclick=()=>emailRenewalNotice(l);if(can('permits_issue')){const foot=box.querySelector('.modal-foot');if(l.status==='Active'){const s=document.createElement('button');s.className='btn btn-outline';s.textContent='Suspend';s.onclick=()=>setLicenseStatus(l,'Suspended');foot.append(s);const r=document.createElement('button');r.className='btn btn-outline';r.textContent='Revoke';r.onclick=()=>setLicenseStatus(l,'Revoked');foot.append(r)}else if(['Suspended','Revoked'].includes(l.status)){const x=document.createElement('button');x.className='btn btn-outline';x.textContent='Reinstate';x.onclick=()=>setLicenseStatus(l,'Active');foot.append(x)}if(l.expiresOn&&can('permits_create')){const n=document.createElement('button');n.className='btn btn-outline';n.textContent='Start renewal';n.onclick=()=>initiateRenewal(l.id);foot.append(n)}}}
 
 function editIssuedLicense(id){
-  if(!can('permits_edit'))return;
-  const l=STATE.permits.licenses.find(x=>x.id===id);if(!l)return;
+  if(!can('permits_license_edit'))return;
+  const lic=STATE.permits.licenses.find(x=>x.id===id);if(!lic)return;
+  const holder=applicant(lic.applicantId),site=locationOf(lic.locationId);
   const box=document.getElementById('modalBox');box.className='modal modal-wide';
-  box.innerHTML='<div class="modal-head"><h3>Edit License · '+esc(l.licenseNumber)+'</h3><button class="modal-close">×</button></div><div class="modal-body"><p class="hint">Edit issued-license details here. Holder and location records remain linked to the original application.</p><div class="form-row"><label>Expiration date</label><input type="date" id="lEditExpires" value="'+esc(l.expiresOn||'')+'"></div><div class="form-row"><label>Conditions / restrictions</label><textarea id="lEditCond">'+esc(l.conditions||'')+'</textarea></div></div><div class="modal-foot"><button type="button" class="btn btn-outline" id="lEditCancel">Cancel</button><button type="button" class="btn btn-primary" id="lEditSave">Save Changes</button></div>';
+  const field=(key,label,value)=>'<div class="form-row"><label for="'+key+'">'+esc(label)+'</label><input type="text" id="'+key+'" value="'+esc(value||'')+'"></div>';
+  box.innerHTML='<div class="modal-head"><h3>Edit License / Permit · '+esc(lic.licenseNumber)+'</h3><button class="modal-close">×</button></div><div class="modal-body">'
+    +'<p class="hint">Contact and location information is linked to the original application. Corrections to these fields update all records using the same applicant or location.</p>'
+    +'<div class="form-row"><label>Expiration date</label><input type="date" id="lEditExpires" value="'+esc(lic.expiresOn||'')+'"></div>'
+    +'<div class="form-row"><label>Conditions / restrictions</label><textarea id="lEditCond">'+esc(lic.conditions||'')+'</textarea></div>'
+    +(holder?'<h4>Applicant / business</h4>'+field('lEditHolder','Name / business',holder.name)+field('lEditPhone','Phone',holder.phone)+field('lEditEmail','Email',holder.email)+field('lEditMail','Mailing address',holder.address):'')
+    +(site?'<h4>Permit location</h4>'+field('lEditAddress','Street address',site.address)+field('lEditCity','City',site.city)+field('lEditState','State',site.state)+field('lEditZip','ZIP',site.zip):'')
+    +'</div><div class="modal-foot"><button type="button" class="btn btn-outline" id="lEditCancel">Cancel</button><button type="button" class="btn btn-primary" id="lEditSave">Save Changes</button></div>';
   SuiteUX.openModal();
-  box.querySelector('.modal-close').onclick=box.querySelector('#lEditCancel').onclick=()=>openLicense(l.id);
+  box.querySelector('.modal-close').onclick=box.querySelector('#lEditCancel').onclick=()=>openLicense(lic.id);
   box.querySelector('#lEditSave').onclick=()=>{
-    if(!can('permits_edit'))return;
-    const expires=box.querySelector('#lEditExpires').value;
-    if(expires&&l.issuedOn&&expires<l.issuedOn){toast('Expiration cannot precede the issuance date.',true);return;}
-    const conditions=box.querySelector('#lEditCond').value.trim();
-    if(expires===l.expiresOn&&conditions===(l.conditions||'')){openLicense(l.id);return;}
-    l.expiresOn=expires;l.conditions=conditions;
-    logAuditEntry('Licensing & Permits','Updated issued license '+l.licenseNumber+' (expiration / conditions)','permits');
-    persist();toast('License updated.');openLicense(l.id);
+    if(!can('permits_license_edit'))return;
+    const get=id=>box.querySelector('#'+id)?.value.trim()||'';
+    const expires=get('lEditExpires'),conditions=get('lEditCond');
+    if(expires&&lic.issuedOn&&expires<lic.issuedOn){toast('Expiration cannot precede the issuance date.',true);return;}
+    if(holder&&!get('lEditHolder')){toast('The applicant name is required.',true);return;}
+    if(site&&!get('lEditAddress')){toast('The permit location address is required.',true);return;}
+    const updates=[
+      [lic,'expiresOn',expires],[lic,'conditions',conditions],
+      ...(holder?[[holder,'name',get('lEditHolder')],[holder,'phone',get('lEditPhone')],[holder,'email',get('lEditEmail')],[holder,'address',get('lEditMail')]]:[]),
+      ...(site?[[site,'address',get('lEditAddress')],[site,'city',get('lEditCity')],[site,'state',get('lEditState')],[site,'zip',get('lEditZip')]]:[])
+    ].filter(([record,key,value])=>String(record[key]||'')!==value);
+    if(!updates.length){openLicense(lic.id);return;}
+    if(updates.some(([record])=>record===holder||record===site)){
+      if(!confirm('This applicant or permit location may be linked to other applications and licenses. Save these corrections to the shared records?'))return;
+    }
+    const changed=updates.map(([record,key])=>(record===holder?'applicant.':record===site?'location.':'license.')+key);
+    updates.forEach(([record,key,value])=>{record[key]=value;});
+    logAuditEntry('Licensing & Permits','Edited '+lic.licenseNumber+' fields: '+changed.join(', '),'permits');
+    persist();toast('License / permit information updated.');openLicense(lic.id);
   };
 }
 function renderLicenses(){
