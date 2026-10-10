@@ -193,7 +193,7 @@ const SuiteUX = (()=>{
     const root=document.querySelector('.view.active');
     if(!root||!ACTIVE_MODULE||!route.startsWith('view/'))return;
     const id=route.slice(5),dashboard=modules()[ACTIVE_MODULE]?.NAV_ITEMS.find(n=>n.id.endsWith('-dashboard')&&allowedView(n.id));
-    if(!dashboard||id===dashboard.id||root.querySelector('[data-module-dashboard-back]'))return;
+    if(!dashboard||id===dashboard.id||root.querySelector('[data-module-dashboard-back]')||document.querySelector('#moduleViewUtilityRail[data-view-id="'+root.id+'"] [data-module-dashboard-back]'))return;
     const back=button('Back to Dashboard','',()=>go(dashboard.id),'btn btn-outline');back.dataset.moduleDashboardBack='1';back.style.marginBottom='16px';root.prepend(back);
   }
   function enhance(){if(!CURRENT_USER_ID)return;ensureDashboardReturn();associateLabels(document.getElementById('modalBox'));document.querySelectorAll('.view.active .form-row').forEach(row=>associateLabels(row));labelFilters(document.querySelector('.view.active')||document);formatVisibleDates(document.querySelector('.view.active'));formatVisibleDates(document.getElementById('modalBox'));formatVisibleDates(document.getElementById('notifPanel'));document.querySelectorAll('.navitem.active').forEach(n=>n.setAttribute('aria-current','page'));
