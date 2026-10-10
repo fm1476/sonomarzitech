@@ -789,7 +789,7 @@ button,a,input,select,textarea{-webkit-tap-highlight-color:transparent;}
 .dash-extras-zone>.dash-widget{height:300px;min-height:0;min-width:0;overflow:hidden;}
 .dash-extras-zone>.dash-widget>.panel{height:100%;min-height:0;margin-bottom:0;display:flex;flex-direction:column;overflow:hidden;}
 .dash-extras-zone>.dash-widget>.panel>.panel-head{flex:0 0 auto;min-width:0;padding-right:86px;}
-.dash-extras-zone>.dash-widget>.panel>.panel-body{flex:1 1 auto;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;}
+.dash-extras-zone>.dash-widget>.panel>.panel-body{flex:1 1 auto;min-height:0;min-width:0;overflow:auto;overscroll-behavior:auto;}
 .dash-extras-zone>.dash-widget>.panel>.panel-body table{margin-bottom:0;}
 .dash-extras-zone>.dash-widget>.panel>.panel-body table thead th{position:sticky;top:0;z-index:1;}
 .dash-extras-zone .dash-widget-toolbar{opacity:1;top:10px;right:10px;}
