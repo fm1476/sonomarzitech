@@ -187,7 +187,8 @@ const SuiteUX = (()=>{
       card.innerHTML=`<div style="width:30px;height:30px;color:var(--blue);margin-bottom:12px">${ICONS[item.icon]||ICONS.grid}</div><strong style="display:block;margin-bottom:8px">${esc(item.label)}</strong><span style="font-size:12px;color:var(--text-dim)">${esc(item.sub)}</span>`;
       hub.append(card);
     }
-    root.prepend(hub);
+    if(currentId.endsWith('-dashboard'))root.append(hub);
+    else root.prepend(hub);
   }
   function ensureDashboardReturn(){
     const root=document.querySelector('.view.active');
