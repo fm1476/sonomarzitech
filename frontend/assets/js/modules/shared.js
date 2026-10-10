@@ -1822,6 +1822,7 @@ const ABILITY_CATALOG = {
   "Fleet: Vehicle Inspections": [
     ["fleet_inspection_conduct","Conduct vehicle inspections"],
     ["fleet_inspection_view_all","View all inspections agency-wide"],
+    ["fleet_dashboard_inspections_overdue","View Fleet dashboard overdue inspections widget"],
     ["fleet_inspection_delete","Delete inspection records"],
   ],
   "Fleet: Maintenance": [
@@ -2148,7 +2149,7 @@ const DEFAULT_ROLES = [
   {id:"role_fleet_admin", name:"Fleet Admin", locked:false, description:"Full control over the Fleet Management module only \u2014 cannot see or access Quartermaster or Personnel Management.",
     agencyScope: [], abilities: abilitiesFor(["module_fleet","personnel_view","fleet_bypass_unit_scope",
       "fleet_vehicle_view","fleet_vehicle_add","fleet_vehicle_edit","fleet_vehicle_delete","fleet_vehicle_retire",
-      "fleet_inspection_conduct","fleet_inspection_view_all","fleet_inspection_delete",
+      "fleet_inspection_conduct","fleet_inspection_view_all","fleet_inspection_delete","fleet_dashboard_inspections_overdue",
       "fleet_maint_log","fleet_maint_schedule","fleet_maint_outofservice","fleet_reports_view","fleet_reports_export",
       "fleet_bulk_import","fleet_admin_categories","fleet_admin_audit"])},
   {id:"role_pm_admin", name:"Personnel Admin", locked:false, description:"Full control over the Personnel Management module only \u2014 cannot see or access Quartermaster or Fleet Management.",
@@ -2189,7 +2190,7 @@ const DEFAULT_ROLES = [
   {id:"role_platform_admin", name:"SonoMarzi Platform Admin", locked:true, hidden:true,
     description:"SonoMarzi-internal role that controls which modules exist for this deployment. Not visible to customer administrators \u2014 this is a vendor-side control, separate from how a customer's own admins manage roles within whatever modules they've been granted.",
     agencyScope: [], abilities: abilitiesFor(["admin_roles","manage_application_access","manage_field_labels","manage_branding","personnel_view",
-      "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil","module_permits"])},
+      "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil","module_permits","fleet_dashboard_inspections_overdue"])},
 ];
 DEFAULT_ROLES.forEach(r=>{
   if(!['role_admin','role_platform_admin'].includes(r.id)) r.abilities.admin_roles=false;
