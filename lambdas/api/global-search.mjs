@@ -48,6 +48,7 @@ export async function searchWorkspaceRecords(client,auth,body){
   for(const row of visible){
     const key=parseKey(row.key);if(!key||key.id==='$order'||key.id==='$value')continue;
     const type=TYPES[key.collection];if(!type)continue;
+    if(!membership.enabledModules.includes(type.mod))continue;
     const value=row.value||{};
     // Search terms must still match the post-authorization/redacted record.
     if(!type.fields.some(f=>String(value[f]??"").toLowerCase().includes(q)))continue;
