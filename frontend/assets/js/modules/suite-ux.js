@@ -156,8 +156,122 @@ const SuiteUX = (()=>{
   }
   function closeModal(event){const user=event&&typeof event==='object'&&'type' in event;if(user&&!guard())return false;modalDirty=false;const overlay=document.getElementById('modalOverlay'),box=document.getElementById('modalBox');overlay.classList.remove('open');box.innerHTML='';if(record){const r={...record};queueMicrotask(()=>{if(!overlay.classList.contains('open')&&!box.innerHTML)dispatchRecord(r);});}else focusReturn?.focus?.();return true;}
   function navigate(next){if(next==='home'||!next){home();return;}if(next==='readiness'){readinessView();return;}if(next==='workflows'){workflowView();return;}if(next==='fieldtraining'){fieldTrainingView();return;}if(next==='workspaces'){workspaces();return;}if(next==='reports'){reports();return;}if(next==='administration'){administration();return;}if(next.startsWith('agency/')){const slug=decodeURIComponent(next.split('/')[1]||'');const match=TenantPlatform.contexts().find(c=>c.tenant&&c.tenant.slug===slug);if(!match){home();toast('No agency was found for that address.',true);return;}switchContext(match.tenant.id,match.agency.id);return;}if(next.startsWith('view/')){if(!allowedView(next.slice(5))){home();toast('That workspace is not available to your current role.',true);return;}go(next.slice(5));return;}if(next.startsWith('record/')){const [,mod,kind,id]=next.split('/');const target={mod,kind,id:decodeURIComponent(id||'')};if(!recordAllowed(target)){home();toast('That record is not available to your current role.',true);return;}dispatchRecord(target);return;}if(next.startsWith('checkin/')){const sessionId=decodeURIComponent(next.slice(8));if(!allowedView('pm-training')){home();toast('Training check-in is not available to your current role.',true);return;}go('pm-training');setTimeout(()=>{if(window.PM&&window.PM.openCheckinFlow)window.PM.openCheckinFlow(sessionId);},60);return;}if(next.startsWith('shared/')){const id=next.slice(7);if(id==='personnel'){home();return;}shared(id,id==='roles'?'Roles & Abilities':id==='audit'?'Platform Audit Log':id==='branding'?'Agency Branding':id==='sso'?'Single Sign-On':id==='notices'?'Staff Notices':'Field Labels','Shared agency workspace');return;}home();}
-  function search(){document.getElementById('modalBox').className='modal';document.getElementById('modalBox').innerHTML='<div class="modal-head"><h3>Find records and workspaces</h3><button class="modal-close" id="searchClose" aria-label="Close search">×</button></div><div class="panel-body"><label for="suiteSearchInput">Name, badge, asset, vehicle, or case number</label><input id="suiteSearchInput" type="text" style="width:100%;margin-top:8px" autocomplete="off"></div><div class="search-results" id="suiteSearchResults"></div>';openModal();document.getElementById('searchClose').onclick=closeModal;const field=document.getElementById('suiteSearchInput');const run=()=>{const q=field.value.trim().toLowerCase();const entries=[];for(const m of Object.values(modules()))for(const n of m.NAV_ITEMS)if(allowedView(n.id)&&(!q||(n.title+' '+MODULE_META[metaFor(n.id).mod].name).toLowerCase().includes(q)))entries.push({title:n.title,sub:MODULE_META[metaFor(n.id).mod].name,action:()=>go(n.id)});if(q.length>=2)for(const [kind,t] of Object.entries(recordTypes)){const mod=t[0];if(!permits(mod,t[1]))continue;const list=STATE[mod==='personnel'?'pm':mod]?.[t[2]]||[];for(const d of list){const id=['person','operator','technician'].includes(kind)?d.personId:d.id,r={mod,kind,id};if(!recordAllowed(r))continue;const title=recordTitle(r);const text=[title,d.assetId,d.serialNumber,d.vin,d.licensePlate,d.badgeNumber,d.employeeId,d.caseNumber].filter(Boolean).join(' ').toLowerCase();if(text.includes(q))entries.push({title,sub:MODULE_META[mod].name+' · '+(d.assetId||d.badgeNumber||d.caseNumber||id),action:()=>dispatchRecord(r)});}}
-      const results=document.getElementById('suiteSearchResults');results.innerHTML='';for(const e of entries.slice(0,40)){const b=document.createElement('button');b.className='search-result';b.innerHTML=esc(e.title)+'<small>'+esc(e.sub)+'</small>';b.onclick=()=>{modalDirty=false;document.getElementById('modalOverlay').classList.remove('open');e.action();};results.append(b);}if(!entries.length)results.innerHTML='<div class="empty-state"><div class="msg">No matching records</div><div class="sub">Try another identifier or check your workspace permissions.</div></div>';};field.oninput=run;field.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();document.querySelector('.search-result')?.focus();}};run();}
+  function search(){
+    const field=document.getElementById('suiteSearchInput');
+    field?.focus();
+    field?.select();
+  }
+  function liveSearchEntries(q){
+    const entries=[];
+    if(!q)return entries;
+    for(const m of Object.values(modules()))for(const n of m.NAV_ITEMS){
+      if(allowedView(n.id)&&(n.title+' '+MODULE_META[metaFor(n.id).mod].name).toLowerCase().includes(q))
+        entries.push({title:n.title,sub:MODULE_META[metaFor(n.id).mod].name,action:()=>go(n.id)});
+    }
+    if(q.length>=2)for(const [kind,t] of Object.entries(recordTypes)){
+      const mod=t[0];if(!permits(mod,t[1]))continue;
+      const list=STATE[mod==='personnel'?'pm':mod]?.[t[2]]||[];
+      for(const d of list){
+        const id=['person','operator','technician'].includes(kind)?d.personId:d.id,r={mod,kind,id};
+        if(!recordAllowed(r))continue;
+        const title=recordTitle(r);
+        const haystack=[title,d.assetId,d.serialNumber,d.vin,d.licensePlate,d.badgeNumber,d.employeeId,d.caseNumber].filter(Boolean).join(' ').toLowerCase();
+        if(haystack.includes(q))entries.push({title,sub:MODULE_META[mod].name+' · '+(d.assetId||d.badgeNumber||d.caseNumber||id),recordKey:mod+'|'+kind+'|'+id,action:()=>dispatchRecord(r)});
+      }
+    }
+    return entries.slice(0,20);
+  }
+  function serverSearchAction(hit){
+    if(hit.mod==='permits'){
+      if(!can('permits_view'))return null;
+      const specs={
+        permitApplication:['applications','openApplication'],
+        permitLicense:['licenses','openLicense'],
+        permitApplicant:['applicants','openApplicant'],
+        permitLocation:['locations','openLocation']
+      };
+      const spec=specs[hit.kind];if(!spec)return null;
+      if(!(STATE.permits?.[spec[0]]||[]).some(r=>r.id===hit.id))return null;
+      return ()=>PERMITS[spec[1]](hit.id);
+    }
+    const r={mod:hit.mod,kind:hit.kind,id:hit.id};
+    return recordAllowed(r)?()=>dispatchRecord(r):null;
+  }
+  function initLiveSearch(toolbar){
+    const wrap=document.createElement('div');
+    wrap.className='suite-live-search';
+    wrap.innerHTML='<div class="suite-live-search-box"><input id="suiteSearchInput" type="text" autocomplete="off" aria-label="Search records and workspaces" aria-controls="suiteSearchResults" aria-expanded="false" placeholder="Find records…"><kbd>Ctrl K</kbd></div><div id="suiteSearchResults" class="suite-live-search-results" role="listbox" hidden></div>';
+    toolbar.prepend(wrap);
+    const field=wrap.querySelector('input'),results=wrap.querySelector('#suiteSearchResults');
+    let entries=[],active=-1,pending=null,requestVersion=0,remoteItems=[],remoteError=false;
+    const hide=()=>{requestVersion++;clearTimeout(pending);results.hidden=true;field.setAttribute('aria-expanded','false');active=-1;};
+    const paint=()=>{
+      const q=field.value.trim().toLowerCase();
+      if(!q){hide();return;}
+      const unique=new Set();
+      entries=[];
+      for(const entry of [...liveSearchEntries(q),...remoteItems]){
+        const key=entry.recordKey||entry.title+'|'+entry.sub;
+        if(unique.has(key))continue;
+        unique.add(key);entries.push(entry);
+        if(entries.length>=20)break;
+      }
+      active=-1;results.replaceChildren();
+      if(!entries.length){
+        const empty=document.createElement('div');empty.className='suite-live-search-empty';
+        empty.textContent=remoteError?'Agency search is unavailable. Showing loaded workspace results only.':q.length<3?'Keep typing to search agency records.':'No matching permitted records.';
+        results.append(empty);
+      }
+      for(const [i,item] of entries.entries()){
+        const b=document.createElement('button');b.type='button';b.className='search-result';b.setAttribute('role','option');
+        b.innerHTML=esc(item.title)+'<small>'+esc(item.sub)+'</small>';
+        b.addEventListener('click',()=>{hide();field.value='';remoteItems=[];item.action();});
+        results.append(b);
+      }
+      results.hidden=false;field.setAttribute('aria-expanded','true');
+    };
+    const searchRemote=async(q,version)=>{
+      if(q.length<3||SuiteStore.mode()!=='shared'||typeof SuiteStore.api!=='function')return;
+      const ctx=SuiteStore.remoteContext?.()||{};
+      if(!ctx.tenantId||!ctx.agencyId)return;
+      try{
+        const data=await SuiteStore.api('/global-search',{
+          method:'POST',
+          body:JSON.stringify({tenant_id:ctx.tenantId,agency_id:ctx.agencyId,query:q})
+        });
+        if(version!==requestVersion||field.value.trim().toLowerCase()!==q)return;
+        remoteError=false;
+        remoteItems=(data?.results||[]).map(hit=>{
+          const action=serverSearchAction(hit);
+          if(!action)return null;
+          return {title:hit.title,sub:hit.sub,recordKey:hit.mod+'|'+hit.kind+'|'+hit.id,action};
+        }).filter(Boolean);
+        paint();
+      }catch(error){
+        if(version!==requestVersion)return;
+        remoteError=true;remoteItems=[];paint();
+      }
+    };
+    field.addEventListener('input',()=>{
+      clearTimeout(pending);requestVersion++;
+      const version=requestVersion,q=field.value.trim().toLowerCase();
+      remoteItems=[];remoteError=false;paint();
+      if(q.length>=3)pending=setTimeout(()=>searchRemote(q,version),450);
+    });
+    field.addEventListener('focus',()=>{if(field.value.trim())paint();});
+    field.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){hide();field.blur();return;}
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        if(results.hidden||!entries.length)return;
+        e.preventDefault();active=(active+(e.key==='ArrowDown'?1:-1)+entries.length)%entries.length;
+        results.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('suite-live-search-active',i===active));
+      }
+      if(e.key==='Enter'&&entries.length&&!results.hidden){
+        e.preventDefault();const chosen=entries[active<0?0:active];hide();field.value='';remoteItems=[];chosen.action();
+      }
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))hide();});
+  }
   function associateLabels(root){root.querySelectorAll('.form-row').forEach(row=>{const label=row.querySelector('label'),field=row.querySelector('input:not([type=hidden]),select,textarea');if(label&&field&&!label.htmlFor&&!label.contains(field)){if(!field.id)field.id='suite-field-'+(++tableSequence);label.htmlFor=field.id;}});root.querySelectorAll('button.modal-close').forEach(b=>b.setAttribute('aria-label','Close'));const title=root.querySelector('h3,h2');if(title){if(!title.id)title.id='suite-dialog-title-'+(++tableSequence);root.setAttribute('aria-labelledby',title.id);}}
   function filterLabel(control){const raw=filterLabelRaw(control);return raw.charAt(0).toUpperCase()+raw.slice(1);}
   function filterLabelRaw(control){const id=(control.id||'').replace(/Filter$/i,'');const title=(control.title||'').trim();let match=title.match(/filter(?:s)? (?:the )?.*? to a single ([^(]+?)(?:\s*\(|$)/i);if(match)return match[1].trim();match=title.match(/filter(?:s)? the (.+?)(?: below)? as you type/i);if(match)return 'Search '+match[1].trim();if(/on or after|from date/i.test(title)||/(Date)?From$/i.test(id))return 'From date';if(/on or before|to date/i.test(title)||/(Date)?To$/i.test(id))return 'To date';if(/sort/i.test(id)||control.options?.[0]?.textContent.trim().startsWith('Sort:'))return 'Sort by';if(/search|query|(^|_)q$/i.test(id)||control.placeholder?.toLowerCase().startsWith('search'))return 'Search records';const terms=[['Personnel','Personnel'],['Vehicle','Vehicle'],['Aircraft|Drone','Aircraft'],['K9','K9'],['Agency','Agency'],['Provider','Provider'],['Course','Course'],['Location|Court','Location'],['Category','Category'],['Mission','Mission type'],['Phase','Lifecycle phase'],['Type','Type'],['Status','Status'],['Unit','Unit'],['Rank','Rank'],['Year','Year'],['Month','Month']];for(const [pattern,label] of terms)if(new RegExp(pattern,'i').test(id))return label;const first=control.options?.[0]?.textContent.trim().replace(/^(All|Any)\s+/i,'');if(first&&first!=='All'&&first!=='Any')return first.replace(/s$/,'');return 'Filter';}
@@ -259,7 +373,7 @@ const SuiteUX = (()=>{
       profile.querySelector('#btnTextSizeToggle').before(themeRow);
     }
     profile.querySelectorAll('.text-zoom-btn').forEach(b=>b.addEventListener('click', e=>{e.stopPropagation();const pct=Number(b.dataset.zoom);applyTextZoom(pct);saveTextZoom(pct);}));const currentZoomPct=parseInt(document.documentElement.style.zoom)||115;profile.querySelectorAll('.text-zoom-btn').forEach(b=>b.classList.toggle('active',Number(b.dataset.zoom)===currentZoomPct));updateTextSizeLabel();document.getElementById('btnTextSizeToggle').addEventListener('click', e=>{e.stopPropagation();const sub=document.getElementById('textSizeSubmenu');const willOpen=sub.style.display==='none';sub.style.display=willOpen?'':'none';document.getElementById('textSizeChevron').style.transform=willOpen?'rotate(180deg)':'rotate(0deg)';});
-    const toolbar=document.querySelector('#topbar .role-switch');const find=button('Find records…','',search,'suite-search');find.innerHTML='<span>Find records…</span><kbd>Ctrl K</kbd>';find.setAttribute('aria-label','Find records and workspaces');toolbar.prepend(find);const profileToggleBtn=button('My profile','users',()=>{document.getElementById('suiteProfileName').textContent=currentPerson().name;profile.hidden=!profile.hidden;},'btn btn-outline btn-sm');profileToggleBtn.id='btnProfileToggle';toolbar.append(profileToggleBtn);
+    const toolbar=document.querySelector('#topbar .role-switch');initLiveSearch(toolbar);const profileToggleBtn=button('My profile','users',()=>{document.getElementById('suiteProfileName').textContent=currentPerson().name;profile.hidden=!profile.hidden;},'btn btn-outline btn-sm');profileToggleBtn.id='btnProfileToggle';toolbar.append(profileToggleBtn);
     // Any actual action inside this menu (Change Password, Reset Demo Data, Data & connection,
     // and the admin-only buttons appended later by addPlatformAdminButtons) should close the panel
     // the moment it's chosen, the same way Log Out already does -- otherwise it's left open behind
