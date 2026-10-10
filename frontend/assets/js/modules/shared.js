@@ -1741,6 +1741,7 @@ const ABILITY_CATALOG = {
     ["permits_view","View Licensing & Permits records"],
     ["permits_create","Create permit and license applications"],
     ["permits_edit","Edit applications, requirements, and internal notes"],
+    ["permits_license_edit","Edit issued license and permit information, including linked contact and location details"],
     ["permits_background_view","View background and regulatory investigations"],
     ["permits_background_edit","Create and update background investigations"],
     ["permits_inspection_view","View permit inspections"],
@@ -2134,7 +2135,7 @@ const CIVIL_ADMIN_ABILITIES = ["civil_bulk_import","civil_paper_view_all","civil
 const CIVIL_SERVER_ABILITIES = ["civil_paper_view_own","civil_paper_log_attempt","civil_document_generate"];
 const CIVIL_SUPERVISOR_ABILITIES = ["civil_paper_view_all","civil_paper_view_own","civil_paper_intake","civil_safety_flag_manage","civil_document_generate","civil_fee_manage","civil_reports_view","civil_reports_export"];
 const CIVIL_AUDITOR_ABILITIES = ["civil_paper_view_all","civil_reports_view"];
-const PERMITS_ADMIN_ABILITIES = ["permits_bulk_import","permits_view","permits_create","permits_edit","permits_background_view","permits_background_edit","permits_inspection_view","permits_inspection_manage","permits_fee_view","permits_payment_record","permits_fee_manage","permits_approve","permits_issue","permits_reports_view","permits_reports_export","permits_admin","permits_admin_audit"];
+const PERMITS_ADMIN_ABILITIES = ["permits_bulk_import","permits_view","permits_create","permits_edit","permits_license_edit","permits_background_view","permits_background_edit","permits_inspection_view","permits_inspection_manage","permits_fee_view","permits_payment_record","permits_fee_manage","permits_approve","permits_issue","permits_reports_view","permits_reports_export","permits_admin","permits_admin_audit"];
 
 const DEFAULT_ROLES = [
   {id:"role_admin", name:"System Admin", locked:true, description:"Full access to every module and every ability. The top-level administrator for the whole suite.",

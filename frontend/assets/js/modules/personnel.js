@@ -2544,6 +2544,7 @@ let SCHED_CAL_YEAR = new Date().getFullYear(), SCHED_CAL_MONTH = new Date().getM
 let SCHED_CAL_SHIFT = 'all';
 let SCHED_DRAFT_PREVIEW_ID = null; // Client-only scheduler preview; never persisted or published.
 let SCHED_CAL_WORKGROUPS = [];
+let SCHED_CAL_PICKER_OPEN = false;
 let SHOW_PAST_SHIFT_PATTERNS = false;
 let SCHED_SUBTAB = 'roster';
 let OT_LOOKAHEAD_DAYS = 14;
@@ -2731,14 +2732,51 @@ function renderScheduling(){
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
-    ${SCHED_SUBTAB==='roster' && ((STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin())?`<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h2>Work Group Calendars</h2>${isGlobalScheduleAdmin()?'<button class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}</div><div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;">${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<button class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" ${isGlobalScheduleAdmin()?'':'disabled'}>${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}${isGlobalScheduleAdmin()?' · Access & Settings':''}</button>`).join('')}${(STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)?'<button type="button" class="btn btn-sm btn-danger" id="btnDeleteScheduleCalendar">Delete Calendar</button>':''}</div></div>`:''}
+    ${SCHED_SUBTAB==='roster' && ((STATE.pm.scheduleWorkGroups||[]).some(canManageWorkGroup)||isGlobalScheduleAdmin())?`
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;overflow:visible;">
+          <h2 style="margin:0;">Work Group Calendars</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="position:relative;">
+              <button type="button" class="btn btn-sm btn-outline" id="btnManageScheduleGroups" aria-expanded="false" aria-controls="scheduleGroupManager">Manage Calendars ▾</button>
+              <div id="scheduleGroupManager" hidden style="position:absolute;right:0;top:calc(100% + 8px);width:320px;max-width:calc(100vw - 32px);z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 32px rgba(0,0,0,.25);padding:10px;max-height:360px;overflow-y:auto;">
+                ${(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup).map(g=>`<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid var(--border);">
+                  <span style="font-size:12px;min-width:0;overflow-wrap:anywhere;">${escapeHtml(g.name)}${g.active===false?' (Inactive)':''}</span>
+                  <div style="display:flex;gap:5px;flex-shrink:0;">
+                    ${isGlobalScheduleAdmin()?`<button type="button" class="btn btn-sm btn-outline" data-schedule-group-edit="${g.id}" aria-label="Edit ${escapeHtml(g.name)} calendar">Edit</button>`:''}
+                    <button type="button" class="btn btn-sm btn-danger" data-schedule-group-delete="${g.id}" aria-label="Delete ${escapeHtml(g.name)} calendar" title="Delete ${escapeHtml(g.name)} calendar" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 9px;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v7m4-7v7"/></svg></button>
+                  </div>
+                </div>`).join('')}
+              </div>
+            </div>
+            ${isGlobalScheduleAdmin()?'<button type="button" class="btn btn-primary btn-sm" id="btnNewScheduleGroup">New Calendar</button>':''}
+          </div>
+        </div>
+      </div>`:''}
     <div id="schedSubBody"></div>
     ${can('pm_admin_categories')&&isGlobalScheduleAdmin()?'<div style="margin-top:28px;padding-top:16px;border-top:1px solid var(--border);"><button type="button" class="panel" id="scheduleAdmin" style="display:block;width:100%;max-width:330px;padding:20px;text-align:left;cursor:pointer;color:var(--heading);font:inherit;"><strong>Administration</strong><div style="font-size:12px;color:var(--text-dim);margin-top:10px">Time off codes and scheduling settings</div></button></div>':''}
   `;
   document.querySelectorAll('[data-sched-tab]').forEach(b=>b.addEventListener('click', ()=>{ SCHED_SUBTAB=b.dataset.schedTab; renderScheduling(); }));
   document.getElementById('scheduleAdmin')?.addEventListener('click',()=>switchView('sched-settings'));
   document.getElementById('btnNewScheduleGroup')?.addEventListener('click',()=>openWorkGroupAccessModal({id:'wg'+Date.now()+Math.random().toString(36).slice(2,6),name:'',active:true,visibility:'unit',unitNames:[],viewerIds:[],managerIds:[]},true));
-  document.getElementById('btnDeleteScheduleCalendar')?.addEventListener('click',openDeleteScheduleCalendarModal);
+  document.getElementById('btnManageScheduleGroups')?.addEventListener('click',()=>{
+    const panel=document.getElementById('scheduleGroupManager'),btn=document.getElementById('btnManageScheduleGroups');
+    panel.hidden=!panel.hidden;
+    btn.setAttribute('aria-expanded',String(!panel.hidden));
+    btn.textContent=panel.hidden?'Manage Calendars ▾':'Manage Calendars ▴';
+  });
+  document.getElementById('scheduleGroupManager')?.addEventListener('click',e=>e.stopPropagation());
+  if(!document.documentElement.dataset.scheduleManagerCloseBound){
+    document.documentElement.dataset.scheduleManagerCloseBound='true';
+    document.addEventListener('click',function closeScheduleManager(e){
+    const menu=document.getElementById('scheduleGroupManager');
+    const toggle=document.getElementById('btnManageScheduleGroups');
+    if(menu&&!menu.hidden&&toggle&&!toggle.contains(e.target)&&!menu.contains(e.target)){
+      menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.textContent='Manage Calendars ▾';
+    }
+    });
+  }
+  document.querySelectorAll('[data-schedule-group-delete]').forEach(b=>b.addEventListener('click',()=>openDeleteScheduleCalendarModal(b.dataset.scheduleGroupDelete)));
   document.querySelectorAll('[data-schedule-group-edit]').forEach(b=>b.onclick=()=>openWorkGroupAccessModal(STATE.pm.scheduleWorkGroups.find(g=>g.id===b.dataset.scheduleGroupEdit)));
   if(SCHED_SUBTAB==='roster') renderRosterSub();
   else if(SCHED_SUBTAB==='events') renderSpecialEventsSub();
@@ -2890,7 +2928,7 @@ function calendarDeletionLinks(id){
   const shiftIds=new Set((STATE.pm.scheduleShifts||[]).filter(s=>(s.workGroupId||'wg_patrol')===id).map(s=>s.id));
   return Object.entries(STATE.pm).filter(([collection,rows])=>collection!=='scheduleWorkGroups'&&collection!=='deletedCalendarArchives'&&Array.isArray(rows)).flatMap(([collection,rows])=>rows.filter(row=>row&&typeof row==='object'&&(row.workGroupId===id||(row.eligibleWorkGroupIds||[]).includes(id)||shiftIds.has(row.shiftId)||Object.keys(row.shiftSlots||{}).some(shiftId=>shiftIds.has(shiftId)))).map(row=>({collection,id:row.id})));
 }
-function openDeleteScheduleCalendarModal(){
+function openDeleteScheduleCalendarModal(selectedGroupId){
   const groups=(STATE.pm.scheduleWorkGroups||[]).filter(canManageWorkGroup);
   if(!groups.length){toast('You do not manage any calendars.',true);return;}
   document.getElementById('modalBox').className='modal';
@@ -2902,6 +2940,7 @@ function openDeleteScheduleCalendarModal(){
   openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
   const select=document.getElementById('fDeleteCalendar'),impact=document.getElementById('calendarDeleteImpact');
   const update=()=>{const links=calendarDeletionLinks(select.value);impact.textContent=links.length+' linked scheduling records will be detached or removed from the active calendar. Any affected event history will be archived.';};
+  if(selectedGroupId && groups.some(g=>g.id===selectedGroupId)) select.value=selectedGroupId;
   select.addEventListener('change',update);update();
   document.getElementById('mSave').onclick=()=>deleteScheduleCalendar(select.value);
 }
@@ -4205,7 +4244,15 @@ function renderDutyCalendar(body){
         <button class="btn btn-sm btn-outline" data-sched-cal-nav="today">Today</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div class="sched-workgroup-filter">${allGroups.map(g=>`<label class="sched-filter-chip"><input type="checkbox" data-cal-workgroup="${g.id}" ${groupIds.has(g.id)?'checked':''}> ${escapeHtml(g.name)}</label>${isGlobalScheduleAdmin()?`<button class="btn btn-sm btn-outline" data-cal-access="${g.id}" title="Configure ${escapeHtml(g.name)} calendar access">Access</button>`:''}`).join('')}</div>
+        <details id="schedCalendarPicker" ${SCHED_CAL_PICKER_OPEN?'open':''} style="position:relative;width:290px;max-width:100%;">
+          <summary class="btn btn-outline" style="height:40px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;list-style:none;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>Calendar Selection</strong> <span style="color:var(--text-dim);font-size:11px;">(${groupIds.size} selected)</span></span><span aria-hidden="true">▾</span>
+          </summary>
+          <div style="position:absolute;top:calc(100% + 5px);left:0;width:290px;max-width:calc(100vw - 40px);z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.19);padding:8px;max-height:320px;overflow-y:auto;">
+            ${allGroups.map(g=>`<div style="display:flex;align-items:center;gap:6px;justify-content:space-between;padding:5px 4px;border-bottom:1px solid var(--border);"><label style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;font-size:12px;cursor:pointer;"><input type="checkbox" data-cal-workgroup="${g.id}" ${groupIds.has(g.id)?'checked':''}><span style="overflow-wrap:anywhere;">${escapeHtml(g.name)}</span></label>${isGlobalScheduleAdmin()?`<button type="button" class="btn btn-sm btn-outline" data-cal-access="${g.id}" title="Configure ${escapeHtml(g.name)} calendar access" style="flex-shrink:0;">Access</button>`:''}</div>`).join('')}
+            <div style="display:flex;justify-content:flex-end;padding-top:8px;"><button type="button" class="btn btn-sm btn-primary" id="schedCalendarPickerDone">Done</button></div>
+          </div>
+        </details>
         <div class="form-row" style="margin:0;min-width:220px;">
         <select id="fSchedCalShift">
           <option value="all" ${SCHED_CAL_SHIFT==='all'?'selected':''}>All Shifts</option>
@@ -4231,7 +4278,10 @@ function renderDutyCalendar(body){
     SCHED_CAL_YEAR=y; SCHED_CAL_MONTH=m;
     renderDutyCalendar(body);
   }));
-  body.querySelectorAll('[data-cal-access]').forEach(b=>b.addEventListener('click',()=>openWorkGroupAccessModal(allGroups.find(g=>g.id===b.dataset.calAccess))));
+  const calPicker=body.querySelector('#schedCalendarPicker');
+  calPicker?.addEventListener('toggle',()=>{SCHED_CAL_PICKER_OPEN=calPicker.open;});
+  body.querySelector('#schedCalendarPickerDone')?.addEventListener('click',()=>{SCHED_CAL_PICKER_OPEN=false;calPicker.open=false;});
+    body.querySelectorAll('[data-cal-access]').forEach(b=>b.addEventListener('click',()=>openWorkGroupAccessModal(allGroups.find(g=>g.id===b.dataset.calAccess))));
   body.querySelectorAll('[data-cal-workgroup]').forEach(cb=>cb.addEventListener('change',()=>{
     const chosen=[...body.querySelectorAll('[data-cal-workgroup]:checked')].map(x=>x.dataset.calWorkgroup);
     if(!chosen.length){ cb.checked=true; toast("Keep at least one work group visible.",true); return; }
