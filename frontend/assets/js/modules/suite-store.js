@@ -53,8 +53,9 @@ function prepareSchedulingMigrationBaseline(baseline,records,roleIds){
 }
 
 const SuiteStore=(()=>{
-  const AWS_DEV_MODE=true;
-  window.SONOMARZI_AWS_DEV=true;
+  const LOCAL_PREVIEW=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  const AWS_DEV_MODE=!LOCAL_PREVIEW;
+  window.SONOMARZI_AWS_DEV=AWS_DEV_MODE;
   const AWS_DEV={
     apiBase:'https://7debzkoq7k.execute-api.us-east-2.amazonaws.com',
     tokenKey:'sonomarzi.aws.id_token',
