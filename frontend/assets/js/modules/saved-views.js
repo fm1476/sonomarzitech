@@ -1,10 +1,29 @@
 /* Saved filter views and table paging use device preferences, never agency records. */
 (()=>{
  const selectedViews=new Map();
+ // One shared header utility rail for all module subsections; future modules inherit it.
+ function placeViewToolbar(active){
+   const banner=document.getElementById('tenantIdentityBanner');
+   let rail=document.getElementById('moduleViewUtilityRail');
+   if(rail && rail.dataset.viewId!==active.id){rail.remove();rail=null;}
+   const saved=active.querySelector('.saved-view-tools')||rail?.querySelector('.saved-view-tools');
+   const back=active.querySelector('[data-module-dashboard-back]')||rail?.querySelector('[data-module-dashboard-back]');
+   if(!saved&&!back){rail?.remove();return;}
+   if(!rail){
+     rail=document.createElement('div');
+     rail.id='moduleViewUtilityRail';
+     rail.className='module-view-utility-rail';
+     rail.dataset.viewId=active.id;
+   }
+   if(saved){saved.dataset.forView=active.id;rail.append(saved);}
+   if(back){back.style.marginBottom='0';rail.append(back);}
+   if(banner)banner.append(rail);
+   else active.prepend(rail); // Safe fallback for contexts without an identity strip.
+ }
  const base=SuiteUX.enhance;
  SuiteUX.enhance=function(){base();const active=document.querySelector('.view.active');if(!active)return;
   const filters=[...active.querySelectorAll('.toolbar .filters input[id]:not(.searchable-select-input),.toolbar .filters select[id]')];
-  if(filters.length&&!active.querySelector('.saved-view-tools')){
+  if(filters.length&&!active.querySelector('.saved-view-tools')&&!document.querySelector('#moduleViewUtilityRail[data-view-id="'+active.id+'"] .saved-view-tools')){
     const key='saved-filters.'+active.id;
     const saved=SuiteUX.preferences.get(key,[]);
     // Defaults come from the module's own controls, not from a saved view.
@@ -103,6 +122,7 @@
     bar.append(btn);
     active.prepend(bar);
   }
+  placeViewToolbar(active);
   active.querySelectorAll('table').forEach(table=>{if(table.dataset.paged)return;table.dataset.paged='1';const rows=[...table.querySelectorAll('tbody>tr')];if(rows.length<=50)return;let page=0,size=50;const bar=document.createElement('div');bar.className='table-pagination';bar.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px;font-size:12px';const prev=document.createElement('button'),next=document.createElement('button'),label=document.createElement('span');prev.className=next.className='btn btn-outline btn-sm';prev.textContent='Previous';next.textContent='Next';const show=()=>{rows.forEach((r,i)=>r.hidden=i<page*size||i>=(page+1)*size);label.textContent=`${page*size+1}–${Math.min((page+1)*size,rows.length)} of ${rows.length}`;prev.disabled=page===0;next.disabled=(page+1)*size>=rows.length;};prev.onclick=()=>{page--;show();};next.onclick=()=>{page++;show();};bar.append(prev,label,next);table.after(bar);show();});
  };
 })();
