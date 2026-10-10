@@ -193,3 +193,10 @@ html[data-theme=dark] .work-eyebrow,html[data-theme=dark] .quick-action svg,html
   line-height:normal;
 }
 #topbar .role-switch #btnNotifBell{width:44px !important;min-width:44px !important;max-width:44px !important;}
+
+
+/* Clickable Licensing & Permits dashboard metrics retain the existing card look. */
+.work-metrics>.permit-metric-link{display:block;width:100%;padding:0;margin:0;border:0;background:transparent;color:inherit;text-align:inherit;font:inherit;cursor:pointer;border-radius:12px;}
+.work-metrics>.permit-metric-link>.work-metric{height:100%;box-sizing:border-box;cursor:pointer;}
+.work-metrics>.permit-metric-link:hover>.work-metric{border-color:var(--blue);}
+.work-metrics>.permit-metric-link:focus-visible{outline:2px solid var(--blue);outline-offset:3px;}
