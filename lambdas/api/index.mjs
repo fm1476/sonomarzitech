@@ -17,6 +17,7 @@ import { staffNoticesApi } from "./staff-notices.mjs";
 import { auditLogApi } from "./audit.mjs";
 import { internalIdentityApi, tenantAdminDbApi } from "./tenant-admin.mjs";
 import { permitsApi } from "./permits.mjs";
+import { searchWorkspaceRecords } from "./global-search.mjs";
 
 /*
  * ---------------------------------------------------------
@@ -66,7 +67,8 @@ export const handler = async event => {
       "/staff-notices",
       "/tenant-admin",
       "/audit-log",
-      "/permits/geocode"
+      "/permits/geocode",
+      "/global-search"
     ]);
 
     if (!allowedPaths.has(path)) {
@@ -90,7 +92,8 @@ export const handler = async event => {
         path === "/staff-notices" ||
         path === "/tenant-admin" ||
         path === "/audit-log" ||
-        path === "/permits/geocode"
+        path === "/permits/geocode" ||
+        path === "/global-search"
       ) &&
       method !== "POST"
     ) {
@@ -159,6 +162,10 @@ export const handler = async event => {
 
     if (path === "/tenant-admin") {
       return await tenantAdminDbApi(client, userAuth, body);
+    }
+
+    if (path === "/global-search") {
+      return await searchWorkspaceRecords(client, userAuth, body);
     }
 
     if (path === "/permits/geocode") {
