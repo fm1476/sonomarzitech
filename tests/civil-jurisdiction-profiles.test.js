@@ -16,3 +16,12 @@ assert.throws(()=>profiles.prepareSelection('unknown','Sonoma'), /Unknown/);
 assert.equal(ca.workflows.some(w=>w.id==='possession'),true);
 assert.equal(ca.safeguards.statutoryFeesRequireApproval,true);
 console.log('Civil jurisdiction profile safety checks passed');
+
+assert.equal(profiles.reviewIntake('possession',{}).ready,false);
+assert.equal(profiles.reviewIntake('unsupported',{}).ready,false);
+assert.equal(profiles.reviewIntake('possession',{
+ caseNumber:'CV-123',courtOfOrigin:'Superior Court',receivedDate:'2026-10-17',
+ signedInstructions:'signed',writDocument:'document',propertyAddress:'123 Main St'
+}).ready,true);
+assert.equal(profiles.reviewService({serviceMethod:'Substituted Service',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).ready,false);
+assert.equal(profiles.reviewService({serviceMethod:'Posting (Nail and Mail)',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).ready,false);
