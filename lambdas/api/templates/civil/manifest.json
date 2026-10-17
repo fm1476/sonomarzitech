@@ -1,0 +1,16 @@
+{
+  "pos010": {
+    "source": "https://www.courts.ca.gov/documents/pos010.pdf",
+    "retrievedAt": "2026-10-17",
+    "sourceSha256": "09b82292b517ea81b7a223a6902f44206645ce6ea8c5ede5b54b8d51bfddfa38",
+    "templateSha256": "8f0539a85f7fc12db7caf26fec2e85403bd3aaff0937d51cbf67536791f340d5",
+    "note": "Official fillable form, normalized for supported AcroForm editing; draft output remains unsigned."
+  },
+  "sc104": {
+    "source": "https://www.courts.ca.gov/documents/sc104.pdf",
+    "retrievedAt": "2026-10-17",
+    "sourceSha256": "d2e4b384f91948b71cc0d331f41133e2893bb552dadd761616844ffc41c1689e",
+    "templateSha256": "a8ba7493b2fd12aeb60c9aaf64ad8d1b757587e35b7606bba6ff6e1756a7179a",
+    "note": "Official fillable form, normalized for supported AcroForm editing; draft output remains unsigned."
+  }
+}

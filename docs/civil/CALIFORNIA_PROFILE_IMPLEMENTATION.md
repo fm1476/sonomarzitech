@@ -36,3 +36,11 @@ PR #45 includes an isolated, platform-admin-only fictional summons lifecycle. It
 Automated API-handler tests exercise the complete intake-to-closure lifecycle using a simulated database, including permission denial, other-tenant denial, disabled-mode denial, stale-update response, evidence rejection, history and audit calls. These tests do not establish real PostgreSQL persistence, transaction rollback, live browser behavior or live tenant isolation.
 
 Outstanding release gates: authenticated Demo testing after branch deployment, real database concurrency and audit atomicity checks, user-facing workflow beyond the internal prompt-based test controls, and California workflows beyond summons (including fees, levies, withholding, exemptions and returns). No commercial-readiness claim is supported by these tests.
+
+## Release-control implementation update
+
+Staff case commands, pagination/search, full-accessible-case accounting reports,
+notice/deadline evidence, return correction, Sonoma fund-holding controls, official
+POS-010/SC-104 unsigned drafts, and an audited acceptance-evidence screen now exist.
+See `QA_2026-10-17.md` for the exact verified scope and remaining release gates.
+A completed evidence checklist is not an activation mechanism or legal certification.

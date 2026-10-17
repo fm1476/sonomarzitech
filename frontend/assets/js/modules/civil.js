@@ -3405,7 +3405,7 @@ function renderCivilJurisdictionTab(body){
         : result.errors.join('; ');
     }catch(error){ output.textContent=error.message; }
   });
-  if(sharedProfile)body.querySelector('#civilJurisdictionLoadRemote').click();
+  if(sharedProfile){body.querySelector('#civilJurisdictionLoadRemote').click();window.CaliforniaCivil?.mountReadiness(body);}
 }
 
 function renderFeeScheduleTab(body){
