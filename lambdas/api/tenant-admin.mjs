@@ -1,3 +1,4 @@
+import { validateTestIntake, validateTestTransition } from "./lib/civil-test-validation.mjs";
 import { response, DEMO_TENANT_ID } from "./core.mjs";
 import { appendAuditEvent } from "./audit.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
@@ -436,7 +437,7 @@ async function tenantAdminDbApi(client, auth, body) {
     const updated=await client.query(
       `UPDATE suite_tenants
           SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{civilJurisdictionProfile}',$2::jsonb,true)
-        WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','unconfigured') <> 'active'
+        WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','unconfigured') NOT IN ('active','test')
         RETURNING id`,
       [targetTenantId,JSON.stringify(draft)]
     );
@@ -481,20 +482,12 @@ async function tenantAdminDbApi(client, auth, body) {
       if(!record || typeof record!=='object' || Array.isArray(record)){
         return response(400,{success:false,error:'Case record required.'});
       }
-      const required=['caseNumber','courtOfOrigin','receivedDate','defendant','plaintiff',
-        'signedInstructions','serviceAddresses'];
-      const missing=required.filter(k=>!record[k] ||
-        (Array.isArray(record[k]) && !record[k].length));
-      if(missing.length)return response(400,{success:false,error:'Missing '+missing.join(', ')});
-      if(!Array.isArray(record.serviceAddresses) ||
-         !record.serviceAddresses.some(a=>typeof a?.address==='string'&&a.address.trim())){
-        return response(400,{success:false,error:'At least one service address required.'});
-      }
-      if(JSON.stringify(record).length>20000)return response(413,{success:false,error:'Test record too large.'});
+      const errors=validateTestIntake(record);
+      if(errors.length)return response(400,{success:false,error:errors.join('; ')});
       const inserted=await client.query(
         `INSERT INTO suite_civil_california_test_cases(tenant_id,case_number,record,created_by)
          VALUES($1,$2,$3::jsonb,$4) RETURNING id,stage`,
-        [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true}),auth.userId]
+        [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true,testHistory:[]}),auth.userId]
       );
       await platformEvent(client,auth,targetTenantId,'Created California TEST summons '+inserted.rows[0].id);
       return response(200,{success:true,data:{case:inserted.rows[0]}});
@@ -502,6 +495,8 @@ async function tenantAdminDbApi(client, auth, body) {
     if(operation==='transition'){
       const id=String(body?.id||'');
       const stage=String(body?.stage||'');
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+        return response(400,{success:false,error:'Valid test case ID required.'});
       const allowed={intake:['assigned'],assigned:['attempted','served'],attempted:['attempted','served'],
         served:['reviewed'],reviewed:['closed']};
       const existing=await client.query(
@@ -514,14 +509,8 @@ async function tenantAdminDbApi(client, auth, body) {
         return response(409,{success:false,error:'Invalid test workflow transition.'});
       }
       const evidence=body?.evidence;
-      if(['attempted','served','reviewed','closed'].includes(stage) &&
-         (!evidence || typeof evidence!=='object' || !String(evidence.note||'').trim())){
-        return response(400,{success:false,error:'Documented evidence note required.'});
-      }
-      if(stage==='served' && (!evidence.serviceMethod || !/^\d{4}-\d{2}-\d{2}$/.test(String(evidence.servedDate||'')) ||
-         !evidence.servedOnName || !evidence.serverIdentity)){
-        return response(400,{success:false,error:'Service evidence incomplete.'});
-      }
+      const errors=validateTestTransition(stage,evidence,current.record,auth.userId);
+      if(errors.length)return response(400,{success:false,error:errors.join('; ')});
       const updated=await client.query(
         `UPDATE suite_civil_california_test_cases
           SET stage=$3,record=jsonb_set(record,'{testHistory}',

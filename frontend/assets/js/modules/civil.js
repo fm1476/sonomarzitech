@@ -3266,15 +3266,22 @@ function renderCivilJurisdictionTab(body){
       const next={intake:'assigned',assigned:'attempted',attempted:'served',
         served:'reviewed',reviewed:'closed'}[selected.stage];
       if(!next)throw Error('Case already closed or transition unavailable.');
-      const note=prompt('Evidence note for '+next+':','Fictional test evidence — no real service performed');
+      const note=prompt('Evidence note for '+next+':','Fictional test evidence, no real service performed');
       if(!note)return;
       const evidence={note};
-      if(next==='served'){
-        evidence.serviceMethod='FICTIONAL TEST ONLY';
-        evidence.servedDate=new Date().toISOString().slice(0,10);
-        evidence.servedOnName='Demo Defendant';
-        evidence.serverIdentity='Demo Test Operator';
+      const fields={assigned:['assignedTo'],attempted:['attemptDate','attemptTime','attemptResult'],
+        served:['servedDate','servedTime','servedOnName','serverIdentity'],
+        reviewed:['approvalReference'],closed:['returnReference','returnedDate']}[next];
+      const defaults={assignedTo:'Demo Test Operator',attemptDate:new Date().toISOString().slice(0,10),
+        attemptTime:'12:00',attemptResult:'No contact',servedDate:new Date().toISOString().slice(0,10),
+        servedTime:'12:00',servedOnName:'Demo Defendant',serverIdentity:'Demo Test Operator',
+        approvalReference:'TEST-APPROVAL',returnReference:'TEST-RETURN',returnedDate:new Date().toISOString().slice(0,10)};
+      for(const field of fields){
+        const value=prompt('Fictional evidence: '+field,defaults[field]);
+        if(!value)return;
+        evidence[field]=value.trim();
       }
+      if(next==='served') evidence.serviceMethod='Personal Service';
       const result=await californiaTestRequest({operation:'transition',id,stage:next,evidence});
       output.textContent='TEST case '+id+' moved to '+result?.case?.stage+'. No real service performed.';
     }catch(error){output.textContent='Transition failed: '+error.message;}

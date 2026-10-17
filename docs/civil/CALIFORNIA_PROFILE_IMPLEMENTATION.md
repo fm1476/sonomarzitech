@@ -29,3 +29,10 @@ Validate against California Code of Civil Procedure and Government Code, includi
 
 ## Acceptance
 No deploy or production activation until automated tests pass, other modules are verified unaffected, and California workflows are reviewed for legal accuracy. This file alone does not implement or activate the profile.
+
+## October 17 Demo implementation and verification
+PR #45 includes an isolated, platform-admin-only fictional summons lifecycle. It does not enable operational California processing. Evidence validation now rejects malformed calendar dates, blank/non-text intake fields, incomplete addresses, missing assignments/attempt details, unsupported service methods, missing method-specific evidence, self-review and closure without recorded approval. Incoming history is discarded at creation. Draft saves cannot overwrite test mode during a concurrent profile update.
+
+Automated API-handler tests exercise the complete intake-to-closure lifecycle using a simulated database, including permission denial, other-tenant denial, disabled-mode denial, stale-update response, evidence rejection, history and audit calls. These tests do not establish real PostgreSQL persistence, transaction rollback, live browser behavior or live tenant isolation.
+
+Outstanding release gates: authenticated Demo testing after branch deployment, real database concurrency and audit atomicity checks, user-facing workflow beyond the internal prompt-based test controls, and California workflows beyond summons (including fees, levies, withholding, exemptions and returns). No commercial-readiness claim is supported by these tests.
