@@ -809,7 +809,7 @@ window.CaliforniaCivil = (() => {
           if(c.workflowId==="bank-levy"&&!present(details.financialInstitution))intakeIssues.push("Record the financial institution");
         }
         const nextActions = {
-          Intake: intakeIssues.length ? (intakeIssues.every(issue=>issue.startsWith("Upload")) ? "intake_details" : "intake_details") : "approve_intake", Ready: "assign", Assigned: "attempt",
+          Intake: intakeIssues.length ? "intake_details" : "approve_intake", Ready: "assign", Assigned: "attempt",
           Attempting: "attempt", Served: "prepare_return",
           "Unable to Serve": "prepare_return", "Return Prepared": "review_return",
           Reviewed: "record_return", "Returned to Court": "reconcile"
@@ -832,10 +832,17 @@ window.CaliforniaCivil = (() => {
           const launch=document.createElement("button");
           launch.type="button";
           launch.className="btn btn-primary";
-          launch.textContent=intakeIssues.length&&r.stage==="Intake" ? "Continue intake review" : "Next: "+labels[recommended];
+          launch.textContent=r.stage==="Intake"&&intakeIssues.length&&intakeIssues.every(issue=>issue.startsWith("Upload")) ? "Next: Upload required documents" : intakeIssues.length&&r.stage==="Intake" ? "Continue intake review" : "Next: "+labels[recommended];
           launch.dataset.nextAction=recommended;
           nextPanel.append(launch);
-          launch.onclick=()=>panel.querySelector('[data-action="'+recommended+'"]')?.click();
+          launch.onclick=()=>{
+            const missingNonUpload=intakeIssues.filter(issue=>!issue.startsWith("Upload"));
+            if(r.stage==="Intake"&&intakeIssues.length&&missingNonUpload.length===0){
+              panel.querySelector("#ca-upload")?.click();
+            }else{
+              panel.querySelector('[data-action="'+recommended+'"]')?.click();
+            }
+          };
         }
         panel.querySelector("#ca-actions").innerHTML = actions
           .map(
