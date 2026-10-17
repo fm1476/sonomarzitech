@@ -3179,6 +3179,13 @@ function renderCivilJurisdictionTab(body){
     const selector=body.querySelector('#civilJurisdictionDraftProfile');
     selector.value=profile.profileId;selector.disabled=false;
     selector.dispatchEvent(new Event('change',{bubbles:true}));
+    // The searchable wrapper snapshots value/disabled on creation. Refresh it
+    // explicitly after the asynchronous tenant profile arrives.
+    const visibleSelector=body.querySelector('#civilJurisdictionDraftProfile-input');
+    if(visibleSelector){
+      visibleSelector.value=definition.displayName||'General / Unconfigured';
+      visibleSelector.disabled=false;
+    }
     const county=body.querySelector('#civilJurisdictionDraftCounty');
     county.value=profile.county||'';county.disabled=false;
     body.querySelector('#civilJurisdictionSaveRemote').disabled=['test','active'].includes(profile.status);
