@@ -796,6 +796,7 @@ function renderPaperDetailModal(){
   const isEnforceable = feeConfigFor(p.paperType).enforceable || !!enforcementFor(p.id);
   const tabs = [['overview','Overview'],['attempts','Attempts'],['fees','Fees & Reconciliation']];
   if(isEnforceable) tabs.push(['enforcement','Enforcement']);
+  if(STATE.civil.jurisdictionProfile?.profileId==='US-CA') tabs.push(['ca-review','CA Readiness']);
   tabs.push(['photos','Photos'],['documents','Documents'],['history','Change History']);
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-xl';
@@ -828,6 +829,20 @@ function renderPaperDetailTabContent(p){
   const canFee = can('civil_fee_manage');
   const canDoc = can('civil_document_generate');
 
+  if(PAPER_DETAIL_TAB==='ca-review'){
+    const registry = window.SonoMarziCivilProfiles;
+    const review = registry?.reviewCase(p) || {ready:false,approved:false,errors:['Jurisdiction registry unavailable']};
+    const missing = review.errors || [];
+    body.innerHTML = `
+      <div class="panel"><div class="panel-head"><h2>California Intake Readiness</h2></div><div class="panel-body">
+        <div style="margin-bottom:12px">Case: <strong>${escapeHtml(p.caseNumber||'')}</strong></div>
+        <div style="margin-bottom:12px">Workflow: ${escapeHtml(registry?.resolveWorkflow(p.paperType)||'Not mapped')}</div>
+        <div style="margin-bottom:12px">Evidence check: <strong>${review.ready?'Complete for preliminary review':'Incomplete'}</strong></div>
+        ${missing.length?`<ul>${missing.map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul>`:'<p>Required fields are present. A supervisor must still validate statutory compliance and authorize the action.</p>'}
+        <p style="font-size:12px;color:var(--text-dim)">Read-only preflight. This does not authorize service, fees, levy, disbursement or court filing. California activation is disabled until server-side controls and legal signoff are completed.</p>
+      </div></div>`;
+    return;
+  }
   if(PAPER_DETAIL_TAB==='overview'){
     const activeFlags = (p.safetyFlags||[]).filter(f=>f.active && (!f.expiresDate || f.expiresDate>=fmt(new Date())));
     body.innerHTML = `
