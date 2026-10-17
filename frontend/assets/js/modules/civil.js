@@ -237,6 +237,7 @@ function buildData(){
   return {
     papers,
     refData: defaultRefDataCivil(),
+    jurisdictionProfile: {profileId:'US-GENERAL',profileVersion:'1.0.0',status:'unconfigured',county:'',activatedAt:null,activatedBy:null},
     enforcements: [],
     cashierReconciliations: [],
     notifications: [],
@@ -246,6 +247,10 @@ function buildData(){
 }
 
 function migrateData(){
+  // Additive, tenant-scoped metadata. Never auto-select California or rewrite historical papers.
+  if(!STATE.civil.jurisdictionProfile){
+    STATE.civil.jurisdictionProfile = {profileId:'US-GENERAL',profileVersion:'1.0.0',status:'unconfigured',county:'',activatedAt:null,activatedBy:null};
+  }
   if(!STATE.civil.refData) STATE.civil.refData = defaultRefDataCivil();
   if(!STATE.civil.refData.feeSchedule) STATE.civil.refData.feeSchedule = defaultFeeScheduleCivil();
   // Backfill anything added to the fee schedule shape after a tenant's schedule was first
