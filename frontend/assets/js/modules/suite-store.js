@@ -722,13 +722,13 @@ const SuiteStore=(()=>{
   async function submitTrainingCheckin(newRecord){return submitSelfServiceRecord('trainingCheckins',newRecord);}
   let refreshing=false,lastRefresh=0,lastRecordRevision=null,lastAuditRevision=null,remoteUpdatePending=false,updateNoticeShown=false;
   async function refreshIfClean(){
-    if(refreshing||mode!=='shared'||!serverReady||pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
+    if(refreshing||mode!=='shared'||!serverReady||pendingWrites||saving||SuiteUX.hasDirty()||(typeof window!=='undefined'&&window.CaliforniaCivil?.hasOpenWork?.())||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
     const context={...remoteContext},epoch=sessionEpoch;
     refreshing=true;lastRefresh=Date.now();
     try{
       const {data,error}=await remoteRpc('suite_load_workspace',{p_tenant_id:context.tenantId,p_agency_id:context.agencyId});
       if(error)throw error;
-      if(epoch!==sessionEpoch||pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
+      if(epoch!==sessionEpoch||pendingWrites||saving||SuiteUX.hasDirty()||(typeof window!=='undefined'&&window.CaliforniaCivil?.hasOpenWork?.())||document.getElementById('modalOverlay')?.classList.contains('open'))return false;
       const changed=data.records.some(row=>serverVersions[row.key]!==row.version) ||
         Object.keys(serverVersions).some(key=>!data.records.some(row=>row.key===key));
       if(!changed){
@@ -747,7 +747,7 @@ const SuiteStore=(()=>{
     finally{refreshing=false;}
   }
   function liveSyncBlocked(){
-    return pendingWrites||saving||SuiteUX.hasDirty()||document.getElementById('modalOverlay')?.classList.contains('open');
+    return pendingWrites||saving||SuiteUX.hasDirty()||(typeof window!=='undefined'&&window.CaliforniaCivil?.hasOpenWork?.())||document.getElementById('modalOverlay')?.classList.contains('open');
   }
   async function checkLiveWorkspace(){
     if(mode!=='shared'||!serverReady||document.hidden||!document.getElementById('app')?.classList.contains('authenticated')||idlePauseBackgroundSync())return false;
