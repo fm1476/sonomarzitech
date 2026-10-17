@@ -237,6 +237,7 @@ function buildData(){
   return {
     papers,
     refData: defaultRefDataCivil(),
+    jurisdictionProfile: {profileId:'US-GENERAL',profileVersion:'1.0.0',status:'unconfigured',county:'',activatedAt:null,activatedBy:null},
     enforcements: [],
     cashierReconciliations: [],
     notifications: [],
@@ -246,6 +247,10 @@ function buildData(){
 }
 
 function migrateData(){
+  // Additive, tenant-scoped metadata. Never auto-select California or rewrite historical papers.
+  if(!STATE.civil.jurisdictionProfile){
+    STATE.civil.jurisdictionProfile = {profileId:'US-GENERAL',profileVersion:'1.0.0',status:'unconfigured',county:'',activatedAt:null,activatedBy:null};
+  }
   if(!STATE.civil.refData) STATE.civil.refData = defaultRefDataCivil();
   if(!STATE.civil.refData.feeSchedule) STATE.civil.refData.feeSchedule = defaultFeeScheduleCivil();
   // Backfill anything added to the fee schedule shape after a tenant's schedule was first
@@ -791,6 +796,7 @@ function renderPaperDetailModal(){
   const isEnforceable = feeConfigFor(p.paperType).enforceable || !!enforcementFor(p.id);
   const tabs = [['overview','Overview'],['attempts','Attempts'],['fees','Fees & Reconciliation']];
   if(isEnforceable) tabs.push(['enforcement','Enforcement']);
+  if(STATE.civil.jurisdictionProfile?.profileId==='US-CA') tabs.push(['ca-review','CA Readiness']);
   tabs.push(['photos','Photos'],['documents','Documents'],['history','Change History']);
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-xl';
@@ -823,6 +829,20 @@ function renderPaperDetailTabContent(p){
   const canFee = can('civil_fee_manage');
   const canDoc = can('civil_document_generate');
 
+  if(PAPER_DETAIL_TAB==='ca-review'){
+    const registry = window.SonoMarziCivilProfiles;
+    const review = registry?.reviewCase(p) || {ready:false,approved:false,errors:['Jurisdiction registry unavailable']};
+    const missing = review.errors || [];
+    body.innerHTML = `
+      <div class="panel"><div class="panel-head"><h2>California Intake Readiness</h2></div><div class="panel-body">
+        <div style="margin-bottom:12px">Case: <strong>${escapeHtml(p.caseNumber||'')}</strong></div>
+        <div style="margin-bottom:12px">Workflow: ${escapeHtml(registry?.resolveWorkflow(p.paperType)||'Not mapped')}</div>
+        <div style="margin-bottom:12px">Evidence check: <strong>${review.ready?'Complete for preliminary review':'Incomplete'}</strong></div>
+        ${missing.length?`<ul>${missing.map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul>`:'<p>Required fields are present. A supervisor must still validate statutory compliance and authorize the action.</p>'}
+        <p style="font-size:12px;color:var(--text-dim)">Read-only preflight. This does not authorize service, fees, levy, disbursement or court filing. California activation is disabled until server-side controls and legal signoff are completed.</p>
+      </div></div>`;
+    return;
+  }
   if(PAPER_DETAIL_TAB==='overview'){
     const activeFlags = (p.safetyFlags||[]).filter(f=>f.active && (!f.expiresDate || f.expiresDate>=fmt(new Date())));
     body.innerHTML = `
@@ -2446,6 +2466,23 @@ function openIntakeModal(existingId){
       assignedServerId, notes: document.getElementById('fCpNotes').value.trim(),
       priority: PRIORITY_PAPER_TYPES.includes(paperType) ? "Immediate" : "Standard",
     };
+    // Never process California papers through the generic/Arizona-derived workflow.
+    // Activation remains server-controlled; these are additional defense-in-depth guards.
+    const caProfile = STATE.civil.jurisdictionProfile;
+    if(caProfile?.profileId==='US-CA'){
+      if(caProfile.status!=='active' || !window.SonoMarziCivilProfiles?.canActivate(caProfile)){
+        toast('California Civil Process is not activated. Paper changes are disabled until the approved jurisdiction workflow is available.',true);
+        return;
+      }
+      const workflow = window.SonoMarziCivilProfiles.resolveWorkflow(paperType);
+      const intake = window.SonoMarziCivilProfiles.reviewIntake(workflow,data);
+      if(!intake.ready){
+        toast('California intake requires additional evidence: '+intake.errors.join('; '),true);
+        return;
+      }
+      toast('California intake requires supervisor review before processing.',true);
+      return;
+    }
     if(editing){
       Object.keys(data).forEach(field=>recordFieldChangeCivil(p,field,p[field],data[field]));
       Object.assign(p, data);
@@ -3066,7 +3103,7 @@ function renderAdmin(){
     return;
   }
   const tabs = [];
-  if(canManage){ Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label])); tabs.push(['feeSchedule','Fee Schedule & Rates']); tabs.push(['notifications','Notification Routing']); }
+  if(canManage){ Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label])); tabs.push(['jurisdiction','Jurisdiction Profile']); tabs.push(['feeSchedule','Fee Schedule & Rates']); tabs.push(['notifications','Notification Routing']); }
   if(can('civil_bulk_import')) tabs.push(['bulkImport','Bulk Import']);
   if(canAudit) tabs.push(['audit','Platform Audit Log']);
   if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
@@ -3083,11 +3120,184 @@ function renderAdmin(){
 
 function renderAdminTabBody(){
   const body = document.getElementById('adminTabBodyCivil');
-  if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
+  if(ADMIN_TAB==='jurisdiction') renderCivilJurisdictionTab(body);
+  else if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
   else if(ADMIN_TAB==='feeSchedule') renderFeeScheduleTab(body);
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImport') renderBulkImportTab(body, 'civil');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
+}
+
+function renderCivilJurisdictionTab(body){
+  const current = STATE.civil.jurisdictionProfile || {profileId:'US-GENERAL',status:'unconfigured'};
+  const registry = window.SonoMarziCivilProfiles;
+  const selected = registry && registry.get(current.profileId);
+  const displayName = selected?.displayName || 'General Civil Process';
+  const status = current.status || 'unconfigured';
+  const profileOptions = ['US-GENERAL','US-CA'].map(id => registry?.get(id)).filter(Boolean);
+  const escProfile = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><h2>Jurisdiction Profile</h2></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px;color:var(--text-dim);">This setting is managed during agency provisioning. California is in development and cannot be activated for live civil process operations.</div>
+        <div class="form-2col">
+          <div class="form-row"><label>Current Profile</label><input disabled value="${escProfile(displayName)}"></div>
+          <div class="form-row"><label>Status</label><input disabled value="${escProfile(status)}"></div>
+          <div class="form-row"><label>Profile Version</label><input disabled value="${escProfile(current.profileVersion || '')}"></div>
+          <div class="form-row"><label>County</label><input disabled value="${escProfile(current.county || 'Not configured')}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);">California rules, forms, statutory fees and enforcement workflows require validation before activation. Existing records and other modules are unchanged.</div>
+        <div class="panel" style="margin-top:16px"><div class="panel-head"><h2>Prepare Jurisdiction Configuration</h2></div><div class="panel-body">
+          <div class="form-2col">
+            <div class="form-row"><label>Jurisdiction</label><select id="civilJurisdictionDraftProfile">
+              ${profileOptions.map(p=>`<option value="${escProfile(p.id)}">${escProfile(p.displayName||'General / Unconfigured')}</option>`).join('')}
+            </select></div>
+            <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name"></div>
+          </div>
+          <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
+          <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
+          <button class="btn btn-primary" id="civilJurisdictionSaveRemote" style="margin-left:8px">Save Draft to Tenant</button>
+          <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
+          <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
+          <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
+          <button class="btn btn-primary" id="civilJurisdictionCreateTestCase" style="margin-left:8px">Create Fictional Summons</button>
+          <button class="btn btn-outline" id="civilJurisdictionAdvanceTestCase" style="margin-left:8px">Advance Test Case</button>
+          <div id="civilJurisdictionTestCasesOutput" style="margin-top:10px"></div>
+          <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
+        </div></div>
+      </div>
+    </div>`;
+  const remoteProfileRequest = async (action, extra={}) => {
+    if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') throw Error('Shared AWS workspace required.');
+    const ctx=SuiteStore.remoteContext?.();
+    if(!ctx?.tenantId) throw Error('Select a tenant first.');
+    const result=await SuiteStore.api('/tenant-admin',{
+      method:'POST',
+      body:JSON.stringify({action,tenantId:ctx.tenantId,...extra})
+    });
+    if(result?.success===false) throw Error(result.error||'Tenant profile request failed.');
+    return result.data?.jurisdictionProfile || result.jurisdictionProfile;
+  };
+  body.querySelector('#civilJurisdictionLoadRemote')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    output.textContent='Loading tenant profile...';
+    try{
+      const profile=await remoteProfileRequest('get_civil_jurisdiction_profile');
+      if(!profile) throw Error('Tenant profile was not returned.');
+      output.textContent='Tenant profile: '+profile.profileId+' / '+(profile.county||'No county')+' ('+profile.status+').';
+      body.querySelector('#civilJurisdictionDraftProfile').value=profile.profileId;
+      body.querySelector('#civilJurisdictionDraftCounty').value=profile.county||'';
+    }catch(error){output.textContent='Unable to load: '+error.message;}
+  });
+  body.querySelector('#civilJurisdictionSaveRemote')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    const id=body.querySelector('#civilJurisdictionDraftProfile').value;
+    const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
+    try{
+      const selection=registry.prepareSelection(id,county);
+      const validation=registry.validateSelection(selection);
+      if(!validation.valid) throw Error(validation.errors.join('; '));
+      output.textContent='Saving draft...';
+      const saved=await remoteProfileRequest('set_civil_jurisdiction_draft',{profileId:id,county});
+      if(!saved) throw Error('Save was not confirmed.');
+      output.textContent='Saved to tenant: '+saved.profileId+' / '+(saved.county||'No county')+' ('+saved.status+'). This does not activate California processing.';
+    }catch(error){output.textContent='Unable to save: '+error.message;}
+  });
+  for(const [id,enabled] of [['civilJurisdictionEnableTest',true],['civilJurisdictionDisableTest',false]]){
+    body.querySelector('#'+id)?.addEventListener('click',async()=>{
+      const output=body.querySelector('#civilJurisdictionDraftResult');
+      try{
+        if(!confirm((enabled?'Enable':'Disable')+' California Civil TEST mode for the internal Demo tenant?')) return;
+        const saved=await remoteProfileRequest('set_civil_california_test_mode',{enabled});
+        output.textContent='Demo California test mode '+(saved?.status==='test'?'enabled':'disabled')+'. Production activation remains disabled.';
+      }catch(error){output.textContent='Unable to change test mode: '+error.message;}
+    });
+  }
+  body.querySelector('#civilJurisdictionTestCases')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    output.textContent='Loading isolated Demo test cases...';
+    try{
+      const ctx=SuiteStore.remoteContext?.();
+      const raw=await SuiteStore.api('/tenant-admin',{method:'POST',body:JSON.stringify({
+        action:'california_test_summons',tenantId:ctx.tenantId,operation:'list'
+      })});
+      const cases=raw?.data?.cases||[];
+      output.textContent=cases.length
+        ? cases.map(c=>c.case_number+' — '+c.stage+' (TEST)').join(' | ')
+        : 'No California Demo test cases have been created.';
+    }catch(error){output.textContent='Unable to list test cases: '+error.message;}
+  });
+  const californiaTestRequest=async(payload)=>{
+    const ctx=SuiteStore.remoteContext?.();
+    if(!ctx?.tenantId) throw Error('Select the Demo tenant.');
+    const result=await SuiteStore.api('/tenant-admin',{method:'POST',
+      body:JSON.stringify({action:'california_test_summons',tenantId:ctx.tenantId,...payload})});
+    if(result?.success===false) throw Error(result.error||'Test operation failed.');
+    return result?.data;
+  };
+  body.querySelector('#civilJurisdictionCreateTestCase')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    const caseNumber=prompt('Fictional test case number (e.g. TEST-CA-001):','TEST-CA-001');
+    if(!caseNumber)return;
+    const defendant=prompt('Fictional defendant name:','Demo Defendant');
+    if(!defendant)return;
+    const address=prompt('Fictional service address:','123 Example Street, Demo City, CA');
+    if(!address)return;
+    const record={caseNumber,courtOfOrigin:'Demo Superior Court (FICTIONAL)',
+      receivedDate:new Date().toISOString().slice(0,10),
+      plaintiff:'Demo Plaintiff',defendant,signedInstructions:'FICTIONAL DEMO INSTRUCTIONS',
+      serviceAddresses:[{address}],testOnly:true};
+    try{
+      const data=await californiaTestRequest({operation:'create',record});
+      output.textContent='Created TEST case '+caseNumber+' ('+data?.case?.id+').';
+    }catch(error){output.textContent='Creation failed: '+error.message;}
+  });
+  body.querySelector('#civilJurisdictionAdvanceTestCase')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    try{
+      const data=await californiaTestRequest({operation:'list'});
+      const cases=data?.cases||[];
+      if(!cases.length){output.textContent='Create a fictional test case first.';return;}
+      const id=prompt('Enter test case ID:',cases[0].id);
+      if(!id)return;
+      const selected=cases.find(c=>c.id===id);
+      if(!selected)throw Error('Case ID is not in the Demo test list.');
+      const next={intake:'assigned',assigned:'attempted',attempted:'served',
+        served:'reviewed',reviewed:'closed'}[selected.stage];
+      if(!next)throw Error('Case already closed or transition unavailable.');
+      const note=prompt('Evidence note for '+next+':','Fictional test evidence, no real service performed');
+      if(!note)return;
+      const evidence={note};
+      const fields={assigned:['assignedTo'],attempted:['attemptDate','attemptTime','attemptResult'],
+        served:['servedDate','servedTime','servedOnName','serverIdentity'],
+        reviewed:['approvalReference'],closed:['returnReference','returnedDate']}[next];
+      const defaults={assignedTo:'Demo Test Operator',attemptDate:new Date().toISOString().slice(0,10),
+        attemptTime:'12:00',attemptResult:'No contact',servedDate:new Date().toISOString().slice(0,10),
+        servedTime:'12:00',servedOnName:'Demo Defendant',serverIdentity:'Demo Test Operator',
+        approvalReference:'TEST-APPROVAL',returnReference:'TEST-RETURN',returnedDate:new Date().toISOString().slice(0,10)};
+      for(const field of fields){
+        const value=prompt('Fictional evidence: '+field,defaults[field]);
+        if(!value)return;
+        evidence[field]=value.trim();
+      }
+      if(next==='served') evidence.serviceMethod='Personal Service';
+      const result=await californiaTestRequest({operation:'transition',id,stage:next,evidence});
+      output.textContent='TEST case '+id+' moved to '+result?.case?.stage+'. No real service performed.';
+    }catch(error){output.textContent='Transition failed: '+error.message;}
+  });
+  body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
+    const id=body.querySelector('#civilJurisdictionDraftProfile').value;
+    const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    try{
+      const selection=registry.prepareSelection(id,county);
+      const result=registry.validateSelection(selection);
+      output.textContent=result.valid
+        ? 'Draft ready for platform administrator review: '+selection.profileId+' / '+selection.county+' (version '+selection.profileVersion+'). Activation is disabled.'
+        : result.errors.join('; ');
+    }catch(error){ output.textContent=error.message; }
+  });
 }
 
 function renderFeeScheduleTab(body){

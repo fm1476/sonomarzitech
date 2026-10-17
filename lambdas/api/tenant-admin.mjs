@@ -1,4 +1,5 @@
-import { response } from "./core.mjs";
+import { validateTestIntake, validateTestTransition } from "./lib/civil-test-validation.mjs";
+import { response, DEMO_TENANT_ID } from "./core.mjs";
 import { appendAuditEvent } from "./audit.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -369,6 +370,159 @@ async function tenantAdminDbApi(client, auth, body) {
   // but is filtered to that user's own memberships unless they are a Platform Admin.
   if (action === 'list_contexts') {
     return await listPlatformContexts(client, auth, body);
+  }
+
+  // Civil jurisdiction configuration is tenant-scoped and draft-only until legal
+  // review, backend workflow gates and explicit activation have been implemented.
+  if (action === 'get_civil_jurisdiction_profile' || action === 'set_civil_jurisdiction_draft' || action === 'set_civil_california_test_mode') {
+    const denied = platformOnly(auth); if (denied) return denied;
+    const targetTenantId = String(body?.tenantId || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(targetTenantId)) {
+      return response(400,{success:false,error:'Valid tenantId is required.'});
+    }
+    const tenant = await client.query(
+      `SELECT id,metadata FROM suite_tenants WHERE id=$1 LIMIT 1`,[targetTenantId]
+    );
+    if (!tenant.rows.length) return response(404,{success:false,error:'Tenant not found.'});
+    const current = tenant.rows[0].metadata?.civilJurisdictionProfile || {
+      profileId:'US-GENERAL',profileVersion:'1.0.0',county:'',status:'unconfigured'
+    };
+    if (action === 'get_civil_jurisdiction_profile') {
+      return response(200,{success:true,data:{jurisdictionProfile:current}});
+    }
+    if(action === 'set_civil_california_test_mode'){
+      if(targetTenantId!==DEMO_TENANT_ID){
+        return response(403,{success:false,error:'California test mode is restricted to the internal Demo tenant.'});
+      }
+      if(current.profileId!=='US-CA' || !current.county){
+        return response(409,{success:false,error:'Save a California county draft before enabling test mode.'});
+      }
+      if(!['draft','test','unconfigured'].includes(current.status)){
+        return response(409,{success:false,error:'Only a draft or existing test profile can change test mode.'});
+      }
+      if(typeof body?.enabled!=='boolean'){
+        return response(400,{success:false,error:'enabled must be a boolean.'});
+      }
+      const next={...current,status:body.enabled?'test':'draft',testMode:body.enabled,
+        activatedAt:null,activatedBy:null};
+      const updated=await client.query(
+        `UPDATE suite_tenants SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),
+          '{civilJurisdictionProfile}',$2::jsonb,true)
+         WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','draft')
+           IN ('draft','test','unconfigured') RETURNING id`,
+        [targetTenantId,JSON.stringify(next)]
+      );
+      if(!updated.rows.length) return response(409,{success:false,error:'Concurrent profile change; retry.'});
+      await platformEvent(client,auth,targetTenantId,
+        body.enabled?'Enabled California Civil TEST mode':'Disabled California Civil TEST mode');
+      return response(200,{success:true,data:{jurisdictionProfile:next}});
+    }
+    const profileId=String(body?.profileId||'').trim();
+    const county=String(body?.county||'').trim();
+    if (!['US-GENERAL','US-CA'].includes(profileId)) {
+      return response(400,{success:false,error:'Unknown jurisdiction profile.'});
+    }
+    if (profileId==='US-CA' && (!county || county.length>100 || !/^[A-Za-z][A-Za-z .'-]*$/.test(county))) {
+      return response(400,{success:false,error:'California county is required (maximum 100 characters).'});
+    }
+    if (body?.status === 'active' || body?.activate === true || body?.activatedBy || body?.activatedAt) {
+      return response(403,{success:false,error:'Activation and approval fields cannot be supplied through draft configuration.'});
+    }
+    if (current.status==='active' || current.status==='test') {
+      return response(409,{success:false,error:'Active jurisdiction profiles cannot be changed through draft configuration.'});
+    }
+    const draft = {profileId,profileVersion:profileId==='US-CA'?'0.1.0':'1.0.0',
+      county:profileId==='US-CA'?county:'',status:profileId==='US-CA'?'draft':'unconfigured',
+      activatedAt:null,activatedBy:null};
+    const updated=await client.query(
+      `UPDATE suite_tenants
+          SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{civilJurisdictionProfile}',$2::jsonb,true)
+        WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','unconfigured') NOT IN ('active','test')
+        RETURNING id`,
+      [targetTenantId,JSON.stringify(draft)]
+    );
+    if (!updated.rows.length) return response(409,{success:false,error:'Jurisdiction profile changed concurrently.'});
+    await platformEvent(client,auth,targetTenantId,
+      'Prepared Civil jurisdiction draft '+profileId+(county?' / '+county:''));
+    return response(200,{success:true,data:{jurisdictionProfile:draft}});
+  }
+
+  // Demo-only California summons lifecycle, isolated from legacy Civil records.
+  // No court filings, notices, payments or external service are initiated here.
+  if (action === 'california_test_summons') {
+    const denied=platformOnly(auth); if(denied)return denied;
+    const targetTenantId=String(body?.tenantId||'');
+    if(targetTenantId!==DEMO_TENANT_ID) return response(403,{success:false,error:'Demo tenant only.'});
+    const q=await client.query(
+      `SELECT metadata->'civilJurisdictionProfile' AS jurisdiction FROM suite_tenants WHERE id=$1`,
+      [targetTenantId]
+    );
+    if(q.rows[0]?.jurisdiction?.profileId!=='US-CA' ||
+       q.rows[0]?.jurisdiction?.status!=='test'){
+      return response(409,{success:false,error:'California Demo test mode must be enabled.'});
+    }
+    await client.query(`CREATE TABLE IF NOT EXISTS suite_civil_california_test_cases (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id UUID NOT NULL,
+      case_number TEXT NOT NULL,
+      record JSONB NOT NULL,
+      stage TEXT NOT NULL DEFAULT 'intake',
+      created_by UUID NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    const operation=String(body?.operation||'list');
+    if(operation==='list'){
+      const rows=await client.query(
+        `SELECT id,case_number,record,stage,updated_at FROM suite_civil_california_test_cases
+          WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`,[targetTenantId]);
+      return response(200,{success:true,data:{cases:rows.rows}});
+    }
+    if(operation==='create'){
+      const record=body?.record;
+      if(!record || typeof record!=='object' || Array.isArray(record)){
+        return response(400,{success:false,error:'Case record required.'});
+      }
+      const errors=validateTestIntake(record);
+      if(errors.length)return response(400,{success:false,error:errors.join('; ')});
+      const inserted=await client.query(
+        `INSERT INTO suite_civil_california_test_cases(tenant_id,case_number,record,created_by)
+         VALUES($1,$2,$3::jsonb,$4) RETURNING id,stage`,
+        [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true,testHistory:[]}),auth.userId]
+      );
+      await platformEvent(client,auth,targetTenantId,'Created California TEST summons '+inserted.rows[0].id);
+      return response(200,{success:true,data:{case:inserted.rows[0]}});
+    }
+    if(operation==='transition'){
+      const id=String(body?.id||'');
+      const stage=String(body?.stage||'');
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+        return response(400,{success:false,error:'Valid test case ID required.'});
+      const allowed={intake:['assigned'],assigned:['attempted','served'],attempted:['attempted','served'],
+        served:['reviewed'],reviewed:['closed']};
+      const existing=await client.query(
+        `SELECT id,record,stage FROM suite_civil_california_test_cases WHERE tenant_id=$1 AND id=$2`,
+        [targetTenantId,id]
+      );
+      if(!existing.rows.length)return response(404,{success:false,error:'Test case not found.'});
+      const current=existing.rows[0];
+      if(!allowed[current.stage]?.includes(stage)){
+        return response(409,{success:false,error:'Invalid test workflow transition.'});
+      }
+      const evidence=body?.evidence;
+      const errors=validateTestTransition(stage,evidence,current.record,auth.userId);
+      if(errors.length)return response(400,{success:false,error:errors.join('; ')});
+      const updated=await client.query(
+        `UPDATE suite_civil_california_test_cases
+          SET stage=$3,record=jsonb_set(record,'{testHistory}',
+            COALESCE(record->'testHistory','[]'::jsonb)||$4::jsonb,true),updated_at=now()
+          WHERE tenant_id=$1 AND id=$2 AND stage=$5 RETURNING id,stage`,
+        [targetTenantId,id,stage,JSON.stringify([{stage,evidence,actor:auth.userId,at:new Date().toISOString()}]),current.stage]
+      );
+      if(!updated.rows.length)return response(409,{success:false,error:'Test case changed; reload.'});
+      await platformEvent(client,auth,targetTenantId,'California TEST summons '+id+' -> '+stage);
+      return response(200,{success:true,data:{case:updated.rows[0]}});
+    }
+    return response(400,{success:false,error:'Unsupported California test operation.'});
   }
 
   if (action === 'list_subdomain_origins') {
