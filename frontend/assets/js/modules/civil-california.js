@@ -319,6 +319,12 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
 .ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
 .ca-classic #ca-detail .ca-case-content{display:block}
+.ca-classic .ca-action-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.ca-classic .ca-action-menu{position:relative;max-width:100%}
+.ca-classic .ca-action-menu summary{list-style:none;cursor:pointer;display:inline-block}
+.ca-classic .ca-action-menu summary::-webkit-details-marker{display:none}
+.ca-classic .ca-action-menu[open]{flex-basis:100%}
+.ca-classic .ca-action-menu .ca-secondary-actions{border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface);padding:12px;margin-top:8px}
 .ca-classic .ca-intake-checklist{margin:12px 0;padding-left:20px;display:grid;gap:5px;color:var(--text-dim);font-size:13px}
 .ca-classic.ca-workspace-open .ca-next-step{max-width:100%;border-radius:14px}
 .ca-classic.ca-workspace-open #ca-detail>.panel{padding:16px}
@@ -844,12 +850,13 @@ window.CaliforniaCivil = (() => {
             }
           };
         }
-        panel.querySelector("#ca-actions").innerHTML = actions
-          .map(
-            (a) =>
-              `<button class="btn btn-outline" data-action="${a}">${esc(labels[a])}</button>`,
-          )
-          .join(" ");
+        const primaryAction = recommended && actions.includes(recommended) ? recommended : null;
+        panel.querySelector("#ca-actions").innerHTML =
+          '<div class="ca-action-row">' +
+          (primaryAction ? '<button type="button" class="btn btn-primary" data-action="'+primaryAction+'">'+esc(labels[primaryAction])+'</button>' : '') +
+          '<details class="ca-action-menu"><summary class="btn btn-outline">More actions ('+(actions.length-(primaryAction?1:0))+')</summary><div class="ca-secondary-actions">' +
+          actions.filter(a=>a!==primaryAction).map(a=>'<button type="button" class="btn btn-outline" data-action="'+a+'">'+esc(labels[a])+'</button>').join('') +
+          '</div></details></div>';
         async function command(action, payload) {
           try {
             const next = await api(
