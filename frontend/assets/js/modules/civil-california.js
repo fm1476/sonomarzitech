@@ -236,7 +236,41 @@ window.CaliforniaCivil = (() => {
       const report = id === "civil-reports";
       if (report && !can("civil_reports_view"))
         throw Error("Civil reporting permission is required.");
-      root.innerHTML = `<div class="panel"><div class="panel-head"><h3>California Civil Process</h3></div><div class="panel-body"><p>${esc(context.profile.county || "California")} · ${context.profile.status === "test" ? "Fictional testing workspace" : "Agency workspace"}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+      root.innerHTML = `
+<style id="ca-classic-theme">
+.ca-classic{--ca-accent:var(--primary,#3478db);--ca-surface:var(--surface,var(--card-bg,var(--bg-card,#172335)));--ca-border:var(--border,rgba(110,146,182,.3));}
+.ca-classic.panel{border:0;background:transparent;box-shadow:none}
+.ca-classic>.panel-head{border:0;background:linear-gradient(110deg,rgba(38,109,215,.19),rgba(16,167,153,.10));padding:22px 24px;border-radius:16px 16px 0 0;border-bottom:1px solid var(--ca-border)}
+.ca-classic>.panel-head h3{font-size:23px;letter-spacing:-.4px;margin:0;color:var(--heading,var(--text))}
+.ca-classic>.panel-body{padding:22px 24px;border:1px solid var(--ca-border);border-top:0;border-radius:0 0 16px 16px}
+.ca-classic .ca-subtitle{font-size:13px;color:var(--text-dim);margin:0 0 16px}
+.ca-classic .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:12px 0 18px}
+.ca-classic .btn{border-radius:10px;min-height:37px;padding:8px 14px;font-weight:600;transition:filter .16s,transform .16s,background .16s;box-shadow:none}
+.ca-classic .btn:hover:not(:disabled){filter:brightness(1.12);transform:translateY(-1px)}
+.ca-classic .btn:focus-visible,.ca-classic input:focus-visible,.ca-classic select:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}
+.ca-classic .btn-primary{background:var(--ca-accent);color:white;border-color:transparent}
+.ca-classic .btn-outline{border:1px solid var(--ca-border);background:var(--ca-surface);color:var(--text,var(--heading))}
+.ca-classic #ca-search{width:100%;min-height:43px;border-radius:10px}
+.ca-classic #ca-list{overflow-x:auto;margin-top:17px}
+.ca-classic .data-table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--ca-border);border-radius:13px}
+.ca-classic .data-table thead{background:rgba(54,122,215,.12)}
+.ca-classic .data-table th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;padding:13px 14px;color:var(--text-dim);text-align:left}
+.ca-classic .data-table td{padding:12px 14px;vertical-align:middle;border-top:1px solid var(--ca-border)}
+.ca-classic .data-table tbody tr:hover{background:rgba(65,139,223,.07)}
+.ca-classic .ca-status-pill{display:inline-flex;border-radius:99px;padding:5px 10px;font-weight:700;font-size:12px;border:1px solid currentColor;background:rgba(68,154,230,.10);color:#4a9af3;white-space:nowrap}
+.ca-classic .ca-status-pill[data-stage="Closed"],.ca-classic .ca-status-pill[data-stage="Served"],.ca-classic .ca-status-pill[data-stage="Returned to Court"]{color:#22b991;background:rgba(34,185,145,.10)}
+.ca-classic .ca-status-pill[data-stage="Unable to Serve"],.ca-classic .ca-status-pill[data-stage="Cancelled"]{color:#eb6672;background:rgba(235,102,114,.10)}
+.ca-classic .ca-status-pill[data-stage="Attempting"],.ca-classic .ca-status-pill[data-stage="Return Prepared"]{color:#eca947;background:rgba(236,169,71,.10)}
+.ca-classic #ca-detail{margin-top:20px}
+.ca-classic #ca-detail>.panel,.ca-classic #ca-report,.ca-classic #ca-form form{border-radius:14px;border:1px solid var(--ca-border);padding:18px;margin:14px 0;background:var(--ca-surface)}
+.ca-classic #ca-detail details{border:1px solid var(--ca-border);border-radius:11px;padding:10px 14px;margin:10px 0}
+.ca-classic #ca-detail summary{font-weight:650;cursor:pointer;padding:4px 0;color:var(--heading,var(--text))}
+.ca-classic #ca-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.ca-classic #ca-actions button{margin:0}
+.ca-classic [role="alert"]:not(:empty){color:#eb6672}
+.ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
+@media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -249,7 +283,7 @@ window.CaliforniaCivil = (() => {
             ),
           );
         root.querySelector("#ca-list").innerHTML =
-          `<table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map((x) => `<tr><td><button class="btn btn-outline" data-case="${esc(x.record.id)}">${esc(x.record.caseNumber)}</button></td><td>${esc(x.record.paperType)}</td><td>${esc(x.record.defendant)}</td><td>${esc(x.record.stage)}</td><td>${esc(x.record.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table>${!selected.length ? "<p>No matching cases.</p>" : ""}<p>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</p>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}`;
+          `<table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map((x) => `<tr><td><button class="btn btn-outline" data-case="${esc(x.record.id)}">${esc(x.record.caseNumber)}</button></td><td>${esc(x.record.paperType)}</td><td>${esc(x.record.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(x.record.stage)}">${esc(x.record.stage)}</span></td><td>${esc(x.record.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table>${!selected.length ? "<p>No matching cases.</p>" : ""}<p>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</p>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}`;
         root.querySelector("#ca-more")?.addEventListener("click", async (e) => {
           e.target.disabled = true;
           try {

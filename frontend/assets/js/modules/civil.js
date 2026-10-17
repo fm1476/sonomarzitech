@@ -3159,6 +3159,7 @@ function renderCivilJurisdictionTab(body){
   const selected = registry && registry.get(current.profileId);
   const displayName = selected?.displayName || 'General Civil Process';
   const status = current.status || 'unconfigured';
+  const californiaCounties = ["Alameda","Alpine","Amador","Butte","Calaveras","Colusa","Contra Costa","Del Norte","El Dorado","Fresno","Glenn","Humboldt","Imperial","Inyo","Kern","Kings","Lake","Lassen","Los Angeles","Madera","Marin","Mariposa","Mendocino","Merced","Modoc","Mono","Monterey","Napa","Nevada","Orange","Placer","Plumas","Riverside","Sacramento","San Benito","San Bernardino","San Diego","San Francisco","San Joaquin","San Luis Obispo","San Mateo","Santa Barbara","Santa Clara","Santa Cruz","Shasta","Sierra","Siskiyou","Solano","Sonoma","Stanislaus","Sutter","Tehama","Trinity","Tulare","Tuolumne","Ventura","Yolo","Yuba"];
   const profileOptions = ['US-GENERAL','US-CA'].map(id => registry?.get(id)).filter(Boolean);
   const escProfile = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   body.innerHTML = `
@@ -3177,17 +3178,11 @@ function renderCivilJurisdictionTab(body){
             <div class="form-row"><label>Jurisdiction</label><select id="civilJurisdictionDraftProfile" ${sharedProfile?'disabled':''}>
               ${profileOptions.map(p=>`<option value="${escProfile(p.id)}">${escProfile(p.displayName||'General / Unconfigured')}</option>`).join('')}
             </select></div>
-            <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name" ${sharedProfile?'disabled':''}></div>
+            <div class="form-row"><label for="civilJurisdictionDraftCounty">County (type to filter)</label><input id="civilJurisdictionDraftCounty" list="civilCaliforniaCounties" placeholder="Start typing a California county" autocomplete="off" ${sharedProfile?'disabled':''}><datalist id="civilCaliforniaCounties">${californiaCounties.map(county=>`<option value="${escProfile(county)}"></option>`).join('')}</datalist><div style="font-size:12px;color:var(--text-dim)">Select one of California's 58 counties. Start typing to narrow the list.</div></div>
           </div>
           <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
           <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
           <button class="btn btn-primary" id="civilJurisdictionSaveRemote" ${sharedProfile?'disabled':''} style="margin-left:8px">Save Draft to Tenant</button>
-          <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
-          <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
-          <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
-          <button class="btn btn-primary" id="civilJurisdictionCreateTestCase" style="margin-left:8px">Create Fictional Summons</button>
-          <button class="btn btn-outline" id="civilJurisdictionAdvanceTestCase" style="margin-left:8px">Advance Test Case</button>
-          <div id="civilJurisdictionTestCasesOutput" style="margin-top:10px"></div>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
         </div></div>
@@ -3246,8 +3241,11 @@ function renderCivilJurisdictionTab(body){
   body.querySelector('#civilJurisdictionSaveRemote')?.addEventListener('click',async()=>{
     const output=body.querySelector('#civilJurisdictionDraftResult');
     const id=body.querySelector('#civilJurisdictionDraftProfile').value;
-    const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
+    const countyInput=body.querySelector('#civilJurisdictionDraftCounty');
+    const rawCounty=countyInput.value.trim();
+    const county=californiaCounties.find(value=>value.toLowerCase()===rawCounty.toLowerCase())||rawCounty;
     try{
+      if(id==='US-CA'&&!californiaCounties.includes(county)) throw Error('Select a valid California county from the list.');
       const selection=registry.prepareSelection(id,county);
       const validation=registry.validateSelection(selection);
       if(!validation.valid) throw Error(validation.errors.join('; '));
