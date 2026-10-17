@@ -14,6 +14,20 @@ window.CaliforniaCivil = (() => {
     );
   let generation = 0;
   let preferredCaseView = "cards";
+  const deadlineStatus = (due,stage) => {
+    if (['Closed','Cancelled','Returned to Court'].includes(stage)) return 'clear';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(due||''))) return 'unknown';
+    const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const get=k=>parts.find(p=>p.type===k).value;
+    const today=Date.UTC(Number(get('year')),Number(get('month'))-1,Number(get('day')));
+    const [y,m,d]=due.split('-').map(Number);
+    const value=Date.UTC(y,m-1,d);
+    if(new Date(value).toISOString().slice(0,10)!==due)return 'unknown';
+    const days=Math.round((value-today)/86400000);
+    return days<0?'overdue':days<=7?'soon':'clear';
+  };
+  const deadlineLabel = status => ({overdue:'Overdue',soon:'Due within 7 days',clear:'On track',unknown:'Due date pending'})[status];
+
   const workspace = () => SuiteStore.remoteContext?.();
   async function api(operation, extra = {}, scope = workspace()) {
     if (!scope?.tenantId || !scope?.agencyId)
@@ -260,6 +274,14 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-view-controls [aria-pressed="true"]{background:rgba(48,125,222,.22);border-color:var(--ca-accent);color:var(--heading,var(--text))}
 .ca-classic .ca-case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:15px}
 .ca-classic .ca-case-card{padding:18px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(145deg,rgba(55,121,212,.10),rgba(24,162,153,.035) 75%),var(--ca-surface);box-shadow:0 5px 15px rgba(0,0,0,.06);min-width:0}
+.ca-classic .ca-case-card[data-deadline="overdue"]{border-left:5px solid #e45965}
+.ca-classic .ca-case-card[data-deadline="soon"]{border-left:5px solid #e7b340}
+.ca-classic .ca-case-card[data-deadline="clear"]{border-left:5px solid #21bd85}
+.ca-classic .ca-deadline{display:inline-flex;font-weight:700;font-size:12px;border-radius:99px;padding:3px 9px;border:1px solid currentColor}
+.ca-classic .ca-deadline[data-deadline="overdue"]{color:#f06b73;background:rgba(240,107,115,.10)}
+.ca-classic .ca-deadline[data-deadline="soon"]{color:#f1c15b;background:rgba(241,193,91,.10)}
+.ca-classic .ca-deadline[data-deadline="clear"]{color:#35ca9b;background:rgba(53,202,155,.10)}
+.ca-classic .ca-deadline[data-deadline="unknown"]{color:var(--text-dim)}
 .ca-classic .ca-case-card:hover{border-color:var(--ca-accent);box-shadow:0 7px 24px rgba(30,105,190,.15)}
 .ca-classic .ca-case-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .ca-classic .ca-case-card h4{font-size:16px;line-height:1.35;overflow-wrap:anywhere;margin:0 0 8px;color:var(--heading,var(--text))}
@@ -279,6 +301,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic .data-table th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;padding:13px 14px;color:var(--text-dim);text-align:left}
 .ca-classic .data-table td{padding:12px 14px;vertical-align:middle;border-top:1px solid var(--ca-border)}
 .ca-classic .data-table tbody tr:hover{background:rgba(65,139,223,.07)}
+.ca-classic #ca-view-cards,.ca-classic #ca-view-table{font-size:13px}
+.ca-classic .ca-calendar-toolbar .btn{min-width:95px}
+.ca-classic .ca-calendar-toolbar .ca-month-navigation{justify-content:space-between;width:100%}
+.ca-classic .ca-calendar-toolbar input[type=month]{flex:0 1 190px}
+.ca-classic .ca-calendar-toolbar{margin:10px 0 18px}
 .ca-classic .ca-status-pill{display:inline-flex;border-radius:99px;padding:5px 10px;font-weight:700;font-size:12px;border:1px solid currentColor;background:rgba(68,154,230,.10);color:#4a9af3;white-space:nowrap}
 .ca-classic .ca-status-pill[data-stage="Closed"],.ca-classic .ca-status-pill[data-stage="Served"],.ca-classic .ca-status-pill[data-stage="Returned to Court"]{color:#22b991;background:rgba(34,185,145,.10)}
 .ca-classic .ca-status-pill[data-stage="Unable to Serve"],.ca-classic .ca-status-pill[data-stage="Cancelled"]{color:#eb6672;background:rgba(235,102,114,.10)}
@@ -292,7 +319,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="alert"]:not(:empty){color:#eb6672}
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">▦ Cards</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -305,16 +332,16 @@ window.CaliforniaCivil = (() => {
             ),
           );
         const cardHtml = selected.map(({record:r}) =>
-          `<article class="ca-case-card"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
-          <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl>
+          `<article class="ca-case-card" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
+          <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl><span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span>
           <button type="button" class="btn btn-primary ca-card-open" data-case="${esc(r.id)}">Open case</button></article>`
         ).join("");
-        const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table></div>`;
+        const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")} <span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span></td></tr>`).join("")}</tbody></table></div>`;
         root.querySelector("#ca-list").innerHTML =
           (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>') +
           `<div class="ca-list-footer"><span>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</span>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}</div>`;
-        root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
-        root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
+        if(id !== "civil-calendar")root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
+        if(id !== "civil-calendar")root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
 
         root.querySelector("#ca-more")?.addEventListener("click", async (e) => {
           e.target.disabled = true;
@@ -349,8 +376,12 @@ window.CaliforniaCivil = (() => {
             }),
         );
       };
-      root.querySelector("#ca-view-cards").onclick = () => { preferredCaseView = "cards"; draw(); };
-      root.querySelector("#ca-view-table").onclick = () => { preferredCaseView = "table"; draw(); };
+      const updateViewButtons = mode => {
+        root.querySelector("#ca-view-cards").setAttribute("aria-pressed",String(mode === "cards"));
+        root.querySelector("#ca-view-table").setAttribute("aria-pressed",String(mode === "table"));
+      };
+      root.querySelector("#ca-view-cards").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("calendar"); } else { preferredCaseView = "cards"; draw(); } updateViewButtons("cards"); };
+      root.querySelector("#ca-view-table").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("table"); } else { preferredCaseView = "table"; draw(); } updateViewButtons("table"); };
       let searchTimer,
         searchEpoch = 0;
       root.querySelector("#ca-search").oninput = () => {
@@ -946,6 +977,7 @@ window.CaliforniaCivil = (() => {
         root.querySelector("#ca-list").hidden = true;
         const calendar = document.createElement("div");
         root.querySelector("#ca-list").before(calendar);
+        updateViewButtons("cards");
         calendarController = await window.CaliforniaCivilCalendar.mount(
           calendar,
           (range) => api("calendar", range, scope),
