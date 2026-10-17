@@ -29,6 +29,13 @@
     if(!profile) throw new Error('Unknown civil jurisdiction profile');
     return {profileId:profile.id,profileVersion:profile.version,county:String(county||'').trim(),status:'draft',activatedAt:null,activatedBy:null};
   }
+  function validateSelection(selection){
+    const errors=[];
+    if(!selection || !get(selection.profileId)) errors.push('Choose a recognized jurisdiction profile');
+    if(selection?.profileId==='US-CA' && !String(selection.county||'').trim()) errors.push('County is required for California');
+    if(selection?.status==='active') errors.push('Jurisdiction activation requires a validated server-side approval process');
+    return {valid:errors.length===0,errors};
+  }
   function canActivate(selection){
     return !!selection && selection.profileId==='US-CA' && false; // Block until statutory and operational signoff.
   }
@@ -49,7 +56,7 @@
     if(!required) return {ready:false,errors:['Unsupported California workflow']};
     const input=record && typeof record==='object'?record:{};
     const errors=required.filter(field=>!nonEmpty(input[field])).map(field=>'Missing required intake information: '+field);
-    return {ready:errors.length===0,errors,requiresHumanReview:true};
+    return {ready:errors.length===0,errors,requiresHumanReview:true,approved:false};
   }
   function reviewService(record){
     const input=record && typeof record==='object'?record:{};
@@ -69,7 +76,7 @@
     }
     return {ready:errors.length===0,errors,requiresHumanReview:true};
   }
-  const api=Object.freeze({get,prepareSelection,canActivate,reviewIntake,reviewService});
+  const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,reviewIntake,reviewService});
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   else root.SonoMarziCivilProfiles=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
