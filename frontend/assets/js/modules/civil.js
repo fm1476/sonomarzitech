@@ -3071,7 +3071,7 @@ function renderAdmin(){
     return;
   }
   const tabs = [];
-  if(canManage){ Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label])); tabs.push(['feeSchedule','Fee Schedule & Rates']); tabs.push(['notifications','Notification Routing']); }
+  if(canManage){ Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label])); tabs.push(['jurisdiction','Jurisdiction Profile']); tabs.push(['feeSchedule','Fee Schedule & Rates']); tabs.push(['notifications','Notification Routing']); }
   if(can('civil_bulk_import')) tabs.push(['bulkImport','Bulk Import']);
   if(canAudit) tabs.push(['audit','Platform Audit Log']);
   if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
@@ -3088,11 +3088,33 @@ function renderAdmin(){
 
 function renderAdminTabBody(){
   const body = document.getElementById('adminTabBodyCivil');
-  if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
+  if(ADMIN_TAB==='jurisdiction') renderCivilJurisdictionTab(body);
+  else if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
   else if(ADMIN_TAB==='feeSchedule') renderFeeScheduleTab(body);
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImport') renderBulkImportTab(body, 'civil');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
+}
+
+function renderCivilJurisdictionTab(body){
+  const current = STATE.civil.jurisdictionProfile || {profileId:'US-GENERAL',status:'unconfigured'};
+  const registry = window.SonoMarziCivilProfiles;
+  const selected = registry && registry.get(current.profileId);
+  const displayName = selected?.displayName || 'General Civil Process';
+  const status = current.status || 'unconfigured';
+  body.innerHTML = `
+    <div class="panel"><div class="panel-head"><h2>Jurisdiction Profile</h2></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px;color:var(--text-dim);">This setting is managed during agency provisioning. California is in development and cannot be activated for live civil process operations.</div>
+        <div class="form-2col">
+          <div class="form-row"><label>Current Profile</label><input disabled value="${esc(displayName)}"></div>
+          <div class="form-row"><label>Status</label><input disabled value="${esc(status)}"></div>
+          <div class="form-row"><label>Profile Version</label><input disabled value="${esc(current.profileVersion || '')}"></div>
+          <div class="form-row"><label>County</label><input disabled value="${esc(current.county || 'Not configured')}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);">California rules, forms, statutory fees and enforcement workflows require validation before activation. Existing records and other modules are unchanged.</div>
+      </div>
+    </div>`;
 }
 
 function renderFeeScheduleTab(body){
