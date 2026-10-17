@@ -165,7 +165,7 @@ window.CaliforniaCivilView = (() => {
     return `<hr><h3>${esc(r.caseNumber)} · ${esc(r.stage)}</h3><p>${esc(r.plaintiff)} / ${esc(r.defendant)} · ${esc(r.courtOfOrigin)}</p>
       <div class="form-2col"><p>Assigned server: <strong>${esc(person(r.assignedServerId))}</strong><br>Return due: ${esc(r.returnByDate ? date(r.returnByDate) : "Pending review")}</p><p>Case balance: <strong>${money(balance)}</strong><br>Released funds: ${money(current.availableCents ?? balance)}</p></div>
       <p style="color:var(${c.holds.some((h) => !h.resolvedAt) ? "--red" : "--green"})">Open claims/stays: ${c.holds.filter((h) => !h.resolvedAt).length}</p>
-      <div class="panel" style="border-left:3px solid var(--blue)"><div class="panel-body"><h4>Next step</h4><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
+      <div class="panel ca-next-step" style="border-left:3px solid var(--blue)"><div class="panel-body"><h4>Next step</h4><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
       <p>Packet forms: ${esc(workflow.forms.join(", "))}. Return: ${esc(workflow.returns.join(", "))}.</p><div id="ca-actions"></div>
       <h4>Documents</h4><div id="ca-documents"></div><h4>Case record</h4>
       ${section(
