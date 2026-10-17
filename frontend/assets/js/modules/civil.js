@@ -3102,15 +3102,16 @@ function renderCivilJurisdictionTab(body){
   const selected = registry && registry.get(current.profileId);
   const displayName = selected?.displayName || 'General Civil Process';
   const status = current.status || 'unconfigured';
+  const escProfile = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   body.innerHTML = `
     <div class="panel"><div class="panel-head"><h2>Jurisdiction Profile</h2></div>
       <div class="panel-body">
         <div style="margin-bottom:12px;color:var(--text-dim);">This setting is managed during agency provisioning. California is in development and cannot be activated for live civil process operations.</div>
         <div class="form-2col">
-          <div class="form-row"><label>Current Profile</label><input disabled value="${esc(displayName)}"></div>
-          <div class="form-row"><label>Status</label><input disabled value="${esc(status)}"></div>
-          <div class="form-row"><label>Profile Version</label><input disabled value="${esc(current.profileVersion || '')}"></div>
-          <div class="form-row"><label>County</label><input disabled value="${esc(current.county || 'Not configured')}"></div>
+          <div class="form-row"><label>Current Profile</label><input disabled value="${escProfile(displayName)}"></div>
+          <div class="form-row"><label>Status</label><input disabled value="${escProfile(status)}"></div>
+          <div class="form-row"><label>Profile Version</label><input disabled value="${escProfile(current.profileVersion || '')}"></div>
+          <div class="form-row"><label>County</label><input disabled value="${escProfile(current.county || 'Not configured')}"></div>
         </div>
         <div style="font-size:12px;color:var(--text-dim);">California rules, forms, statutory fees and enforcement workflows require validation before activation. Existing records and other modules are unchanged.</div>
       </div>
