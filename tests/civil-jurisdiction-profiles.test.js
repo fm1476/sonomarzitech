@@ -38,3 +38,7 @@ assert.equal(profiles.reviewWrit({issuedDate:'2026-01-01',writExpirationDate:'20
 assert.equal(profiles.reviewWrit({issuedDate:'2026-01-01',writExpirationDate:'2026-12-01',writDocument:'doc',courtOfOrigin:'court'},'2026-10-17').ready,true);
 assert.equal(profiles.reviewDisbursement({amount:200,availableTrustBalance:100,payee:'Payee',accountingReference:'A1',reconciledBy:'Reviewer'}).ready,false);
 assert.equal(profiles.reviewDisbursement({amount:50,availableTrustBalance:100,payee:'Payee',accountingReference:'A1',reconciledBy:'Reviewer'}).approved,false);
+
+assert.equal(profiles.reviewDisbursement({amount:'',availableTrustBalance:'',payee:'P',accountingReference:'A',reconciledBy:'R',approvalReference:'S'}).ready,false);
+assert.equal(profiles.reviewDisbursement({amount:50,availableTrustBalance:100,payee:'P',accountingReference:'A',reconciledBy:'R'}).ready,false);
+assert.equal(profiles.reviewDisbursement({amount:50,availableTrustBalance:100,payee:'P',accountingReference:'A',reconciledBy:'R',approvalReference:'S'}).ready,true);
