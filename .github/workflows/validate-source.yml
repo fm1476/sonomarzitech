@@ -29,4 +29,5 @@ jobs:
         run: |
           node tests/civil-california-postgres.test.mjs
           node tests/civil-california-view.test.mjs
+          node tests/civil-california-presentation.test.mjs
           node tests/civil-california-returns.test.mjs

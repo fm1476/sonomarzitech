@@ -1,4 +1,5 @@
 import {SONOMA_FEE_REFERENCE} from './lib/civil-california-fees.mjs';
+import {calendarEvents,validateCalendarRange} from './lib/civil-california-calendar.mjs';
 import {generateCaliforniaReturnDraft} from './lib/civil-california-returns.mjs';
 import {readinessStatus,saveReadinessEvidence} from './lib/civil-california-readiness.mjs';
 import {californiaFinancialReport} from './lib/civil-california-reporting.mjs';
@@ -50,6 +51,13 @@ export async function californiaCivilApi(client,auth,body){
     if(!access.admin&&!granted.includes('civil_paper_intake'))return response(403,{success:false,error:'Assignment management is required.'});
     const roster=await client.query(`SELECT DISTINCT m.person_id,u.display_name AS name,u.email FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.status='active' AND u.status='active' AND m.person_id IS NOT NULL ORDER BY u.display_name,u.email`,[tenantId,agencyId]);
     return response(200,{success:true,data:{people:roster.rows}});
+  }
+  if(operation==='calendar'){
+    try{validateCalendarRange(body.fromDate,body.toDate);}catch(error){return response(error.statusCode,{success:false,error:error.message});}
+    const q=await client.query(`SELECT value->>'id' AS id,value->>'caseNumber' AS case_number,value->>'stage' AS stage,value->>'returnByDate' AS return_by,value->'california'->'deadlines' AS deadlines FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false AND key::jsonb->0='["civil","papers"]'::jsonb AND value->'california'->>'ruleVersion'=$3 AND ($4::boolean OR value->>'assignedServerId'=$5) AND ((value->>'returnByDate' BETWEEN $6 AND $7) OR EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(value->'california'->'deadlines','[]'::jsonb)) AS d WHERE d->>'dueDate' BETWEEN $6 AND $7 AND d->>'completedAt' IS NULL))`,[tenantId,agencyId,CA_RULE_VERSION,access.admin||granted.includes('civil_paper_view_all'),access.personId,body.fromDate,body.toDate]);
+    const events=calendarEvents(q.rows,body.fromDate,body.toDate);
+    if(Buffer.byteLength(JSON.stringify(events))>3000000)return response(413,{success:false,error:'This calendar range contains too many events. Choose a shorter range.'});
+    return response(200,{success:true,data:{events,fromDate:body.fromDate,toDate:body.toDate}});
   }
   if(operation==='list'||operation==='report'){
     const all=access.admin||granted.includes('civil_paper_view_all');

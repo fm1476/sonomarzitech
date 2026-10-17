@@ -398,8 +398,8 @@ function stageColor(stage){
    ========================================================================= */
 const NAV_ITEMS = [
   {id:"civil-dashboard",label:"Dashboard",icon:"scale",title:"Civil Process",sub:"Service assignments, court deadlines, lookup, and administration",requiredAbility:null},
-  {id:"civil-board", label:"Service Board", icon:"scale", title:"Civil Process Service Board", sub:"Drag papers through intake, assignment, attempts, and return to court", requiredAbility:"civil_paper_view_all"},
-  {id:"civil-mine", label:"My Assignments", icon:"clipboardcheck", title:"My Assignments", sub:"Papers assigned to you, with attempt logging and Return of Service generation", requiredAbility:"civil_paper_view_own"},
+  {id:"civil-board", label:"Service Board", icon:"scale", title:"Civil Process Service Board", sub:"Manage intake, assignments, service attempts, and court returns", requiredAbility:"civil_paper_view_all"},
+  {id:"civil-mine", label:"My Assignments", icon:"clipboardcheck", title:"My Assignments", sub:"Your assigned papers, service attempts, and court returns", requiredAbility:"civil_paper_view_own"},
   {id:"civil-calendar", label:"Master Calendar", icon:"dashboard", title:"Civil Process Master Calendar", sub:"Every return-by deadline across the unit, by case", requiredAbility:"civil_paper_view_all"},
   {id:"civil-lookup", label:"Party & Address Lookup", icon:"search", title:"Party & Address Lookup", sub:"Search every case a name or address has ever appeared in, including safety history", requiredAbility:"civil_paper_view_all"},
   {id:"civil-reports", label:"Reports", icon:"chart", title:"Reports & Analytics", sub:"Fee collection and service performance across the unit", requiredAbility:"civil_reports_view"},
