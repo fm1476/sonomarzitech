@@ -3182,12 +3182,6 @@ function renderCivilJurisdictionTab(body){
           <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
           <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
           <button class="btn btn-primary" id="civilJurisdictionSaveRemote" ${sharedProfile?'disabled':''} style="margin-left:8px">Save Draft to Tenant</button>
-          <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
-          <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
-          <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
-          <button class="btn btn-primary" id="civilJurisdictionCreateTestCase" style="margin-left:8px">Create Fictional Summons</button>
-          <button class="btn btn-outline" id="civilJurisdictionAdvanceTestCase" style="margin-left:8px">Advance Test Case</button>
-          <div id="civilJurisdictionTestCasesOutput" style="margin-top:10px"></div>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
         </div></div>
