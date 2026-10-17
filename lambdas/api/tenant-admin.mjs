@@ -394,8 +394,11 @@ async function tenantAdminDbApi(client, auth, body) {
     if (!['US-GENERAL','US-CA'].includes(profileId)) {
       return response(400,{success:false,error:'Unknown jurisdiction profile.'});
     }
-    if (profileId==='US-CA' && (!county || county.length>100)) {
+    if (profileId==='US-CA' && (!county || county.length>100 || !/^[A-Za-z][A-Za-z .'-]*$/.test(county))) {
       return response(400,{success:false,error:'California county is required (maximum 100 characters).'});
+    }
+    if (body?.status === 'active' || body?.activate === true || body?.activatedBy || body?.activatedAt) {
+      return response(403,{success:false,error:'Activation and approval fields cannot be supplied through draft configuration.'});
     }
     if (current.status==='active') {
       return response(409,{success:false,error:'Active jurisdiction profiles cannot be changed through draft configuration.'});
