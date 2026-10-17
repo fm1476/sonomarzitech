@@ -440,7 +440,8 @@ function switchView(id){
   renderNav();
   renderView(id);
 }
-function renderView(id){
+async function renderView(id){
+  if(await window.CaliforniaCivil?.route(document.getElementById("view-"+id),id))return;
   if(id==='civil-dashboard'){
     const root=document.getElementById('view-civil-dashboard');root.innerHTML='';SuiteUX.renderModuleHub(root,'civil','civil-dashboard');
   }
@@ -458,7 +459,7 @@ function renderView(id){
 function recalcNotifications(){
   const today = new Date();
   const upcoming = [];
-  STATE.civil.papers.filter(p=>!['Returned to Court','Cancelled'].includes(p.stage)).forEach(p=>{
+  STATE.civil.papers.filter(p=>!['Returned to Court','Closed','Cancelled'].includes(p.stage)).forEach(p=>{
     const days = daysBetween(fmt(today), p.returnByDate);
     if(days<=3) upcoming.push({type:"return_due", entityId:p.id, message:`${p.caseNumber} (${p.paperType}) ${days<0?'is past its return-by date by '+Math.abs(days)+' days':'must be returned to court in '+days+' day(s)'} (${p.returnByDate}).`, recipientRoleId: STATE.civil.notifySettings.returnDueRoleId});
     if(p.priority==='Immediate' && p.stage==='Unassigned') upcoming.push({type:"priority_unassigned", entityId:p.id, message:`${p.caseNumber} is an Order of Protection / Injunction and is still unassigned \u2014 these require immediate service.`, recipientRoleId: STATE.civil.notifySettings.priorityUnassignedRoleId});
@@ -502,7 +503,7 @@ function renderBoard(){
 
   const unassignedCount = STATE.civil.papers.filter(p=>p.stage==='Unassigned').length;
   const priorityUnassigned = STATE.civil.papers.filter(p=>p.stage==='Unassigned' && p.priority==='Immediate').length;
-  const overdueCount = STATE.civil.papers.filter(p=>!['Returned to Court','Cancelled'].includes(p.stage) && daysBetween(fmt(new Date()),p.returnByDate)<0).length;
+  const overdueCount = STATE.civil.papers.filter(p=>!['Returned to Court','Closed','Cancelled'].includes(p.stage) && daysBetween(fmt(new Date()),p.returnByDate)<0).length;
   const servedThisWeek = STATE.civil.papers.filter(p=>p.servedDate && p.servedDate >= suiteWeekStart() && p.servedDate <= fmt(new Date())).length;
 
   document.getElementById('view-civil-board').innerHTML = `
@@ -510,7 +511,7 @@ function renderBoard(){
       <div class="stat-card"><div class="label">Unassigned</div><div class="value" style="color:${unassignedCount?'var(--red)':'var(--heading)'}">${unassignedCount}</div><div class="delta ${priorityUnassigned?'warn':'neutral'}">${priorityUnassigned} priority (protective orders)</div></div>
       <div class="stat-card"><div class="label">Past Return-By Date</div><div class="value" style="color:${overdueCount?'var(--red)':'var(--heading)'}">${overdueCount}</div></div>
       <div class="stat-card"><div class="label">Served This Week</div><div class="value">${servedThisWeek}</div></div>
-      <div class="stat-card"><div class="label">Total Active Papers</div><div class="value">${STATE.civil.papers.filter(p=>!['Returned to Court','Cancelled'].includes(p.stage)).length}</div></div>
+      <div class="stat-card"><div class="label">Total Active Papers</div><div class="value">${STATE.civil.papers.filter(p=>!['Returned to Court','Closed','Cancelled'].includes(p.stage)).length}</div></div>
     </div>
     <div class="toolbar">
       <div class="filters">
@@ -548,7 +549,7 @@ function renderBoard(){
 
 function renderPaperCard(p){
   const days = daysSinceReceived(p);
-  const overdue = !['Returned to Court','Cancelled'].includes(p.stage) && daysBetween(fmt(new Date()),p.returnByDate)<0;
+  const overdue = !['Returned to Court','Closed','Cancelled'].includes(p.stage) && daysBetween(fmt(new Date()),p.returnByDate)<0;
   const balance = feeBalance(p);
   const hasActiveSafety = (p.safetyFlags||[]).some(f=>f.active && (!f.expiresDate || f.expiresDate>=fmt(new Date())));
   return `
@@ -770,7 +771,17 @@ function healPaperRecord(p){
   if(p.mileage===undefined) p.mileage = 0;
   return p;
 }
-function openPaperDetail(id){
+async function openPaperDetail(id){
+  if(SuiteStore.mode()==='shared'&&window.CaliforniaCivil){
+    try{
+      const context=await window.CaliforniaCivil.context();
+      if(context.profile.profileId==='US-CA'){
+        switchView('civil-board');
+        await window.CaliforniaCivil.route(document.getElementById('view-civil-board'),'civil-board',id);
+        return;
+      }
+    }catch(error){toast(error.message,true);return;}
+  }
   // A record can be re-dispatched while it is already open (for example after a confirmed
   // shared-workspace save/live refresh). In that case keep the user's current tab instead of
   // bouncing them back to Overview. A normal open from the board/calendar still starts at Overview.
@@ -2288,7 +2299,20 @@ function openMarkServedModal(paperId, carryOverNotes){
 /* =========================================================================
    INTAKE / EDIT PAPER
    ========================================================================= */
-function openIntakeModal(existingId){
+async function openIntakeModal(existingId){
+  if(SuiteStore.mode()==='shared'&&window.CaliforniaCivil){
+    try{
+      const context=await window.CaliforniaCivil.context();
+      if(context.profile.profileId==='US-CA'){
+        if(existingId){toast('Open California case records from the Civil case board.',true);return;}
+        switchView('civil-board');
+        const root=document.getElementById('view-civil-board');
+        await window.CaliforniaCivil.route(root,'civil-board');
+        root.querySelector('#ca-new')?.click();
+        return;
+      }
+    }catch(error){toast(error.message,true);return;}
+  }
   const editing = !!existingId;
   const p = editing ? paperFor(existingId) : {
     caseNumber:"", courtOfOrigin: STATE.civil.refData.courtsOfOrigin[0], paperType: STATE.civil.refData.paperTypes[0],
@@ -2837,7 +2861,7 @@ function renderMyAssignments(){
     return;
   }
   const canLog = can('civil_paper_log_attempt');
-  const mine = STATE.civil.papers.filter(p=>p.assignedServerId===CURRENT_USER_ID && !['Returned to Court','Cancelled'].includes(p.stage));
+  const mine = STATE.civil.papers.filter(p=>p.assignedServerId===CURRENT_USER_ID && !['Returned to Court','Closed','Cancelled'].includes(p.stage));
   mine.sort((a,b)=>{
     if(a.priority!==b.priority) return a.priority==='Immediate'?-1:1;
     return a.returnByDate.localeCompare(b.returnByDate);
