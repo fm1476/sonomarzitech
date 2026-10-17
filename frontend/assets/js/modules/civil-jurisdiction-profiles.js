@@ -32,7 +32,44 @@
   function canActivate(selection){
     return !!selection && selection.profileId==='US-CA' && false; // Block until statutory and operational signoff.
   }
-  const api=Object.freeze({get,prepareSelection,canActivate});
+  // Intake readiness is intentionally conservative: missing evidence blocks completion.
+  const REQUIRED_BY_WORKFLOW=Object.freeze({
+    summons:['caseNumber','courtOfOrigin','receivedDate','serviceAddresses','signedInstructions'],
+    'earnings-withholding':['caseNumber','courtOfOrigin','receivedDate','signedInstructions','writDocument','employerName'],
+    'writ-execution':['caseNumber','courtOfOrigin','receivedDate','signedInstructions','writDocument','issuedDate','writExpirationDate'],
+    possession:['caseNumber','courtOfOrigin','receivedDate','signedInstructions','writDocument','propertyAddress'],
+    'personal-property-levy':['caseNumber','courtOfOrigin','receivedDate','signedInstructions','writDocument','propertyDescription'],
+    'real-property-levy':['caseNumber','courtOfOrigin','receivedDate','signedInstructions','writDocument','legalDescription']
+  });
+  function nonEmpty(value){
+    return Array.isArray(value)?value.length>0:value!==undefined && value!==null && String(value).trim()!=='';
+  }
+  function reviewIntake(workflowId,record){
+    const required=REQUIRED_BY_WORKFLOW[workflowId];
+    if(!required) return {ready:false,errors:['Unsupported California workflow']};
+    const input=record && typeof record==='object'?record:{};
+    const errors=required.filter(field=>!nonEmpty(input[field])).map(field=>'Missing required intake information: '+field);
+    return {ready:errors.length===0,errors,requiresHumanReview:true};
+  }
+  function reviewService(record){
+    const input=record && typeof record==='object'?record:{};
+    const errors=[];
+    for(const field of ['serviceMethod','servedDate','servedTime','servedOnName','serverIdentity']){
+      if(!nonEmpty(input[field])) errors.push('Missing service evidence: '+field);
+    }
+    if(input.serviceMethod==='Substituted Service'){
+      for(const field of ['substituteRecipient','recipientRelationship','followupMailingDate','followupMailingAddress']){
+        if(!nonEmpty(input[field])) errors.push('Missing substituted service evidence: '+field);
+      }
+    }
+    if(input.serviceMethod==='Posting (Nail and Mail)'){
+      for(const field of ['courtAuthorization','postingDate','mailingDate','mailingAddress']){
+        if(!nonEmpty(input[field])) errors.push('Missing posting and mailing evidence: '+field);
+      }
+    }
+    return {ready:errors.length===0,errors,requiresHumanReview:true};
+  }
+  const api=Object.freeze({get,prepareSelection,canActivate,reviewIntake,reviewService});
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   else root.SonoMarziCivilProfiles=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
