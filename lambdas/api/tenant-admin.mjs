@@ -588,12 +588,13 @@ async function tenantAdminDbApi(client, auth, body) {
     if (!exists.rows.length) return response(404, { success:false, error:'User not found.' });
 
     const internalMembership = await client.query(
-      `SELECT m.tenant_id
+      `SELECT m.tenant_id, m.person_id
          FROM suite_memberships m
          JOIN suite_agencies a ON a.id=m.agency_id AND a.tenant_id=m.tenant_id
         WHERE m.user_id=$1
           AND m.status='active'
           AND lower(COALESCE(a.subdomain,''))='demo'
+        ORDER BY m.tenant_id, m.agency_id
         LIMIT 1`,
       [userId]
     );
@@ -609,12 +610,23 @@ async function tenantAdminDbApi(client, auth, body) {
         return response(409, { success:false, error:'At least one Platform Admin must remain enabled.' });
       }
     }
-    await client.query(
-      `INSERT INTO suite_platform_admins (user_id, enabled)
-       VALUES ($1,$2)
-       ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled`,
-      [userId, enabled]
-    );
+    if (enabled) {
+      // The platform-admin table requires the person's existing Demo identity.
+      // Resolve it on the server rather than accepting a caller-supplied link.
+      const personId = internalMembership.rows[0]?.person_id;
+      if (typeof personId !== 'string' || !personId.trim()) {
+        return response(409, { success:false, error:'The Demo membership is missing its personnel link. Repair that user membership before granting Platform Admin.' });
+      }
+      await client.query(
+        `INSERT INTO suite_platform_admins (user_id, person_id, enabled)
+         VALUES ($1,$2,true)
+         ON CONFLICT (user_id) DO UPDATE SET enabled=true, person_id=EXCLUDED.person_id`,
+        [userId, personId]
+      );
+    } else {
+      // Revocation must still work if the user's Demo membership was removed.
+      await client.query(`UPDATE suite_platform_admins SET enabled=false WHERE user_id=$1`, [userId]);
+    }
 
     const eventTenantId = internalMembership.rows[0]?.tenant_id || null;
     if (eventTenantId) {
