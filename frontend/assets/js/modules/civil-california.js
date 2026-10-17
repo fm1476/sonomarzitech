@@ -214,10 +214,13 @@ window.CaliforniaCivil = (() => {
       '<div class="panel"><div class="panel-body">Loading Civil workspace...</div></div>';
     try {
       const context = await api("context", {}, scope);
+      context.people =
+        typeof STATE !== "undefined" ? STATE.personnel || [] : [];
       if (token !== generation) return true;
       if (context.profile.profileId !== "US-CA") return false;
       const can = (a) => context.admin || context.abilities.includes(a);
       let selection = 0;
+      let calendarController;
       const firstPage = await api(
         "list",
         { assignedOnly: id === "civil-mine" },
@@ -267,13 +270,18 @@ window.CaliforniaCivil = (() => {
             e.target.disabled = false;
           }
         });
-        root
-          .querySelectorAll("[data-case]")
-          .forEach(
-            (b) =>
-              (b.onclick = () =>
-                detail(b.dataset.case).catch((e) => status(e.message))),
-          );
+        root.querySelectorAll("[data-case]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              if (root.querySelector("#ca-form form")) {
+                status(
+                  "Save or cancel the open form before opening another case.",
+                );
+                return;
+              }
+              detail(b.dataset.case).catch((e) => status(e.message));
+            }),
+        );
       };
       let searchTimer,
         searchEpoch = 0;
@@ -309,7 +317,16 @@ window.CaliforniaCivil = (() => {
       draw();
       function form(title, html, save) {
         const target = root.querySelector("#ca-form");
+        if (target.querySelector("form")) {
+          status(
+            "Save or cancel the open form before starting another action.",
+          );
+          return;
+        }
         target.innerHTML = `<form><h3>${esc(title)}</h3>${html}<p role="alert"></p><button class="btn btn-primary" type="submit">Save</button> <button class="btn btn-outline" type="button" id="ca-cancel-form">Cancel</button></form>`;
+        window.CaliforniaCivilView.bindServiceFields(
+          target.querySelector("form"),
+        );
         target.querySelector("#ca-cancel-form").onclick = () => {
           target.innerHTML = "";
         };
@@ -552,7 +569,12 @@ window.CaliforniaCivil = (() => {
         const r = current.record,
           c = r.california;
         const panel = root.querySelector("#ca-detail");
-        panel.innerHTML = `<hr><h3>${esc(r.caseNumber)} · ${esc(r.stage)}</h3><p>${esc(r.plaintiff)} / ${esc(r.defendant)} · ${esc(r.courtOfOrigin)}</p><p>Case balance: ${money(balance(r))}. Released funds: ${money(current.availableCents ?? balance(r))}. Court return: ${esc(r.returnByDate || "Pending review")}.</p><p>Required packet review: ${esc(context.workflows[c.workflowId].forms.join(", "))}. Return form: ${esc(context.workflows[c.workflowId].returns.join(", "))}.</p><p>Dates and fee amounts must come from the reviewed court packet and agency authority.</p><div id="ca-actions"></div><h4>Documents</h4><div id="ca-documents"></div><h4>Deadlines and notices</h4><p>${(c.deadlines || []).filter((d) => !d.completedAt).length} open deadlines</p><details><summary>Tracked deadlines and delivered notices</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify({ deadlines: c.deadlines || [], notices: c.notices || [] }, null, 2))}</pre></details><h4>Case record</h4><details><summary>Intake, service and enforcement</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify({ intake: c.intakeDetails, assignedServerId: r.assignedServerId, attempts: r.attempts, service: c.service, return: c.returnPacket, enforcement: c.enforcement }, null, 2))}</pre></details><details><summary>Claims and stays</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify(c.holds, null, 2))}</pre></details><details><summary>Ledger and disbursements</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify({ ledger: c.ledger, disbursements: c.disbursements, reconciliation: c.reconciliation }, null, 2))}</pre></details><details><summary>History</summary>${c.history.map((h) => `<p>${esc(h.at)} · ${esc(h.command)} · ${esc(h.actor)} · ${esc(h.note)}</p>`).join("")}</details>`;
+        panel.innerHTML = window.CaliforniaCivilView.renderCase(
+          r,
+          context,
+          current,
+          labels,
+        );
         const closed = ["Closed", "Cancelled"].includes(r.stage),
           actions = [];
         if (!closed) {
@@ -574,7 +596,8 @@ window.CaliforniaCivil = (() => {
                 : []),
               "hold",
               ...(c.holds.some((h) => !h.resolvedAt) ? ["resolve_hold"] : []),
-              ...(context.workflows[c.workflowId].writ
+              ...(context.workflows[c.workflowId].writ &&
+              ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
                 ? ["enforcement_event"]
                 : []),
               ...(r.stage === "Return Prepared" ? ["review_return"] : []),
@@ -638,6 +661,7 @@ window.CaliforniaCivil = (() => {
             if (index >= 0) rows[index] = next;
             draw();
             await detail(caseId);
+            await calendarController?.refresh();
             status("Saved.");
             return next;
           } catch (e) {
@@ -651,13 +675,15 @@ window.CaliforniaCivil = (() => {
               try {
                 const action = button.dataset.action;
                 let roster = [];
-                if (action === "assign")
-                  roster = (await api("roster", {}, scope)).people.map((p) => [
-                    p.person_id,
-                    p.name || p.email,
-                  ]);
+                if (action === "assign") {
+                  const people = (await api("roster", {}, scope)).people;
+                  context.people = [...context.people, ...people];
+                  roster = people.map((p) => [p.person_id, p.name || p.email]);
+                }
                 const choice = (key) =>
-                  key === "smallClaimsDocument"
+                  key === "method" && action === "serve" && !["summons", "small-claims"].includes(c.workflowId)
+                    ? options.method.filter(method => method !== 'Substituted service')
+                    : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "deadlineId"
                       ? (c.deadlines || [])
@@ -728,9 +754,14 @@ window.CaliforniaCivil = (() => {
                                           "Remittance",
                                         ]
                                 : undefined;
+                const actionFields = window.CaliforniaCivilView.fieldsForAction(
+                  action,
+                  r,
+                  fields,
+                );
                 form(
                   labels[action],
-                  fields[action]
+                  actionFields
                     .map((spec) => {
                       const key = spec.split(":")[0];
                       let value =
@@ -798,19 +829,16 @@ window.CaliforniaCivil = (() => {
                 `<button class="btn btn-outline" data-doc="${esc(d.id)}">${esc(d.kind)}: ${esc(d.name)}</button>`,
             )
             .join(" ") +
-          (!closed && can("civil_document_generate")
+          (!closed && !["Return Prepared", "Reviewed", "Returned to Court"].includes(r.stage) && can("civil_document_generate")
             ? '<button class="btn btn-primary" id="ca-upload">Upload document</button>'
             : "");
-        documents
-          .querySelectorAll("[data-doc]")
-          .forEach(
-            (b) =>
-              (b.onclick = () =>
-                AWS_ATTACHMENTS.download({
-                  storageKey: c.documents.find((d) => d.id === b.dataset.doc)
-                    .key,
-                }).catch((e) => status(e.message))),
-          );
+        documents.querySelectorAll("[data-doc]").forEach(
+          (b) =>
+            (b.onclick = () =>
+              AWS_ATTACHMENTS.download({
+                storageKey: c.documents.find((d) => d.id === b.dataset.doc).key,
+              }).catch((e) => status(e.message))),
+        );
         documents.querySelector("#ca-upload")?.addEventListener("click", () =>
           form(
             "Upload case document",
@@ -843,6 +871,24 @@ window.CaliforniaCivil = (() => {
               });
             },
           ),
+        );
+      }
+      if (id === "civil-calendar") {
+        root.querySelector("#ca-search").closest("label").hidden = true;
+        root.querySelector("#ca-list").hidden = true;
+        const calendar = document.createElement("div");
+        root.querySelector("#ca-list").before(calendar);
+        calendarController = await window.CaliforniaCivilCalendar.mount(
+          calendar,
+          (range) => api("calendar", range, scope),
+          async (caseId) => {
+            if (root.querySelector("#ca-form form"))
+              throw Error(
+                "Save or cancel the open form before opening another case.",
+              );
+            await detail(caseId);
+          },
+          (error) => status(error.message),
         );
       }
       if (openCaseId) await detail(openCaseId);

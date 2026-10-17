@@ -1,0 +1,12 @@
+import {JSDOM} from './civil-support/node_modules/jsdom/lib/api.js';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const dom=new JSDOM('<main></main>',{runScripts:'outside-only'}),w=dom.window;
+for(const file of ['civil-california-view','civil-california-calendar'])w.eval(fs.readFileSync('frontend/assets/js/modules/'+file+'.js','utf8'));
+const definitions={intake_details:['returnByDate:date','instructionsReference','issuedDate:date','writExpirationDate:date','employerName','propertyDescription','financialInstitution','hearingDate:date'],generate_return_draft:['serverName','courtStreet','smallClaimsDocument']};
+const fields=workflow=>w.CaliforniaCivilView.fieldsForAction('intake_details',{california:{workflowId:workflow}},definitions);
+assert.equal(fields('summons').includes('issuedDate:date'),false);assert.equal(fields('bank-levy').includes('financialInstitution'),true);assert.equal(fields('bank-levy').includes('employerName'),false);assert.equal(fields('earnings-withholding').includes('employerName'),true);assert.equal(fields('small-claims').includes('hearingDate:date'),true);
+const root=w.document.querySelector('main'),requests=[],opened=[];
+await w.CaliforniaCivilCalendar.mount(root,async range=>{requests.push(range);return {events:[{caseId:'case-a',caseNumber:'TEST-CASE',date:range.fromDate,title:'<img src=x onerror=bad>',kind:'Notice',stage:'Assigned',reference:'Court order'}]};},async id=>opened.push(id),error=>{throw error;});
+assert.match(root.textContent,/TEST-CASE/);assert.equal(root.querySelector('img'),null);assert.ok(requests[0].fromDate.endsWith('-01'));root.querySelector('[data-calendar-case]').click();await new Promise(r=>setImmediate(r));assert.equal(opened[0],'case-a');const first=requests[0].fromDate;root.querySelector('[data-month=next]').click();await new Promise(r=>setImmediate(r));assert.notEqual(requests[1].fromDate,first);assert.equal(requests[1].toDate.slice(0,7),requests[1].fromDate.slice(0,7));
+console.log('California presentation: workflow-specific fields, escaped calendar evidence, month navigation and case links passed.');w.close();
