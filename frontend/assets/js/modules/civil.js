@@ -2466,6 +2466,23 @@ function openIntakeModal(existingId){
       assignedServerId, notes: document.getElementById('fCpNotes').value.trim(),
       priority: PRIORITY_PAPER_TYPES.includes(paperType) ? "Immediate" : "Standard",
     };
+    // Never process California papers through the generic/Arizona-derived workflow.
+    // Activation remains server-controlled; these are additional defense-in-depth guards.
+    const caProfile = STATE.civil.jurisdictionProfile;
+    if(caProfile?.profileId==='US-CA'){
+      if(caProfile.status!=='active' || !window.SonoMarziCivilProfiles?.canActivate(caProfile)){
+        toast('California Civil Process is not activated. Paper changes are disabled until the approved jurisdiction workflow is available.',true);
+        return;
+      }
+      const workflow = window.SonoMarziCivilProfiles.resolveWorkflow(paperType);
+      const intake = window.SonoMarziCivilProfiles.reviewIntake(workflow,data);
+      if(!intake.ready){
+        toast('California intake requires additional evidence: '+intake.errors.join('; '),true);
+        return;
+      }
+      toast('California intake requires supervisor review before processing.',true);
+      return;
+    }
     if(editing){
       Object.keys(data).forEach(field=>recordFieldChangeCivil(p,field,p[field],data[field]));
       Object.assign(p, data);
