@@ -3157,6 +3157,8 @@ function renderCivilJurisdictionTab(body){
           <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
           <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
           <button class="btn btn-primary" id="civilJurisdictionSaveRemote" style="margin-left:8px">Save Draft to Tenant</button>
+          <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
+          <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
         </div></div>
@@ -3198,6 +3200,16 @@ function renderCivilJurisdictionTab(body){
       output.textContent='Saved to tenant: '+saved.profileId+' / '+(saved.county||'No county')+' ('+saved.status+'). This does not activate California processing.';
     }catch(error){output.textContent='Unable to save: '+error.message;}
   });
+  for(const [id,enabled] of [['civilJurisdictionEnableTest',true],['civilJurisdictionDisableTest',false]]){
+    body.querySelector('#'+id)?.addEventListener('click',async()=>{
+      const output=body.querySelector('#civilJurisdictionDraftResult');
+      try{
+        if(!confirm((enabled?'Enable':'Disable')+' California Civil TEST mode for the internal Demo tenant?')) return;
+        const saved=await remoteProfileRequest('set_civil_california_test_mode',{enabled});
+        output.textContent='Demo California test mode '+(saved?.status==='test'?'enabled':'disabled')+'. Production activation remains disabled.';
+      }catch(error){output.textContent='Unable to change test mode: '+error.message;}
+    });
+  }
   body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
     const id=body.querySelector('#civilJurisdictionDraftProfile').value;
     const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
