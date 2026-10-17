@@ -310,6 +310,15 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-status-pill[data-stage="Closed"],.ca-classic .ca-status-pill[data-stage="Served"],.ca-classic .ca-status-pill[data-stage="Returned to Court"]{color:#22b991;background:rgba(34,185,145,.10)}
 .ca-classic .ca-status-pill[data-stage="Unable to Serve"],.ca-classic .ca-status-pill[data-stage="Cancelled"]{color:#eb6672;background:rgba(235,102,114,.10)}
 .ca-classic .ca-status-pill[data-stage="Attempting"],.ca-classic .ca-status-pill[data-stage="Return Prepared"]{color:#eca947;background:rgba(236,169,71,.10)}
+.ca-classic.ca-workspace-open #ca-list,.ca-classic.ca-workspace-open .ca-view-controls,.ca-classic.ca-workspace-open #ca-search,.ca-classic.ca-workspace-open #ca-search-label,.ca-classic.ca-workspace-open .ca-list-toolbar{display:none!important}
+.ca-classic.ca-workspace-open #ca-detail{display:block;margin-top:0}
+.ca-classic .ca-workspace-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 0}
+.ca-classic .ca-case-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0}
+.ca-classic .ca-case-tabs button[aria-selected="true"]{background:rgba(45,120,215,.19);border-color:var(--ca-accent);color:var(--heading)}
+.ca-classic .ca-case-tabs button:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}
+.ca-classic #ca-actions{max-width:100%;overflow:visible}
+.ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
+.ca-classic #ca-detail .ca-case-content{display:block}
 .ca-classic #ca-detail{margin-top:20px}
 .ca-classic #ca-detail>.panel,.ca-classic #ca-report,.ca-classic #ca-form form{border-radius:14px;border:1px solid var(--ca-border);padding:18px;margin:14px 0;background:var(--ca-surface)}
 .ca-classic #ca-detail details{border:1px solid var(--ca-border);border-radius:11px;padding:10px 14px;margin:10px 0}
@@ -319,7 +328,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="alert"]:not(:empty){color:#eb6672}
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -676,6 +685,40 @@ window.CaliforniaCivil = (() => {
           current,
           labels,
         );
+        const shell=root.querySelector(".ca-classic");
+        shell?.classList.add("ca-workspace-open");
+        const bar=document.createElement("div");
+        bar.className="ca-workspace-bar";
+        bar.innerHTML='<button type="button" class="btn btn-outline" data-back-cases>← Back to cases</button><span class="ca-status-pill" data-stage="'+esc(r.stage)+'">'+esc(r.stage)+'</span>';
+        panel.prepend(bar);
+        bar.querySelector("[data-back-cases]").onclick=()=>{
+          if(root.querySelector("#ca-form form")){status("Save or cancel the current action before returning to cases.");return;}
+          ++selection;
+          shell?.classList.remove("ca-workspace-open");
+          panel.innerHTML="";
+        };
+        const sections=[...panel.querySelectorAll("details")];
+        if(sections.length){
+          const tabs=document.createElement("div");
+          tabs.className="ca-case-tabs";
+          tabs.setAttribute("role","tablist");
+          const names=["Overview","Service","Documents","Deadlines","Enforcement","Claims","Financials","Forms","History"];
+          const activate=index=>{
+            sections.forEach((section,i)=>{
+              section.open=i===index;
+              section.hidden=i!==index;
+            });
+            tabs.querySelectorAll("button").forEach((button,i)=>button.setAttribute("aria-selected",String(i===index)));
+          };
+          sections.forEach((section,i)=>{
+            const button=document.createElement("button");
+            button.type="button";button.className="btn btn-outline";
+            button.setAttribute("role","tab");button.textContent=names[i]||section.querySelector("summary")?.textContent||"Details";
+            button.onclick=()=>activate(i);tabs.append(button);
+          });
+          panel.querySelector("#ca-actions")?.after(tabs);
+          activate(0);
+        }
         const closed = ["Closed", "Cancelled"].includes(r.stage),
           actions = [];
         if (!closed) {

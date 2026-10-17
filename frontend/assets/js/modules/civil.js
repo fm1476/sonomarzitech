@@ -415,18 +415,11 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  if(!visibleItems.find(it=>it.id===ACTIVE_VIEW) && visibleItems.length) ACTIVE_VIEW = visibleItems[0].id;
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  const nav=document.getElementById('navlist');
+  nav.innerHTML='<button class="navitem active" data-nav="civil-dashboard">'+ICONS.scale+'<span>Civil Process</span></button>';
+  nav.querySelector('[data-nav]').addEventListener('click',()=>switchView('civil-dashboard'));
 }
+
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
@@ -443,7 +436,7 @@ function switchView(id){
 async function renderView(id){
   if(await window.CaliforniaCivil?.route(document.getElementById("view-"+id),id))return;
   if(id==='civil-dashboard'){
-    const root=document.getElementById('view-civil-dashboard');root.innerHTML='';SuiteUX.renderModuleHub(root,'civil','civil-dashboard');
+    renderUnifiedCivilDashboard();
   }
   else if(id==="civil-board") renderBoard();
   else if(id==="civil-mine") renderMyAssignments();
@@ -451,6 +444,45 @@ async function renderView(id){
   else if(id==="civil-lookup") renderPartyLookup();
   else if(id==="civil-reports") renderReports();
   else if(id==="civil-admin") renderAdmin();
+}
+
+function renderUnifiedCivilDashboard(){
+  const root=document.getElementById('view-civil-dashboard');
+  const items=NAV_ITEMS.filter(item=>item.id!=='civil-dashboard'&&navItemVisible(item));
+  const cards=[
+    ['civil-board','Service Board','Manage cases, intake, and service workflow','scale','var(--blue)'],
+    ['civil-mine','My Assignments','Papers assigned to you','clipboardcheck','var(--green)'],
+    ['civil-calendar','Master Calendar','Court returns and upcoming deadlines','dashboard','var(--gold)'],
+    ['civil-lookup','Party & Address Lookup','Find cases and prior service history','search','var(--blue)'],
+    ['civil-reports','Reports & Analytics','Service performance and financials','chart','var(--green)'],
+    ['civil-admin','Configuration','Courts, paper types, jurisdiction, and audits','gear','var(--gold)']
+  ].filter(card=>items.some(item=>item.id===card[0]));
+  const escDash=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const papers=STATE.civil?.papers||[];
+  const today=fmt(new Date());
+  const active=papers.filter(p=>!['Closed','Cancelled','Returned to Court'].includes(p.stage));
+  const overdue=active.filter(p=>p.returnByDate&&daysBetween(today,p.returnByDate)<0);
+  const soon=active.filter(p=>p.returnByDate&&daysBetween(today,p.returnByDate)>=0&&daysBetween(today,p.returnByDate)<=7);
+  const closed=papers.filter(p=>['Closed','Returned to Court'].includes(p.stage));
+  const metrics=[['Active Cases',active.length,'var(--blue)'],['Overdue',overdue.length,'var(--red)'],['Due in 7 Days',soon.length,'var(--gold)'],['Completed',closed.length,'var(--green)']];
+  const showLocalCounts=SuiteStore.mode()!=='shared';
+  root.innerHTML=`<style>
+    .civil-home{padding:22px 10px;max-width:1480px;margin:auto}
+    .civil-home-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px}
+    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:12px;padding:17px;background:var(--panel-bg,var(--bg-card,#172335))}
+    .civil-home-metric strong{display:block;font-size:26px;color:var(--metric-color);margin:7px 0}
+    .civil-home-metric span{font-size:12px;color:var(--text-dim)}
+    .civil-home h2{margin:0 0 7px;color:var(--heading)}
+    .civil-home-sub{margin:0 0 26px;color:var(--text-dim)}
+    .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:16px}
+    .civil-home-tile{background:var(--panel-bg,var(--bg-card,#172335));border:1px solid var(--border);border-radius:15px;padding:23px;text-align:left;color:var(--text);cursor:pointer;min-height:170px;display:flex;flex-direction:column;align-items:flex-start;gap:13px;transition:transform .15s,border-color .15s}
+    .civil-home-tile:hover{border-color:var(--blue);transform:translateY(-2px)}
+    .civil-home-tile:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+    .civil-home-icon{width:43px;height:43px;border-radius:12px;background:color-mix(in srgb,var(--tile-color) 17%,transparent);color:var(--tile-color);display:grid;place-items:center}
+    .civil-home-tile strong{font-size:17px}
+    .civil-home-tile small{font-size:13px;color:var(--text-dim);line-height:1.5}
+  </style><section class="civil-home"><h2>Civil Process</h2><p class="civil-home-sub">One workspace for case management, service, court returns and oversight. Jurisdiction-specific requirements apply automatically.</p>${showLocalCounts?'<div class="civil-home-metrics">'+metrics.map(([label,count,color])=>'<div class="civil-home-metric" style="--metric-color:'+color+'"><span>'+label+'</span><strong>'+count+'</strong></div>').join('')+'</div>':''}<div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small></button>`).join('')}</div></section>`;
+  root.querySelectorAll('[data-civil-go]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.civilGo)));
 }
 
 /* =========================================================================
@@ -693,7 +725,7 @@ function openAssignServerModal(paperId){
   const p = paperFor(paperId);
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>Assign Server \u2014 ${escapeHtml(p.caseNumber)}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-head"><h3>Assign Server \u2014 ${escapeHtml(p.caseNumber)}</h3><button class="modal-close" id="mClose" aria-label="Close case workspace">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Assign To</label><select id="fAssignServer">${STATE.personnel.map(person=>`<option value="${person.id}" ${p.assignedServerId===person.id?'selected':''}>${escapeHtml(person.name)}</option>`).join('')}</select></div>
     </div>
@@ -810,8 +842,9 @@ function renderPaperDetailModal(){
   if(STATE.civil.jurisdictionProfile?.profileId==='US-CA') tabs.push(['ca-review','CA Readiness']);
   tabs.push(['photos','Photos'],['documents','Documents'],['history','Change History']);
   const box = document.getElementById('modalBox');
-  box.className = 'modal modal-xl';
+  box.className = 'modal modal-xl civil-case-workspace';
   box.innerHTML = `
+    <style id="civil-workspace-style">\n      #modalBox.civil-case-workspace{width:min(1500px,calc(100vw - 48px));max-width:1500px;max-height:calc(100vh - 38px);height:calc(100vh - 38px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#111d2f))}\n      #modalBox.civil-case-workspace .modal-head{background:linear-gradient(115deg,rgba(48,116,210,.16),rgba(21,165,147,.08));padding:20px 26px;flex-shrink:0}\n      #modalBox.civil-case-workspace .modal-body{flex:1;min-height:0;overflow-y:auto;padding:24px}\n      #modalBox.civil-case-workspace .modal-foot{flex-shrink:0;padding:13px 24px}\n      #modalBox.civil-case-workspace [data-pd-tab]{border-radius:9px!important;border:1px solid var(--border)!important;min-height:38px}\n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
     <div class="modal-head">
       <div>
         <h3 style="margin-bottom:2px;">${escapeHtml(p.caseNumber)} ${p.priority==='Immediate'?'<span class="badge badge-missing" style="margin-left:8px;">PRIORITY</span>':''}</h3>
@@ -823,7 +856,7 @@ function renderPaperDetailModal(){
       ${tabs.map(([tid,label])=>`<button class="btn btn-sm ${PAPER_DETAIL_TAB===tid?'btn-primary':'btn-outline'}" data-pd-tab="${tid}" style="border-radius:5px 5px 0 0;border-bottom:none;">${label}</button>`).join('')}
     </div>
     <div class="modal-body" id="paperDetailBody"></div>
-    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back to cases</button></div>
   `;
   openModal();
   document.getElementById('mClose').onclick = ()=>{ closeModal(); if(ACTIVE_VIEW==='civil-board') renderBoard(); else if(ACTIVE_VIEW==='civil-mine') renderMyAssignments(); };
