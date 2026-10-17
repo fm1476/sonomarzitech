@@ -157,6 +157,32 @@ async function applyChanges(client, auth, body) {
         workspaceAuth.roleIds
       );
 
+  // A draft California jurisdiction must never use the legacy civil write path.
+  // The tenant metadata is authoritative; client-side STATE cannot override it.
+  const civilChanges=validated.filter(change=>String(change.path[0])==='civil');
+  if(civilChanges.length){
+    const profile=await client.query(
+      `SELECT metadata->'civilJurisdictionProfile' AS jurisdiction
+         FROM suite_tenants WHERE id=$1 LIMIT 1`,[tenantId]
+    );
+    if(!profile.rows.length){
+      return response(404,{success:false,error:'Tenant not found.'});
+    }
+    const jurisdiction=profile.rows[0].jurisdiction;
+    if(jurisdiction?.profileId==='US-CA'){
+      return response(409,{success:false,error:
+        'California Civil Process requires the approved jurisdiction workflow; generic civil record writes are disabled.'
+      });
+    }
+    // Protect tenant configuration from workspace record injection.
+    if(civilChanges.some(change=>change.path.length<2 ||
+        change.path[1]==='jurisdictionProfile')){
+      return response(403,{success:false,error:
+        'Civil jurisdiction configuration is managed by the tenant administration API.'
+      });
+    }
+  }
+
   await client.query("BEGIN");
 
   try {
