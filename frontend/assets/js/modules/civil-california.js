@@ -272,8 +272,8 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-view-controls .btn:first-child{border-radius:10px 0 0 10px}
 .ca-classic .ca-view-controls .btn:last-child{border-radius:0 10px 10px 0}
 .ca-classic .ca-view-controls [aria-pressed="true"]{background:rgba(48,125,222,.22);border-color:var(--ca-accent);color:var(--heading,var(--text))}
-.ca-classic .ca-case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:15px}
-.ca-classic .ca-case-card{padding:18px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(145deg,rgba(55,121,212,.10),rgba(24,162,153,.035) 75%),var(--ca-surface);box-shadow:0 5px 15px rgba(0,0,0,.06);min-width:0}
+.ca-classic .ca-case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,255px),1fr));gap:12px}
+.ca-classic .ca-case-card{padding:13px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(145deg,rgba(55,121,212,.10),rgba(24,162,153,.035) 75%),var(--ca-surface);box-shadow:0 5px 15px rgba(0,0,0,.06);min-width:0}
 .ca-classic .ca-case-card[data-deadline="overdue"]{border-left:5px solid #e45965}
 .ca-classic .ca-case-card[data-deadline="soon"]{border-left:5px solid #e7b340}
 .ca-classic .ca-case-card[data-deadline="clear"]{border-left:5px solid #21bd85}
@@ -319,6 +319,10 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
 .ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
 .ca-classic #ca-detail .ca-case-content{display:block}
+.ca-classic .ca-intake-checklist{margin:12px 0;padding-left:20px;display:grid;gap:5px;color:var(--text-dim);font-size:13px}
+.ca-classic.ca-workspace-open .ca-next-step{max-width:100%;border-radius:14px}
+.ca-classic.ca-workspace-open #ca-detail>.panel{padding:16px}
+.ca-classic .ca-case-tabs{border-bottom:1px solid var(--ca-border);padding-bottom:12px}
 .ca-classic #ca-detail{margin-top:20px}
 .ca-classic #ca-detail>.panel,.ca-classic #ca-report,.ca-classic #ca-form form{border-radius:14px;border:1px solid var(--ca-border);padding:18px;margin:14px 0;background:var(--ca-surface)}
 .ca-classic #ca-detail details{border:1px solid var(--ca-border);border-radius:11px;padding:10px 14px;margin:10px 0}
@@ -783,19 +787,52 @@ window.CaliforniaCivil = (() => {
               "reconcile",
             );
         }
+        const intakeIssues = [];
+        if(r.stage === "Intake"){
+          const details=c.intakeDetails||{};
+          const present=value=>typeof value==="string"&&value.trim().length>0;
+          const kinds=new Set((c.documents||[]).map(d=>d.kind));
+          const workflow=context.workflows[c.workflowId]||{};
+          if(!r.returnByDate)intakeIssues.push("Set and review the court return deadline");
+          if(!present(details.instructionsReference))intakeIssues.push("Enter the signed instructions reference");
+          if(!present(details.deadlineAuthority))intakeIssues.push("Record the deadline authority");
+          if(!present(details.formReviewReference))intakeIssues.push("Record the form review reference");
+          if((workflow.forms||[]).some(form=>!(details.reviewedForms||[]).includes(form)))intakeIssues.push("Review required forms: "+(workflow.forms||[]).join(", "));
+          if(!kinds.has("Court packet"))intakeIssues.push("Upload the court packet");
+          if(!kinds.has("Signed instructions"))intakeIssues.push("Upload signed instructions");
+          if(workflow.writ){
+            if(!present(details.issuedDate)||!present(details.writExpirationDate))intakeIssues.push("Record writ issuance and expiration");
+            if(!kinds.has("Writ"))intakeIssues.push("Upload the writ");
+          }
+          if(c.workflowId==="earnings-withholding"&&!present(details.employerName))intakeIssues.push("Record the employer");
+          if(["possession","real-property-levy","sheriff-sale","personal-property-levy"].includes(c.workflowId)&&!present(details.propertyDescription))intakeIssues.push("Record the property description");
+          if(c.workflowId==="bank-levy"&&!present(details.financialInstitution))intakeIssues.push("Record the financial institution");
+        }
         const nextActions = {
-          Intake: "intake_details", Ready: "assign", Assigned: "attempt",
+          Intake: intakeIssues.length ? (intakeIssues.every(issue=>issue.startsWith("Upload")) ? "intake_details" : "intake_details") : "approve_intake", Ready: "assign", Assigned: "attempt",
           Attempting: "attempt", Served: "prepare_return",
           "Unable to Serve": "prepare_return", "Return Prepared": "review_return",
           Reviewed: "record_return", "Returned to Court": "reconcile"
         };
         const recommended=nextActions[r.stage];
         const nextPanel=panel.querySelector(".ca-next-step");
+        if(nextPanel && r.stage === "Intake"){
+          const summary=nextPanel.querySelector("p");
+          if(summary)summary.textContent=intakeIssues.length
+            ? "Intake saved. Complete the following requirements before approval:"
+            : "Intake requirements appear complete. Review and approve intake to advance the case.";
+          if(intakeIssues.length){
+            const list=document.createElement("ul");
+            list.className="ca-intake-checklist";
+            intakeIssues.forEach(issue=>{const li=document.createElement("li");li.textContent=issue;list.append(li);});
+            nextPanel.querySelector(".panel-body")?.append(list);
+          }
+        }
         if(nextPanel && recommended && actions.includes(recommended)){
           const launch=document.createElement("button");
           launch.type="button";
           launch.className="btn btn-primary";
-          launch.textContent="Go to next step: "+labels[recommended];
+          launch.textContent=intakeIssues.length&&r.stage==="Intake" ? "Continue intake review" : "Next: "+labels[recommended];
           launch.dataset.nextAction=recommended;
           nextPanel.append(launch);
           launch.onclick=()=>panel.querySelector('[data-action="'+recommended+'"]')?.click();
