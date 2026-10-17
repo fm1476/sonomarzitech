@@ -3155,11 +3155,49 @@ function renderCivilJurisdictionTab(body){
             <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name"></div>
           </div>
           <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
+          <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
+          <button class="btn btn-primary" id="civilJurisdictionSaveRemote" style="margin-left:8px">Save Draft to Tenant</button>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview only. No tenant configuration is saved or activated.</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
         </div></div>
       </div>
     </div>`;
+  const remoteProfileRequest = async (action, extra={}) => {
+    if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') throw Error('Shared AWS workspace required.');
+    const ctx=SuiteStore.remoteContext?.();
+    if(!ctx?.tenantId) throw Error('Select a tenant first.');
+    const result=await SuiteStore.api('/tenant-admin',{
+      method:'POST',
+      body:JSON.stringify({action,tenantId:ctx.tenantId,...extra})
+    });
+    if(result?.success===false) throw Error(result.error||'Tenant profile request failed.');
+    return result.data?.jurisdictionProfile || result.jurisdictionProfile;
+  };
+  body.querySelector('#civilJurisdictionLoadRemote')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    output.textContent='Loading tenant profile...';
+    try{
+      const profile=await remoteProfileRequest('get_civil_jurisdiction_profile');
+      if(!profile) throw Error('Tenant profile was not returned.');
+      output.textContent='Tenant profile: '+profile.profileId+' / '+(profile.county||'No county')+' ('+profile.status+').';
+      body.querySelector('#civilJurisdictionDraftProfile').value=profile.profileId;
+      body.querySelector('#civilJurisdictionDraftCounty').value=profile.county||'';
+    }catch(error){output.textContent='Unable to load: '+error.message;}
+  });
+  body.querySelector('#civilJurisdictionSaveRemote')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    const id=body.querySelector('#civilJurisdictionDraftProfile').value;
+    const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
+    try{
+      const selection=registry.prepareSelection(id,county);
+      const validation=registry.validateSelection(selection);
+      if(!validation.valid) throw Error(validation.errors.join('; '));
+      output.textContent='Saving draft...';
+      const saved=await remoteProfileRequest('set_civil_jurisdiction_draft',{profileId:id,county});
+      if(!saved) throw Error('Save was not confirmed.');
+      output.textContent='Saved to tenant: '+saved.profileId+' / '+(saved.county||'No county')+' ('+saved.status+'). This does not activate California processing.';
+    }catch(error){output.textContent='Unable to save: '+error.message;}
+  });
   body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
     const id=body.querySelector('#civilJurisdictionDraftProfile').value;
     const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
