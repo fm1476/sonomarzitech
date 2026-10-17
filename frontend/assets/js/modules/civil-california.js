@@ -279,6 +279,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic .data-table th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;padding:13px 14px;color:var(--text-dim);text-align:left}
 .ca-classic .data-table td{padding:12px 14px;vertical-align:middle;border-top:1px solid var(--ca-border)}
 .ca-classic .data-table tbody tr:hover{background:rgba(65,139,223,.07)}
+.ca-classic #ca-view-cards,.ca-classic #ca-view-table{font-size:13px}
+.ca-classic .ca-calendar-toolbar .btn{min-width:95px}
+.ca-classic .ca-calendar-toolbar .ca-month-navigation{justify-content:space-between;width:100%}
+.ca-classic .ca-calendar-toolbar input[type=month]{flex:0 1 190px}
+.ca-classic .ca-calendar-toolbar{margin:10px 0 18px}
 .ca-classic .ca-status-pill{display:inline-flex;border-radius:99px;padding:5px 10px;font-weight:700;font-size:12px;border:1px solid currentColor;background:rgba(68,154,230,.10);color:#4a9af3;white-space:nowrap}
 .ca-classic .ca-status-pill[data-stage="Closed"],.ca-classic .ca-status-pill[data-stage="Served"],.ca-classic .ca-status-pill[data-stage="Returned to Court"]{color:#22b991;background:rgba(34,185,145,.10)}
 .ca-classic .ca-status-pill[data-stage="Unable to Serve"],.ca-classic .ca-status-pill[data-stage="Cancelled"]{color:#eb6672;background:rgba(235,102,114,.10)}
@@ -292,7 +297,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="alert"]:not(:empty){color:#eb6672}
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">▦ Cards</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -313,8 +318,8 @@ window.CaliforniaCivil = (() => {
         root.querySelector("#ca-list").innerHTML =
           (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>') +
           `<div class="ca-list-footer"><span>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</span>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}</div>`;
-        root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
-        root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
+        if(id !== "civil-calendar")root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
+        if(id !== "civil-calendar")root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
 
         root.querySelector("#ca-more")?.addEventListener("click", async (e) => {
           e.target.disabled = true;
@@ -349,8 +354,12 @@ window.CaliforniaCivil = (() => {
             }),
         );
       };
-      root.querySelector("#ca-view-cards").onclick = () => { preferredCaseView = "cards"; draw(); };
-      root.querySelector("#ca-view-table").onclick = () => { preferredCaseView = "table"; draw(); };
+      const updateViewButtons = mode => {
+        root.querySelector("#ca-view-cards").setAttribute("aria-pressed",String(mode === "cards"));
+        root.querySelector("#ca-view-table").setAttribute("aria-pressed",String(mode === "table"));
+      };
+      root.querySelector("#ca-view-cards").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("calendar"); } else { preferredCaseView = "cards"; draw(); } updateViewButtons("cards"); };
+      root.querySelector("#ca-view-table").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("table"); } else { preferredCaseView = "table"; draw(); } updateViewButtons("table"); };
       let searchTimer,
         searchEpoch = 0;
       root.querySelector("#ca-search").oninput = () => {
@@ -946,6 +955,7 @@ window.CaliforniaCivil = (() => {
         root.querySelector("#ca-list").hidden = true;
         const calendar = document.createElement("div");
         root.querySelector("#ca-list").before(calendar);
+        updateViewButtons("cards");
         calendarController = await window.CaliforniaCivilCalendar.mount(
           calendar,
           (range) => api("calendar", range, scope),
