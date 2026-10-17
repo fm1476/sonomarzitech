@@ -1,4 +1,4 @@
-import { response } from "./core.mjs";
+import { response, DEMO_TENANT_ID } from "./core.mjs";
 import { appendAuditEvent } from "./audit.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -373,7 +373,7 @@ async function tenantAdminDbApi(client, auth, body) {
 
   // Civil jurisdiction configuration is tenant-scoped and draft-only until legal
   // review, backend workflow gates and explicit activation have been implemented.
-  if (action === 'get_civil_jurisdiction_profile' || action === 'set_civil_jurisdiction_draft') {
+  if (action === 'get_civil_jurisdiction_profile' || action === 'set_civil_jurisdiction_draft' || action === 'set_civil_california_test_mode') {
     const denied = platformOnly(auth); if (denied) return denied;
     const targetTenantId = String(body?.tenantId || '').trim();
     if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(targetTenantId)) {
@@ -389,6 +389,33 @@ async function tenantAdminDbApi(client, auth, body) {
     if (action === 'get_civil_jurisdiction_profile') {
       return response(200,{success:true,data:{jurisdictionProfile:current}});
     }
+    if(action === 'set_civil_california_test_mode'){
+      if(targetTenantId!==DEMO_TENANT_ID){
+        return response(403,{success:false,error:'California test mode is restricted to the internal Demo tenant.'});
+      }
+      if(current.profileId!=='US-CA' || !current.county){
+        return response(409,{success:false,error:'Save a California county draft before enabling test mode.'});
+      }
+      if(!['draft','test','unconfigured'].includes(current.status)){
+        return response(409,{success:false,error:'Only a draft or existing test profile can change test mode.'});
+      }
+      if(typeof body?.enabled!=='boolean'){
+        return response(400,{success:false,error:'enabled must be a boolean.'});
+      }
+      const next={...current,status:body.enabled?'test':'draft',testMode:body.enabled,
+        activatedAt:null,activatedBy:null};
+      const updated=await client.query(
+        `UPDATE suite_tenants SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),
+          '{civilJurisdictionProfile}',$2::jsonb,true)
+         WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','draft')
+           IN ('draft','test','unconfigured') RETURNING id`,
+        [targetTenantId,JSON.stringify(next)]
+      );
+      if(!updated.rows.length) return response(409,{success:false,error:'Concurrent profile change; retry.'});
+      await platformEvent(client,auth,targetTenantId,
+        body.enabled?'Enabled California Civil TEST mode':'Disabled California Civil TEST mode');
+      return response(200,{success:true,data:{jurisdictionProfile:next}});
+    }
     const profileId=String(body?.profileId||'').trim();
     const county=String(body?.county||'').trim();
     if (!['US-GENERAL','US-CA'].includes(profileId)) {
@@ -400,7 +427,7 @@ async function tenantAdminDbApi(client, auth, body) {
     if (body?.status === 'active' || body?.activate === true || body?.activatedBy || body?.activatedAt) {
       return response(403,{success:false,error:'Activation and approval fields cannot be supplied through draft configuration.'});
     }
-    if (current.status==='active') {
+    if (current.status==='active' || current.status==='test') {
       return response(409,{success:false,error:'Active jurisdiction profiles cannot be changed through draft configuration.'});
     }
     const draft = {profileId,profileVersion:profileId==='US-CA'?'0.1.0':'1.0.0',
