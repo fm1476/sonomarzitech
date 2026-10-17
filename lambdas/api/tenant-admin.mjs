@@ -558,7 +558,8 @@ async function tenantAdminDbApi(client, auth, body) {
     const search = String(body?.search || '').trim().toLowerCase();
     const like = `%${search}%`;
     const q = await client.query(
-      `SELECT DISTINCT u.id AS user_id, u.email, u.display_name AS name,
+      `SELECT candidates.* FROM (
+       SELECT DISTINCT u.id AS user_id, u.email, u.display_name AS name,
               t.id AS tenant_id, t.name AS tenant_name, a.name AS agency_name
          FROM suite_users u
          JOIN suite_memberships m ON m.user_id = u.id AND m.status = 'active'
@@ -569,7 +570,8 @@ async function tenantAdminDbApi(client, auth, body) {
           AND lower(COALESCE(a.subdomain,'')) = 'demo'
           AND pa.user_id IS NULL
           AND ($1 = '' OR lower(COALESCE(u.display_name,'')) LIKE $2 OR lower(u.email) LIKE $2)
-        ORDER BY lower(COALESCE(u.display_name,u.email)), lower(u.email)
+       ) AS candidates
+        ORDER BY lower(COALESCE(candidates.name,candidates.email)), lower(candidates.email), candidates.user_id
         LIMIT 25`,
       [search, like]
     );
