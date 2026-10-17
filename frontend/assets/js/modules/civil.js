@@ -3102,6 +3102,7 @@ function renderCivilJurisdictionTab(body){
   const selected = registry && registry.get(current.profileId);
   const displayName = selected?.displayName || 'General Civil Process';
   const status = current.status || 'unconfigured';
+  const profileOptions = ['US-GENERAL','US-CA'].map(id => registry?.get(id)).filter(Boolean);
   const escProfile = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   body.innerHTML = `
     <div class="panel"><div class="panel-head"><h2>Jurisdiction Profile</h2></div>
@@ -3114,8 +3115,31 @@ function renderCivilJurisdictionTab(body){
           <div class="form-row"><label>County</label><input disabled value="${escProfile(current.county || 'Not configured')}"></div>
         </div>
         <div style="font-size:12px;color:var(--text-dim);">California rules, forms, statutory fees and enforcement workflows require validation before activation. Existing records and other modules are unchanged.</div>
+        <div class="panel" style="margin-top:16px"><div class="panel-head"><h2>Prepare Jurisdiction Configuration</h2></div><div class="panel-body">
+          <div class="form-2col">
+            <div class="form-row"><label>Jurisdiction</label><select id="civilJurisdictionDraftProfile">
+              ${profileOptions.map(p=>`<option value="${escProfile(p.id)}">${escProfile(p.displayName||'General / Unconfigured')}</option>`).join('')}
+            </select></div>
+            <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name"></div>
+          </div>
+          <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
+          <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview only. No tenant configuration is saved or activated.</div>
+        </div></div>
       </div>
     </div>`;
+  body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
+    const id=body.querySelector('#civilJurisdictionDraftProfile').value;
+    const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
+    const output=body.querySelector('#civilJurisdictionDraftResult');
+    try{
+      const selection=registry.prepareSelection(id,county);
+      const result=registry.validateSelection(selection);
+      output.textContent=result.valid
+        ? 'Draft ready for platform administrator review: '+selection.profileId+' / '+selection.county+' (version '+selection.profileVersion+'). Activation is disabled.'
+        : result.errors.join('; ');
+    }catch(error){ output.textContent=error.message; }
+  });
 }
 
 function renderFeeScheduleTab(body){
