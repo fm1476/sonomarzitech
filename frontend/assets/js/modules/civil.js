@@ -415,18 +415,11 @@ function navItemVisible(item){
   return can(item.requiredAbility);
 }
 function renderNav(){
-  const nav = document.getElementById('navlist');
-  const visibleItems = NAV_ITEMS.filter(navItemVisible);
-  if(!visibleItems.find(it=>it.id===ACTIVE_VIEW) && visibleItems.length) ACTIVE_VIEW = visibleItems[0].id;
-  nav.innerHTML = visibleItems.map(item=>`
-    <button class="navitem ${item.id===ACTIVE_VIEW?'active':''}" data-nav="${item.id}">
-      ${ICONS[item.icon]}<span>${item.label}</span>
-    </button>
-  `).join('');
-  nav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=> switchView(btn.dataset.nav));
-  });
+  const nav=document.getElementById('navlist');
+  nav.innerHTML='<button class="navitem active" data-nav="civil-dashboard">'+ICONS.scale+'<span>Civil Process</span></button>';
+  nav.querySelector('[data-nav]').addEventListener('click',()=>switchView('civil-dashboard'));
 }
+
 function switchView(id){
   const target = NAV_ITEMS.find(n=>n.id===id);
   if(!target || !navItemVisible(target)) return;
@@ -443,7 +436,7 @@ function switchView(id){
 async function renderView(id){
   if(await window.CaliforniaCivil?.route(document.getElementById("view-"+id),id))return;
   if(id==='civil-dashboard'){
-    const root=document.getElementById('view-civil-dashboard');root.innerHTML='';SuiteUX.renderModuleHub(root,'civil','civil-dashboard');
+    renderUnifiedCivilDashboard();
   }
   else if(id==="civil-board") renderBoard();
   else if(id==="civil-mine") renderMyAssignments();
@@ -451,6 +444,33 @@ async function renderView(id){
   else if(id==="civil-lookup") renderPartyLookup();
   else if(id==="civil-reports") renderReports();
   else if(id==="civil-admin") renderAdmin();
+}
+
+function renderUnifiedCivilDashboard(){
+  const root=document.getElementById('view-civil-dashboard');
+  const items=NAV_ITEMS.filter(item=>item.id!=='civil-dashboard'&&navItemVisible(item));
+  const cards=[
+    ['civil-board','Service Board','Manage cases, intake, and service workflow','scale','var(--blue)'],
+    ['civil-mine','My Assignments','Papers assigned to you','clipboardcheck','var(--green)'],
+    ['civil-calendar','Master Calendar','Court returns and upcoming deadlines','dashboard','var(--gold)'],
+    ['civil-lookup','Party & Address Lookup','Find cases and prior service history','search','var(--blue)'],
+    ['civil-reports','Reports & Analytics','Service performance and financials','chart','var(--green)'],
+    ['civil-admin','Configuration','Courts, paper types, jurisdiction, and audits','gear','var(--gold)']
+  ].filter(card=>items.some(item=>item.id===card[0]));
+  const escDash=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  root.innerHTML=`<style>
+    .civil-home{padding:22px 10px;max-width:1480px;margin:auto}
+    .civil-home h2{margin:0 0 7px;color:var(--heading)}
+    .civil-home-sub{margin:0 0 26px;color:var(--text-dim)}
+    .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:16px}
+    .civil-home-tile{background:var(--panel-bg,var(--bg-card,#172335));border:1px solid var(--border);border-radius:15px;padding:23px;text-align:left;color:var(--text);cursor:pointer;min-height:170px;display:flex;flex-direction:column;align-items:flex-start;gap:13px;transition:transform .15s,border-color .15s}
+    .civil-home-tile:hover{border-color:var(--blue);transform:translateY(-2px)}
+    .civil-home-tile:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+    .civil-home-icon{width:43px;height:43px;border-radius:12px;background:color-mix(in srgb,var(--tile-color) 17%,transparent);color:var(--tile-color);display:grid;place-items:center}
+    .civil-home-tile strong{font-size:17px}
+    .civil-home-tile small{font-size:13px;color:var(--text-dim);line-height:1.5}
+  </style><section class="civil-home"><h2>Civil Process</h2><p class="civil-home-sub">One workspace for case management, service, court returns and oversight. Jurisdiction-specific requirements apply automatically.</p><div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small></button>`).join('')}</div></section>`;
+  root.querySelectorAll('[data-civil-go]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.civilGo)));
 }
 
 /* =========================================================================
