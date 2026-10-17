@@ -359,6 +359,19 @@ async function internalIdentityApi(client, event) {
   return { success:false, statusCode:400, error:'Unsupported internal identity action.' };
 }
 
+// A fictional Civil write and its audit event must either both commit or neither.
+async function civilTestTransaction(client,write){
+  await client.query('BEGIN');
+  try{
+    const result=await write();
+    await client.query('COMMIT');
+    return result;
+  }catch(error){
+    await client.query('ROLLBACK');
+    throw error;
+  }
+}
+
 async function tenantAdminDbApi(client, auth, body) {
   const action = String(body?.action || '');
   const tenantId = body?.tenantId || body?.tenant_id;
@@ -484,13 +497,15 @@ async function tenantAdminDbApi(client, auth, body) {
       }
       const errors=validateTestIntake(record);
       if(errors.length)return response(400,{success:false,error:errors.join('; ')});
-      const inserted=await client.query(
-        `INSERT INTO suite_civil_california_test_cases(tenant_id,case_number,record,created_by)
-         VALUES($1,$2,$3::jsonb,$4) RETURNING id,stage`,
-        [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true,testHistory:[]}),auth.userId]
-      );
-      await platformEvent(client,auth,targetTenantId,'Created California TEST summons '+inserted.rows[0].id);
-      return response(200,{success:true,data:{case:inserted.rows[0]}});
+      return await civilTestTransaction(client,async()=>{
+        const inserted=await client.query(
+          `INSERT INTO suite_civil_california_test_cases(tenant_id,case_number,record,created_by)
+           VALUES($1,$2,$3::jsonb,$4) RETURNING id,stage`,
+          [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true,testHistory:[]}),auth.userId]
+        );
+        await platformEvent(client,auth,targetTenantId,'Created California TEST summons '+inserted.rows[0].id);
+        return response(200,{success:true,data:{case:inserted.rows[0]}});
+      });
     }
     if(operation==='transition'){
       const id=String(body?.id||'');
@@ -511,16 +526,18 @@ async function tenantAdminDbApi(client, auth, body) {
       const evidence=body?.evidence;
       const errors=validateTestTransition(stage,evidence,current.record,auth.userId);
       if(errors.length)return response(400,{success:false,error:errors.join('; ')});
-      const updated=await client.query(
-        `UPDATE suite_civil_california_test_cases
-          SET stage=$3,record=jsonb_set(record,'{testHistory}',
-            COALESCE(record->'testHistory','[]'::jsonb)||$4::jsonb,true),updated_at=now()
-          WHERE tenant_id=$1 AND id=$2 AND stage=$5 RETURNING id,stage`,
-        [targetTenantId,id,stage,JSON.stringify([{stage,evidence,actor:auth.userId,at:new Date().toISOString()}]),current.stage]
-      );
-      if(!updated.rows.length)return response(409,{success:false,error:'Test case changed; reload.'});
-      await platformEvent(client,auth,targetTenantId,'California TEST summons '+id+' -> '+stage);
-      return response(200,{success:true,data:{case:updated.rows[0]}});
+      return await civilTestTransaction(client,async()=>{
+        const updated=await client.query(
+          `UPDATE suite_civil_california_test_cases
+            SET stage=$3,record=jsonb_set(record,'{testHistory}',
+              COALESCE(record->'testHistory','[]'::jsonb)||$4::jsonb,true),updated_at=now()
+            WHERE tenant_id=$1 AND id=$2 AND stage=$5 RETURNING id,stage`,
+          [targetTenantId,id,stage,JSON.stringify([{stage,evidence,actor:auth.userId,at:new Date().toISOString()}]),current.stage]
+        );
+        if(!updated.rows.length)return response(409,{success:false,error:'Test case changed; reload.'});
+        await platformEvent(client,auth,targetTenantId,'California TEST summons '+id+' -> '+stage);
+        return response(200,{success:true,data:{case:updated.rows[0]}});
+      });
     }
     return response(400,{success:false,error:'Unsupported California test operation.'});
   }
