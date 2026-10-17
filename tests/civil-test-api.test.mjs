@@ -3,8 +3,11 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {validateTestIntake,validateTestTransition} from '../lambdas/api/lib/civil-test-validation.mjs';
 const tenant='f15865be-cf46-41e0-9d60-7cd753437501',id='12345678-1234-1234-1234-123456789012';
-let cases=new Map(),events=[],mode='test',conflict=false;
+let cases=new Map(),events=[],mode='test',conflict=false,failAudit=false,snapshot;
 const db={query:async(sql,p=[])=>{
+  if(sql==='BEGIN'){snapshot={cases:structuredClone(cases),events:structuredClone(events)};return {rows:[]};}
+  if(sql==='COMMIT'){snapshot=null;return {rows:[]};}
+  if(sql==='ROLLBACK'){cases=snapshot.cases;events=snapshot.events;snapshot=null;return {rows:[]};}
   if(sql.includes("AS jurisdiction FROM suite_tenants"))return {rows:[{jurisdiction:{profileId:'US-CA',status:mode}}]};
   if(sql.startsWith('CREATE TABLE'))return {rows:[]};
   if(sql.includes('INSERT INTO suite_civil_california_test_cases')){
@@ -20,7 +23,7 @@ const db={query:async(sql,p=[])=>{
 }};
 const ctx={validateTestIntake,validateTestTransition,DEMO_TENANT_ID:tenant,
  response:(status,body)=>({status,body}),ensureAgencySubdomainSchema:async()=>{},
- platformEvent:async(c,a,t,event)=>{events.push({actor:a.userId,tenant:t,event});}};
+ platformEvent:async(c,a,t,event)=>{if(failAudit)throw Error('Injected audit outage');events.push({actor:a.userId,tenant:t,event});}};
 vm.createContext(ctx);
 let source=fs.readFileSync('lambdas/api/tenant-admin.mjs','utf8').replace(/^import .*;\n/gm,'').replace(/async function platformEvent\([\s\S]*?\n}\n/,'').replace('export { internalIdentityApi, tenantAdminDbApi };','globalThis.api=tenantAdminDbApi;');
 vm.runInContext(source,ctx);
@@ -32,12 +35,14 @@ mode='draft';assert.equal((await call({operation:'list'})).status,409);mode='tes
 const record={caseNumber:'TEST-CA-001',courtOfOrigin:'Fictional court',receivedDate:'2026-10-17',defendant:'Demo Defendant',plaintiff:'Demo Plaintiff',signedInstructions:'Fictional',serviceAddresses:[{address:'123 Example Street'}],testHistory:[{stage:'reviewed'}]};
 assert.equal((await call({operation:'create',record:{...record,receivedDate:'2026-02-30'}})).status,400);
 assert.equal(cases.size,0);
+failAudit=true;await assert.rejects(()=>call({operation:'create',record}),/audit outage/);assert.equal(cases.size,0);assert.equal(events.length,0);failAudit=false;
 assert.equal((await call({operation:'create',record})).status,200);
 assert.equal(cases.get(id).record.testHistory.length,0);
 assert.equal((await call({operation:'transition',id:'bad',stage:'assigned'})).status,400);
 assert.equal((await call({operation:'transition',id,stage:'closed',evidence:{note:'Test'}})).status,409);
 const move=(stage,evidence,identity=auth)=>call({operation:'transition',id,stage,evidence},identity);
 assert.equal((await move('assigned',{note:'Test'})).status,400);
+failAudit=true;await assert.rejects(()=>move('assigned',{note:'Test',assignedTo:'Demo officer'}),/audit outage/);assert.equal(cases.get(id).stage,'intake');assert.equal(cases.get(id).record.testHistory.length,0);assert.equal(events.length,1);failAudit=false;
 assert.equal((await move('assigned',{note:'Test',assignedTo:'Demo officer'})).status,200);
 conflict=true;assert.equal((await move('attempted',{note:'Test',attemptDate:'2026-10-17',attemptTime:'12:00',attemptResult:'No contact'})).status,409);conflict=false;
 assert.equal(cases.get(id).stage,'assigned');
