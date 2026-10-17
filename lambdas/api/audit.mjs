@@ -278,4 +278,4 @@ async function auditLogApi(client, auth, body, event) {
   });
 }
 
-export { auditLogApi, appendAuditEvent };
+export { auditLogApi, appendAuditEvent, ensureAuditSchema };

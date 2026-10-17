@@ -18,3 +18,11 @@ jobs:
 
       - name: Verify source structure and syntax
         run: bash scripts/verify-source.sh
+
+      - name: Install isolated Civil integration test dependencies
+        run: npm ci --prefix tests/civil-support --ignore-scripts --no-audit --no-fund
+
+      - name: Verify California PostgreSQL and staff forms
+        run: |
+          node tests/civil-california-postgres.test.mjs
+          node tests/civil-california-view.test.mjs

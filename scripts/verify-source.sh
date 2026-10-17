@@ -71,4 +71,7 @@ node tests/civil-test-api.test.mjs
 
 node tests/civil-jurisdiction-view.test.mjs
 
+node tests/civil-california-domain.test.mjs
+node tests/civil-california-api.test.mjs
+
 echo "Source checks passed."

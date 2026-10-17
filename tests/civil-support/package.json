@@ -1,0 +1,9 @@
+{
+  "name": "civil-integration-tests",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "jsdom": "26.1.0"
+  }
+}

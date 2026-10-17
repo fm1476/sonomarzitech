@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {CA_WORKFLOWS,createCaliforniaCase,applyCaliforniaCommand,ledgerBalance,civilDate} from '../lambdas/api/lib/civil-california-domain.mjs';
+const ctx={admin:true,userId:'clerk',personId:'person-a',today:'2026-10-17',at:'2026-10-17T12:00:00Z',eventId:'event',id:'case',county:'Sonoma',testOnly:true};
+const intake=workflowId=>({workflowId,caseNumber:'TEST-CA',courtOfOrigin:'Fictional Court',plaintiff:'Demo Plaintiff',defendant:'Demo Defendant',receivedDate:'2026-10-16',serviceAddresses:[{address:'123 Fictional Lane'}]});
+let seq=0;
+const step=(r,command,payload={},actor=ctx)=>applyCaliforniaCommand(r,command,{note:'Fictional verification',...payload},{...actor,eventId:String(++seq)});
+const fails=(r,command,payload={},actor=ctx,pattern)=>{const snapshot=structuredClone(r);assert.throws(()=>step(r,command,payload,actor),pattern);assert.deepEqual(r,snapshot,'Rejected command must not mutate original');};
+const doc=(r,kind)=>step(r,'attach_document',{name:kind+'.pdf',key:'uploaded/'+kind,kind});
+const ready=workflowId=>{
+ let r=createCaliforniaCase(intake(workflowId),ctx);
+ fails(r,'approve_intake');
+ r=step(r,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed court order',formReviewReference:'Reviewed current court forms',reviewedForms:CA_WORKFLOWS[workflowId].forms,issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',propertyDescription:'Fictional parcel',financialInstitution:'Demo Bank'});
+ r=doc(doc(r,'Court packet'),'Signed instructions');if(CA_WORKFLOWS[workflowId].writ)r=doc(r,'Writ');return step(r,'approve_intake');
+};
+assert.equal(civilDate('2026-02-29'),false);assert.equal(civilDate('2028-02-29'),true);
+assert.throws(()=>createCaliforniaCase({...intake('summons'),receivedDate:'2099-01-01'},ctx));
+assert.throws(()=>createCaliforniaCase(intake('summons'),{...ctx,admin:false,abilities:[]}));
+for(const workflowId of Object.keys(CA_WORKFLOWS)){
+ let r=ready(workflowId);assert.equal(r.stage,'Ready');r=step(r,'assign',{personId:ctx.personId});
+ const other={...ctx,admin:false,personId:'other',abilities:['civil_paper_view_all','civil_paper_log_attempt']};
+ fails(r,'attempt',{date:'2026-10-17',time:'10:00',result:'Not home'},other,/assigned server/);
+ fails(r,'unserved',{},other,/assigned server/);
+ fails(r,'serve',{date:'2026-10-17',time:'10:00',recipient:'Demo',address:'Fictional',method:'Substituted service'});
+ fails(r,'attempt',{date:'2026-10-18',time:'10:00',result:'Not home'});
+ r=step(r,'attempt',{date:'2026-10-17',time:'10:00',result:'Not home'});
+ r=step(r,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'});
+ fails(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});
+ r=doc(r,'Proof of service');r=step(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});fails(r,'review_return',{},ctx,/different supervisor/);
+ r=step(r,'review_return',{}, {...ctx,userId:'reviewer'});r=step(r,'record_return',{date:'2026-10-17',reference:'Court receipt'});r=step(r,'close');assert.equal(r.stage,'Closed');fails(r,'receipt',{kind:'Service fee',amountCents:100,payer:'Demo',reference:'R1'});
+}
+let r=ready('bank-levy');r=step(r,'receipt',{kind:'Creditor deposit',amountCents:10000,payer:'Demo',reference:'R1'});assert.equal(ledgerBalance(r),10000);
+fails(r,'receipt',{kind:'Creditor deposit',amountCents:100,payer:'Demo',reference:'R1'},ctx,/already recorded/);
+fails(r,'expense',{amountCents:10001,authority:'Reviewed',reference:'E1'});
+fails(r,'receipt',{kind:'Creditor deposit',amountCents:Number.MAX_SAFE_INTEGER,payer:'Demo',reference:'R2'},ctx,/accounting range/);
+r=step(r,'hold',{kind:'Bankruptcy',reference:'Demo stay'});fails(r,'request_disbursement',{amountCents:10000,payee:'Demo',authority:'Order',reference:'D1'});
+fails(r,'enforcement_event',{kind:'Levy',date:'2026-10-17',description:'Fictional',authorityReference:'Order'});
+r=step(r,'resolve_hold',{holdId:r.california.holds[0].id,orderReference:'Court resolution'});
+r=step(r,'enforcement_event',{id:'spoofed',kind:'Levy',date:'2026-10-17',description:'Fictional',authorityReference:'Order'});assert.notEqual(r.california.enforcement[0].id,'spoofed');
+r=step(r,'request_disbursement',{amountCents:10000,payee:'Demo',authority:'Order',reference:'D1'});const disbursementId=r.california.disbursements[0].id;fails(r,'approve_disbursement',{disbursementId});r=step(r,'approve_disbursement',{disbursementId},{...ctx,userId:'finance-reviewer'});r=step(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});assert.equal(ledgerBalance(r),0);fails(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});fails(r,'cancel');r=step(r,'reconcile',{verifiedBalanceCents:0,reference:'Bank reconciliation'});r=step(r,'cancel');assert.equal(r.stage,'Cancelled');
+let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
+let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});unserved=step(unserved,'unserved');assert.equal(unserved.stage,'Unable to Serve');
+console.log('California domain: 11 workflows, permissions, immutable rejections, dates, returns, holds and accounting passed.');

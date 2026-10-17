@@ -13,6 +13,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand
 } from "@aws-sdk/client-s3";
 
@@ -5011,6 +5012,18 @@ function parentReferencesAttachment(parentRow, key) {
 }
 
 
+async function verifyAttachmentForParent(tenantId,agencyId,key,parentCollection,parentId){
+  if(!attachmentKeyAllowed(key,tenantId,agencyId))throw Object.assign(new Error('Document does not belong to this agency.'),{statusCode:403});
+  let object;
+  try{object=await s3.send(new HeadObjectCommand({Bucket:ATTACHMENTS_BUCKET,Key:key}));}
+  catch(error){if(error.$metadata?.httpStatusCode===404)throw Object.assign(new Error('Upload the document before attaching it.'),{statusCode:400});throw error;}
+  const meta=object.Metadata||{};
+  if(meta.parent_collection!==parentCollection||meta.parent_id!==String(parentId)||meta.tenant_id!==tenantId||meta.agency_id!==agencyId){
+    throw Object.assign(new Error('Uploaded document belongs to a different record.'),{statusCode:403});
+  }
+  if(!object.ContentLength)throw Object.assign(new Error('Uploaded document is empty.'),{statusCode:400});
+}
+
 async function createAttachmentUploadUrl(
   client,
   auth,
@@ -5573,6 +5586,7 @@ export {
   authorizePermitsChange,
   authorizeDroneEodGrantsChange,
   authorizePersonnelSharedChange,
+  verifyAttachmentForParent,
   createAttachmentUploadUrl,
   createAttachmentDownloadUrl,
   deleteAttachment,
