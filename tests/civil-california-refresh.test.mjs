@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const source=fs.readFileSync('frontend/assets/js/modules/suite-store.js','utf8');
+const start=source.indexOf('  async function refreshIfClean(){'),end=source.indexOf('  function liveSyncBlocked(){',start);
+const next=source.indexOf('\n  }',end)+4;
+let busy=true,requests=0,accepted=0,race=false;
+const ctx={refreshing:false,mode:'shared',serverReady:true,pendingWrites:false,saving:false,SuiteUX:{hasDirty:()=>false},window:{CaliforniaCivil:{hasOpenWork:()=>busy}},document:{getElementById:()=>null},remoteContext:{tenantId:'demo',agencyId:'agency'},sessionEpoch:1,lastRefresh:0,Date,serverVersions:{},lastRecordRevision:null,remoteRpc:async()=>{requests++;if(race)busy=true;return {data:{records:[]}};},loadNotificationReads:async()=>{},acceptRemote:()=>accepted++,console};
+vm.createContext(ctx);vm.runInContext(source.slice(start,end)+source.slice(end,next)+'\nglobalThis.refresh=refreshIfClean;globalThis.blocked=liveSyncBlocked;',ctx);
+assert.equal(ctx.blocked(),true);assert.equal(await ctx.refresh(),false);assert.equal(requests,0,'Open California work must prevent background loading');
+busy=false;assert.equal(!!ctx.blocked(),false);assert.equal(await ctx.refresh(),false);assert.equal(requests,1,'Other screens keep normal refresh behavior');
+race=true;assert.equal(await ctx.refresh(),false);assert.equal(requests,2);assert.equal(accepted,0,'Opening a form during a refresh must prevent state replacement');
+console.log('California refresh: open work preserved before and during refresh; other screens retain normal loading.');
