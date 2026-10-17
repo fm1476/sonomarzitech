@@ -4,6 +4,11 @@ class El{constructor(){this.events={};this.value='';this.disabled=false;}addEven
 const elements=new Map();const body={innerHTML:'',querySelector(s){if(!elements.has(s))elements.set(s,new El());return elements.get(s);}};
 let fulfill,tenant='demo',requests=[];const pending=new Promise(r=>fulfill=r);const state={civil:{jurisdictionProfile:{profileId:'US-GENERAL',status:'unconfigured'}}};
 const ctx={STATE:state,window:{SonoMarziCivilProfiles:{get:id=>({'US-CA':{displayName:'California Civil Process'},'US-GENERAL':{}}[id])}},SuiteStore:{mode:()=> 'shared',remoteContext:()=>({tenantId:tenant}),api:async(path,request)=>{requests.push(JSON.parse(request.body));return pending;}},Event:class{constructor(type){this.type=type;}}};vm.createContext(ctx);vm.runInContext(source.slice(a,b),ctx);ctx.renderCivilJurisdictionTab(body);
+assert.ok(body.innerHTML.includes('civilCaliforniaCounties'),'County suggestions must be present');
+assert.ok(body.innerHTML.includes('value="Alameda"'),'Alphabetical counties start with Alameda');
+assert.ok(body.innerHTML.includes('value="Yuba"'),'All California counties are listed through Yuba');
+assert.ok(body.innerHTML.includes('value="Marin"'),'Marin County should be selectable');
+assert.ok(body.innerHTML.includes('value="Sonoma"'),'Sonoma County should be selectable');
 assert.ok(!body.innerHTML.includes('civilJurisdictionCreateTestCase'),'Demo case creation must not appear in agency configuration');
 assert.ok(!body.innerHTML.includes('civilJurisdictionAdvanceTestCase'),'Demo case advancement must not appear in agency configuration');
 assert.ok(!body.innerHTML.includes('civilJurisdictionEnableTest'),'Internal test mode controls must be hidden');
