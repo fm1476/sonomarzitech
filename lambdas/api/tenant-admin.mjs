@@ -371,6 +371,51 @@ async function tenantAdminDbApi(client, auth, body) {
     return await listPlatformContexts(client, auth, body);
   }
 
+  // Civil jurisdiction configuration is tenant-scoped and draft-only until legal
+  // review, backend workflow gates and explicit activation have been implemented.
+  if (action === 'get_civil_jurisdiction_profile' || action === 'set_civil_jurisdiction_draft') {
+    const denied = platformOnly(auth); if (denied) return denied;
+    const targetTenantId = String(body?.tenantId || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(targetTenantId)) {
+      return response(400,{success:false,error:'Valid tenantId is required.'});
+    }
+    const tenant = await client.query(
+      `SELECT id,metadata FROM suite_tenants WHERE id=$1 LIMIT 1`,[targetTenantId]
+    );
+    if (!tenant.rows.length) return response(404,{success:false,error:'Tenant not found.'});
+    const current = tenant.rows[0].metadata?.civilJurisdictionProfile || {
+      profileId:'US-GENERAL',profileVersion:'1.0.0',county:'',status:'unconfigured'
+    };
+    if (action === 'get_civil_jurisdiction_profile') {
+      return response(200,{success:true,data:{jurisdictionProfile:current}});
+    }
+    const profileId=String(body?.profileId||'').trim();
+    const county=String(body?.county||'').trim();
+    if (!['US-GENERAL','US-CA'].includes(profileId)) {
+      return response(400,{success:false,error:'Unknown jurisdiction profile.'});
+    }
+    if (profileId==='US-CA' && (!county || county.length>100)) {
+      return response(400,{success:false,error:'California county is required (maximum 100 characters).'});
+    }
+    if (current.status==='active') {
+      return response(409,{success:false,error:'Active jurisdiction profiles cannot be changed through draft configuration.'});
+    }
+    const draft = {profileId,profileVersion:profileId==='US-CA'?'0.1.0':'1.0.0',
+      county:profileId==='US-CA'?county:'',status:profileId==='US-CA'?'draft':'unconfigured',
+      activatedAt:null,activatedBy:null};
+    const updated=await client.query(
+      `UPDATE suite_tenants
+          SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{civilJurisdictionProfile}',$2::jsonb,true)
+        WHERE id=$1 AND COALESCE(metadata->'civilJurisdictionProfile'->>'status','unconfigured') <> 'active'
+        RETURNING id`,
+      [targetTenantId,JSON.stringify(draft)]
+    );
+    if (!updated.rows.length) return response(409,{success:false,error:'Jurisdiction profile changed concurrently.'});
+    await platformEvent(client,auth,targetTenantId,
+      'Prepared Civil jurisdiction draft '+profileId+(county?' / '+county:''));
+    return response(200,{success:true,data:{jurisdictionProfile:draft}});
+  }
+
   if (action === 'list_subdomain_origins') {
     const denied = platformOnly(auth); if (denied) return denied;
     const q = await client.query(
