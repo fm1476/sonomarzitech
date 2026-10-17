@@ -92,7 +92,43 @@
     if(!workflowId) return {ready:false,approved:false,requiresHumanReview:true,errors:['Paper type requires California workflow mapping and supervisory review']};
     return reviewIntake(workflowId,paper);
   }
-  const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,resolveWorkflow,reviewCase,reviewIntake,reviewService});
+  // Dates are civil calendar dates, not timestamps. Invalid calendar values fail closed.
+  function parseCivilDate(value){
+    if(typeof value!=='string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return null;
+    const [year,month,day]=value.split('-').map(Number);
+    const date=new Date(Date.UTC(year,month-1,day));
+    if(date.getUTCFullYear()!==year || date.getUTCMonth()!==month-1 || date.getUTCDate()!==day) return null;
+    return date;
+  }
+  function reviewWrit(record,asOfDate){
+    const input=record && typeof record==='object'?record:{};
+    const errors=[];
+    const issued=parseCivilDate(input.issuedDate);
+    const expires=parseCivilDate(input.writExpirationDate);
+    const today=parseCivilDate(asOfDate);
+    if(!issued) errors.push('Valid writ issuance date required (YYYY-MM-DD)');
+    if(!expires) errors.push('Valid writ expiration date required (YYYY-MM-DD)');
+    if(!today) errors.push('Valid review date required (YYYY-MM-DD)');
+    if(issued && expires && expires<issued) errors.push('Writ expiration precedes issuance');
+    if(expires && today && expires<today) errors.push('Writ expiration has passed');
+    if(!nonEmpty(input.writDocument)) errors.push('Writ document required');
+    if(!nonEmpty(input.courtOfOrigin)) errors.push('Issuing court required');
+    return {ready:errors.length===0,approved:false,requiresHumanReview:true,errors};
+  }
+  function reviewDisbursement(record){
+    const input=record && typeof record==='object'?record:{};
+    const errors=[];
+    const amount=Number(input.amount);
+    const available=Number(input.availableTrustBalance);
+    if(!Number.isFinite(amount)||amount<=0) errors.push('Disbursement amount must be positive');
+    if(!Number.isFinite(available)||available<0) errors.push('Verified trust balance required');
+    if(Number.isFinite(amount)&&Number.isFinite(available)&&amount>available) errors.push('Disbursement exceeds trust balance');
+    if(!nonEmpty(input.payee)) errors.push('Payee required');
+    if(!nonEmpty(input.accountingReference)) errors.push('Accounting reference required');
+    if(!nonEmpty(input.reconciledBy)) errors.push('Reconciliation reviewer required');
+    return {ready:errors.length===0,approved:false,requiresHumanReview:true,errors};
+  }
+  const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,resolveWorkflow,reviewCase,reviewIntake,reviewService,reviewWrit,reviewDisbursement});
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   else root.SonoMarziCivilProfiles=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
