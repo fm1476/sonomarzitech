@@ -3204,11 +3204,60 @@ function renderCivilJurisdictionTab(body){
       output.textContent='Saved to tenant: '+saved.profileId+' / '+(saved.county||'No county')+' ('+saved.status+'). This does not activate California processing.';
     }catch(error){output.textContent='Unable to save: '+error.message;}
   });
+  // Keep demo interactions inside the application: browser-native dialogs can
+  // be suppressed and provide no visible explanation when the action stops.
+  const requestDemoFields=(output,title,fields=[],submitLabel='Continue')=>new Promise(resolve=>{
+    output.cancelDemoForm?.();
+    output.replaceChildren();
+    const form=document.createElement('form');
+    form.className='panel';
+    form.style.padding='16px';
+    const heading=document.createElement('h3');
+    heading.textContent=title;
+    form.append(heading);
+    const inputs={};
+    for(const field of fields){
+      const row=document.createElement('div');
+      row.className='form-row';
+      const label=document.createElement('label');
+      label.textContent=field.label;
+      const input=document.createElement(field.options?'select':'input');
+      input.id='civil-demo-'+field.name;
+      label.htmlFor=input.id;
+      if(field.options){
+        for(const option of field.options){
+          const el=document.createElement('option');
+          el.value=option.value;el.textContent=option.label;input.append(el);
+        }
+      }else input.type=field.type||'text';
+      input.required=true;
+      if(field.value!==undefined)input.value=field.value;
+      inputs[field.name]=input;
+      row.append(label,input);form.append(row);
+    }
+    const submit=document.createElement('button');
+    submit.type='submit';submit.className='btn btn-primary';submit.textContent=submitLabel;
+    const cancel=document.createElement('button');
+    cancel.type='button';cancel.className='btn btn-outline';cancel.textContent='Cancel';cancel.style.marginLeft='8px';
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;output.cancelDemoForm=null;form.remove();resolve(value);};
+    output.cancelDemoForm=()=>finish(null);
+    cancel.addEventListener('click',()=>{finish(null);output.textContent='Cancelled. No changes made.';});
+    form.addEventListener('submit',event=>{
+      event.preventDefault();
+      const values=Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value.trim()]));
+      if(Object.values(values).some(value=>!value)){form.reportValidity();return;}
+      finish(values);
+    });
+    form.append(submit,cancel);output.append(form);
+  });
   for(const [id,enabled] of [['civilJurisdictionEnableTest',true],['civilJurisdictionDisableTest',false]]){
     body.querySelector('#'+id)?.addEventListener('click',async()=>{
       const output=body.querySelector('#civilJurisdictionDraftResult');
       try{
-        if(!confirm((enabled?'Enable':'Disable')+' California Civil TEST mode for the internal Demo tenant?')) return;
+        const confirmed=await requestDemoFields(output,(enabled?'Enable':'Disable')+' California Civil TEST mode for internal Demo only?',[],enabled?'Confirm Enable Test Mode':'Confirm Disable Test Mode');
+        if(!confirmed)return;
+        output.textContent=enabled?'Enabling Demo test mode...':'Disabling Demo test mode...';
         const saved=await remoteProfileRequest('set_civil_california_test_mode',{enabled});
         output.textContent='Demo California test mode '+(saved?.status==='test'?'enabled':'disabled')+'. Production activation remains disabled.';
       }catch(error){output.textContent='Unable to change test mode: '+error.message;}
@@ -3238,16 +3287,18 @@ function renderCivilJurisdictionTab(body){
   };
   body.querySelector('#civilJurisdictionCreateTestCase')?.addEventListener('click',async()=>{
     const output=body.querySelector('#civilJurisdictionTestCasesOutput');
-    const caseNumber=prompt('Fictional test case number (e.g. TEST-CA-001):','TEST-CA-001');
-    if(!caseNumber)return;
-    const defendant=prompt('Fictional defendant name:','Demo Defendant');
-    if(!defendant)return;
-    const address=prompt('Fictional service address:','123 Example Street, Demo City, CA');
-    if(!address)return;
+    const values=await requestDemoFields(output,'Create Fictional Summons',[
+      {name:'caseNumber',label:'Fictional case number',value:'TEST-CA-'+Date.now()},
+      {name:'defendant',label:'Fictional defendant',value:'Demo Defendant'},
+      {name:'address',label:'Fictional service address',value:'123 Example Street, Demo City, CA'}
+    ],'Create Test Case');
+    if(!values)return;
+    const {caseNumber,defendant,address}=values;
     const record={caseNumber,courtOfOrigin:'Demo Superior Court (FICTIONAL)',
       receivedDate:new Date().toISOString().slice(0,10),
       plaintiff:'Demo Plaintiff',defendant,signedInstructions:'FICTIONAL DEMO INSTRUCTIONS',
       serviceAddresses:[{address}],testOnly:true};
+    output.textContent='Creating fictional summons...';
     try{
       const data=await californiaTestRequest({operation:'create',record});
       output.textContent='Created TEST case '+caseNumber+' ('+data?.case?.id+').';
@@ -3259,16 +3310,14 @@ function renderCivilJurisdictionTab(body){
       const data=await californiaTestRequest({operation:'list'});
       const cases=data?.cases||[];
       if(!cases.length){output.textContent='Create a fictional test case first.';return;}
-      const id=prompt('Enter test case ID:',cases[0].id);
-      if(!id)return;
+      const choice=await requestDemoFields(output,'Select Demo Test Case',[{name:'id',label:'Test case',options:cases.map(c=>({value:c.id,label:c.case_number+' ('+c.stage+')'}))}],'Choose Case');
+      if(!choice)return;
+      const id=choice.id;
       const selected=cases.find(c=>c.id===id);
       if(!selected)throw Error('Case ID is not in the Demo test list.');
       const next={intake:'assigned',assigned:'attempted',attempted:'served',
         served:'reviewed',reviewed:'closed'}[selected.stage];
       if(!next)throw Error('Case already closed or transition unavailable.');
-      const note=prompt('Evidence note for '+next+':','Fictional test evidence, no real service performed');
-      if(!note)return;
-      const evidence={note};
       const fields={assigned:['assignedTo'],attempted:['attemptDate','attemptTime','attemptResult'],
         served:['servedDate','servedTime','servedOnName','serverIdentity'],
         reviewed:['approvalReference'],closed:['returnReference','returnedDate']}[next];
@@ -3276,12 +3325,17 @@ function renderCivilJurisdictionTab(body){
         attemptTime:'12:00',attemptResult:'No contact',servedDate:new Date().toISOString().slice(0,10),
         servedTime:'12:00',servedOnName:'Demo Defendant',serverIdentity:'Demo Test Operator',
         approvalReference:'TEST-APPROVAL',returnReference:'TEST-RETURN',returnedDate:new Date().toISOString().slice(0,10)};
-      for(const field of fields){
-        const value=prompt('Fictional evidence: '+field,defaults[field]);
-        if(!value)return;
-        evidence[field]=value.trim();
-      }
-      if(next==='served') evidence.serviceMethod='Personal Service';
+      const labels={assignedTo:'Assigned test operator',attemptDate:'Attempt date',attemptTime:'Attempt time',
+        attemptResult:'Attempt result',servedDate:'Service date',servedTime:'Service time',
+        servedOnName:'Fictional recipient',serverIdentity:'Test server identity',approvalReference:'Review reference',
+        returnReference:'Fictional court return reference',returnedDate:'Return date'};
+      const evidence=await requestDemoFields(output,'Fictional evidence: '+next,[
+        {name:'note',label:'Evidence note',value:'Fictional test only, no real service performed'},
+        ...fields.map(name=>({name,label:labels[name],value:defaults[name],type:name.endsWith('Date')?'date':name.endsWith('Time')?'time':'text'}))
+      ],'Save '+next);
+      if(!evidence)return;
+      if(next==='served')evidence.serviceMethod='Personal Service';
+      output.textContent='Saving test transition...';
       const result=await californiaTestRequest({operation:'transition',id,stage:next,evidence});
       output.textContent='TEST case '+id+' moved to '+result?.case?.stage+'. No real service performed.';
     }catch(error){output.textContent='Transition failed: '+error.message;}
