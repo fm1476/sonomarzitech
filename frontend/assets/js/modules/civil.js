@@ -3129,6 +3129,7 @@ function renderAdminTabBody(){
 }
 
 function renderCivilJurisdictionTab(body){
+  const sharedProfile = typeof SuiteStore!=='undefined' && SuiteStore.mode()==='shared';
   const current = STATE.civil.jurisdictionProfile || {profileId:'US-GENERAL',status:'unconfigured'};
   const registry = window.SonoMarziCivilProfiles;
   const selected = registry && registry.get(current.profileId);
@@ -3141,22 +3142,22 @@ function renderCivilJurisdictionTab(body){
       <div class="panel-body">
         <div style="margin-bottom:12px;color:var(--text-dim);">This setting is managed during agency provisioning. California is in development and cannot be activated for live civil process operations.</div>
         <div class="form-2col">
-          <div class="form-row"><label>Current Profile</label><input disabled value="${escProfile(displayName)}"></div>
-          <div class="form-row"><label>Status</label><input disabled value="${escProfile(status)}"></div>
-          <div class="form-row"><label>Profile Version</label><input disabled value="${escProfile(current.profileVersion || '')}"></div>
-          <div class="form-row"><label>County</label><input disabled value="${escProfile(current.county || 'Not configured')}"></div>
+          <div class="form-row"><label>Current Profile</label><input id="civilJurisdictionCurrentName" disabled value="${sharedProfile?'Loading saved profile...':escProfile(displayName)}"></div>
+          <div class="form-row"><label>Status</label><input id="civilJurisdictionCurrentStatus" disabled value="${sharedProfile?'Loading...':escProfile(status)}"></div>
+          <div class="form-row"><label>Profile Version</label><input id="civilJurisdictionCurrentVersion" disabled value="${sharedProfile?'':escProfile(current.profileVersion || '')}"></div>
+          <div class="form-row"><label>County</label><input id="civilJurisdictionCurrentCounty" disabled value="${sharedProfile?'Loading...':escProfile(current.county || 'Not configured')}"></div>
         </div>
         <div style="font-size:12px;color:var(--text-dim);">California rules, forms, statutory fees and enforcement workflows require validation before activation. Existing records and other modules are unchanged.</div>
         <div class="panel" style="margin-top:16px"><div class="panel-head"><h2>Prepare Jurisdiction Configuration</h2></div><div class="panel-body">
           <div class="form-2col">
-            <div class="form-row"><label>Jurisdiction</label><select id="civilJurisdictionDraftProfile">
+            <div class="form-row"><label>Jurisdiction</label><select id="civilJurisdictionDraftProfile" ${sharedProfile?'disabled':''}>
               ${profileOptions.map(p=>`<option value="${escProfile(p.id)}">${escProfile(p.displayName||'General / Unconfigured')}</option>`).join('')}
             </select></div>
-            <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name"></div>
+            <div class="form-row"><label>County</label><input id="civilJurisdictionDraftCounty" placeholder="County name" ${sharedProfile?'disabled':''}></div>
           </div>
           <button class="btn btn-outline" id="civilJurisdictionDraftPreview">Preview Configuration</button>
           <button class="btn btn-outline" id="civilJurisdictionLoadRemote" style="margin-left:8px">Load Tenant Profile</button>
-          <button class="btn btn-primary" id="civilJurisdictionSaveRemote" style="margin-left:8px">Save Draft to Tenant</button>
+          <button class="btn btn-primary" id="civilJurisdictionSaveRemote" ${sharedProfile?'disabled':''} style="margin-left:8px">Save Draft to Tenant</button>
           <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
           <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
           <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
@@ -3168,6 +3169,20 @@ function renderCivilJurisdictionTab(body){
         </div></div>
       </div>
     </div>`;
+  const showSavedProfile=profile=>{
+    const definition=registry?.get(profile?.profileId);
+    if(!definition)throw Error('Tenant returned an unrecognized jurisdiction profile.');
+    body.querySelector('#civilJurisdictionCurrentName').value=definition.displayName||'General Civil Process';
+    body.querySelector('#civilJurisdictionCurrentStatus').value=profile.status||'unconfigured';
+    body.querySelector('#civilJurisdictionCurrentVersion').value=profile.profileVersion||'';
+    body.querySelector('#civilJurisdictionCurrentCounty').value=profile.county||'Not configured';
+    const selector=body.querySelector('#civilJurisdictionDraftProfile');
+    selector.value=profile.profileId;selector.disabled=false;
+    selector.dispatchEvent(new Event('change',{bubbles:true}));
+    const county=body.querySelector('#civilJurisdictionDraftCounty');
+    county.value=profile.county||'';county.disabled=false;
+    body.querySelector('#civilJurisdictionSaveRemote').disabled=['test','active'].includes(profile.status);
+  };
   const remoteProfileRequest = async (action, extra={}) => {
     if(typeof SuiteStore==='undefined' || SuiteStore.mode()!=='shared') throw Error('Shared AWS workspace required.');
     const ctx=SuiteStore.remoteContext?.();
@@ -3177,7 +3192,10 @@ function renderCivilJurisdictionTab(body){
       body:JSON.stringify({action,tenantId:ctx.tenantId,...extra})
     });
     if(result?.success===false) throw Error(result.error||'Tenant profile request failed.');
-    return result.data?.jurisdictionProfile || result.jurisdictionProfile;
+    if(SuiteStore.remoteContext?.()?.tenantId!==ctx.tenantId)throw Error('Workspace changed while loading jurisdiction. Reopen this tab.');
+    const profile=result.data?.jurisdictionProfile || result.jurisdictionProfile;
+    if(profile && body.querySelector('#civilJurisdictionCurrentName'))showSavedProfile(profile);
+    return profile;
   };
   body.querySelector('#civilJurisdictionLoadRemote')?.addEventListener('click',async()=>{
     const output=body.querySelector('#civilJurisdictionDraftResult');
@@ -3188,7 +3206,11 @@ function renderCivilJurisdictionTab(body){
       output.textContent='Tenant profile: '+profile.profileId+' / '+(profile.county||'No county')+' ('+profile.status+').';
       body.querySelector('#civilJurisdictionDraftProfile').value=profile.profileId;
       body.querySelector('#civilJurisdictionDraftCounty').value=profile.county||'';
-    }catch(error){output.textContent='Unable to load: '+error.message;}
+    }catch(error){
+      output.textContent='Unable to load: '+error.message;
+      const status=body.querySelector('#civilJurisdictionCurrentStatus');
+      if(status)status.value='Unable to load';
+    }
   });
   body.querySelector('#civilJurisdictionSaveRemote')?.addEventListener('click',async()=>{
     const output=body.querySelector('#civilJurisdictionDraftResult');
@@ -3352,6 +3374,7 @@ function renderCivilJurisdictionTab(body){
         : result.errors.join('; ');
     }catch(error){ output.textContent=error.message; }
   });
+  if(sharedProfile)body.querySelector('#civilJurisdictionLoadRemote').click();
 }
 
 function renderFeeScheduleTab(body){

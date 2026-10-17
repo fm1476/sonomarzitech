@@ -69,4 +69,6 @@ node tests/civil-jurisdiction-integration.test.mjs
 node tests/civil-test-validation.test.mjs
 node tests/civil-test-api.test.mjs
 
+node tests/civil-jurisdiction-view.test.mjs
+
 echo "Source checks passed."
