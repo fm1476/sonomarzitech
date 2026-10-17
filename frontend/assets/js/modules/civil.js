@@ -713,7 +713,7 @@ function openAssignServerModal(paperId){
   const p = paperFor(paperId);
   document.getElementById('modalBox').className = 'modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>Assign Server \u2014 ${escapeHtml(p.caseNumber)}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-head"><h3>Assign Server \u2014 ${escapeHtml(p.caseNumber)}</h3><button class="modal-close" id="mClose" aria-label="Close case workspace">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Assign To</label><select id="fAssignServer">${STATE.personnel.map(person=>`<option value="${person.id}" ${p.assignedServerId===person.id?'selected':''}>${escapeHtml(person.name)}</option>`).join('')}</select></div>
     </div>
@@ -830,8 +830,9 @@ function renderPaperDetailModal(){
   if(STATE.civil.jurisdictionProfile?.profileId==='US-CA') tabs.push(['ca-review','CA Readiness']);
   tabs.push(['photos','Photos'],['documents','Documents'],['history','Change History']);
   const box = document.getElementById('modalBox');
-  box.className = 'modal modal-xl';
+  box.className = 'modal modal-xl civil-case-workspace';
   box.innerHTML = `
+    <style id="civil-workspace-style">\n      #modalBox.civil-case-workspace{width:min(1500px,calc(100vw - 48px));max-width:1500px;max-height:calc(100vh - 38px);height:calc(100vh - 38px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#111d2f))}\n      #modalBox.civil-case-workspace .modal-head{background:linear-gradient(115deg,rgba(48,116,210,.16),rgba(21,165,147,.08));padding:20px 26px;flex-shrink:0}\n      #modalBox.civil-case-workspace .modal-body{flex:1;min-height:0;overflow-y:auto;padding:24px}\n      #modalBox.civil-case-workspace .modal-foot{flex-shrink:0;padding:13px 24px}\n      #modalBox.civil-case-workspace [data-pd-tab]{border-radius:9px!important;border:1px solid var(--border)!important;min-height:38px}\n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
     <div class="modal-head">
       <div>
         <h3 style="margin-bottom:2px;">${escapeHtml(p.caseNumber)} ${p.priority==='Immediate'?'<span class="badge badge-missing" style="margin-left:8px;">PRIORITY</span>':''}</h3>
@@ -843,7 +844,7 @@ function renderPaperDetailModal(){
       ${tabs.map(([tid,label])=>`<button class="btn btn-sm ${PAPER_DETAIL_TAB===tid?'btn-primary':'btn-outline'}" data-pd-tab="${tid}" style="border-radius:5px 5px 0 0;border-bottom:none;">${label}</button>`).join('')}
     </div>
     <div class="modal-body" id="paperDetailBody"></div>
-    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back to cases</button></div>
   `;
   openModal();
   document.getElementById('mClose').onclick = ()=>{ closeModal(); if(ACTIVE_VIEW==='civil-board') renderBoard(); else if(ACTIVE_VIEW==='civil-mine') renderMyAssignments(); };
