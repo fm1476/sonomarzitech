@@ -13,6 +13,7 @@ window.CaliforniaCivil = (() => {
         })[c],
     );
   let generation = 0;
+  let preferredCaseView = "cards";
   const workspace = () => SuiteStore.remoteContext?.();
   async function api(operation, extra = {}, scope = workspace()) {
     if (!scope?.tenantId || !scope?.agencyId)
@@ -251,7 +252,28 @@ window.CaliforniaCivil = (() => {
 .ca-classic .btn-primary{background:var(--ca-accent);color:white;border-color:transparent}
 .ca-classic .btn-outline{border:1px solid var(--ca-border);background:var(--ca-surface);color:var(--text,var(--heading))}
 .ca-classic #ca-search{width:100%;min-height:43px;border-radius:10px}
-.ca-classic #ca-list{overflow-x:auto;margin-top:17px}
+.ca-classic #ca-list{margin-top:17px}
+.ca-classic .ca-view-controls{display:flex;justify-content:flex-end;align-items:center;gap:0;margin:12px 0 6px}
+.ca-classic .ca-view-controls .btn{min-height:36px;border-radius:0}
+.ca-classic .ca-view-controls .btn:first-child{border-radius:10px 0 0 10px}
+.ca-classic .ca-view-controls .btn:last-child{border-radius:0 10px 10px 0}
+.ca-classic .ca-view-controls [aria-pressed="true"]{background:rgba(48,125,222,.22);border-color:var(--ca-accent);color:var(--heading,var(--text))}
+.ca-classic .ca-case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:15px}
+.ca-classic .ca-case-card{padding:18px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(145deg,rgba(55,121,212,.10),rgba(24,162,153,.035) 75%),var(--ca-surface);box-shadow:0 5px 15px rgba(0,0,0,.06);min-width:0}
+.ca-classic .ca-case-card:hover{border-color:var(--ca-accent);box-shadow:0 7px 24px rgba(30,105,190,.15)}
+.ca-classic .ca-case-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ca-classic .ca-case-card h4{font-size:16px;line-height:1.35;overflow-wrap:anywhere;margin:0 0 8px;color:var(--heading,var(--text))}
+.ca-classic .ca-case-type{margin:0 0 15px;color:var(--text-dim);font-size:13px}
+.ca-classic .ca-card-details{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--ca-border);border-bottom:1px solid var(--ca-border)}
+.ca-classic .ca-card-details dt{color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin:0 0 5px}
+.ca-classic .ca-card-details dd{margin:0;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.ca-classic .ca-case-card .ca-card-open{margin-top:14px;width:100%;justify-content:center}
+.ca-classic .ca-table-wrap{overflow-x:auto}
+.ca-classic .ca-list-footer{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:14px;color:var(--text-dim);font-size:13px}
+.ca-classic .ca-empty-state{border:1px dashed var(--ca-border);border-radius:14px;padding:32px 18px;text-align:center;background:rgba(55,121,212,.035)}
+.ca-classic .ca-empty-state strong{display:block;font-size:16px;margin-bottom:7px;color:var(--heading,var(--text))}
+.ca-classic .ca-empty-state p{margin:0;color:var(--text-dim)}
+
 .ca-classic .data-table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--ca-border);border-radius:13px}
 .ca-classic .data-table thead{background:rgba(54,122,215,.12)}
 .ca-classic .data-table th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;padding:13px 14px;color:var(--text-dim);text-align:left}
@@ -270,7 +292,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="alert"]:not(:empty){color:#eb6672}
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">▦ Cards</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -282,8 +304,18 @@ window.CaliforniaCivil = (() => {
               b.record.returnByDate || "9999",
             ),
           );
+        const cardHtml = selected.map(({record:r}) =>
+          `<article class="ca-case-card"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
+          <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl>
+          <button type="button" class="btn btn-primary ca-card-open" data-case="${esc(r.id)}">Open case</button></article>`
+        ).join("");
+        const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table></div>`;
         root.querySelector("#ca-list").innerHTML =
-          `<table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map((x) => `<tr><td><button class="btn btn-outline" data-case="${esc(x.record.id)}">${esc(x.record.caseNumber)}</button></td><td>${esc(x.record.paperType)}</td><td>${esc(x.record.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(x.record.stage)}">${esc(x.record.stage)}</span></td><td>${esc(x.record.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table>${!selected.length ? "<p>No matching cases.</p>" : ""}<p>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</p>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}`;
+          (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>') +
+          `<div class="ca-list-footer"><span>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</span>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}</div>`;
+        root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
+        root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
+
         root.querySelector("#ca-more")?.addEventListener("click", async (e) => {
           e.target.disabled = true;
           try {
@@ -317,6 +349,8 @@ window.CaliforniaCivil = (() => {
             }),
         );
       };
+      root.querySelector("#ca-view-cards").onclick = () => { preferredCaseView = "cards"; draw(); };
+      root.querySelector("#ca-view-table").onclick = () => { preferredCaseView = "table"; draw(); };
       let searchTimer,
         searchEpoch = 0;
       root.querySelector("#ca-search").oninput = () => {
