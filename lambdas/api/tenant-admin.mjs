@@ -518,7 +518,7 @@ async function tenantAdminDbApi(client, auth, body) {
          (!evidence || typeof evidence!=='object' || !String(evidence.note||'').trim())){
         return response(400,{success:false,error:'Documented evidence note required.'});
       }
-      if(stage==='served' && (!evidence.serviceMethod || !evidence.servedDate ||
+      if(stage==='served' && (!evidence.serviceMethod || !/^\d{4}-\d{2}-\d{2}$/.test(String(evidence.servedDate||'')) ||
          !evidence.servedOnName || !evidence.serverIdentity)){
         return response(400,{success:false,error:'Service evidence incomplete.'});
       }
