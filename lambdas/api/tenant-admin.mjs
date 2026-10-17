@@ -446,6 +446,96 @@ async function tenantAdminDbApi(client, auth, body) {
     return response(200,{success:true,data:{jurisdictionProfile:draft}});
   }
 
+  // Demo-only California summons lifecycle, isolated from legacy Civil records.
+  // No court filings, notices, payments or external service are initiated here.
+  if (action === 'california_test_summons') {
+    const denied=platformOnly(auth); if(denied)return denied;
+    const targetTenantId=String(body?.tenantId||'');
+    if(targetTenantId!==DEMO_TENANT_ID) return response(403,{success:false,error:'Demo tenant only.'});
+    const q=await client.query(
+      `SELECT metadata->'civilJurisdictionProfile' AS jurisdiction FROM suite_tenants WHERE id=$1`,
+      [targetTenantId]
+    );
+    if(q.rows[0]?.jurisdiction?.profileId!=='US-CA' ||
+       q.rows[0]?.jurisdiction?.status!=='test'){
+      return response(409,{success:false,error:'California Demo test mode must be enabled.'});
+    }
+    await client.query(`CREATE TABLE IF NOT EXISTS suite_civil_california_test_cases (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id UUID NOT NULL,
+      case_number TEXT NOT NULL,
+      record JSONB NOT NULL,
+      stage TEXT NOT NULL DEFAULT 'intake',
+      created_by UUID NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    const operation=String(body?.operation||'list');
+    if(operation==='list'){
+      const rows=await client.query(
+        `SELECT id,case_number,record,stage,updated_at FROM suite_civil_california_test_cases
+          WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`,[targetTenantId]);
+      return response(200,{success:true,data:{cases:rows.rows}});
+    }
+    if(operation==='create'){
+      const record=body?.record;
+      if(!record || typeof record!=='object' || Array.isArray(record)){
+        return response(400,{success:false,error:'Case record required.'});
+      }
+      const required=['caseNumber','courtOfOrigin','receivedDate','defendant','plaintiff',
+        'signedInstructions','serviceAddresses'];
+      const missing=required.filter(k=>!record[k] ||
+        (Array.isArray(record[k]) && !record[k].length));
+      if(missing.length)return response(400,{success:false,error:'Missing '+missing.join(', ')});
+      if(!Array.isArray(record.serviceAddresses) ||
+         !record.serviceAddresses.some(a=>typeof a?.address==='string'&&a.address.trim())){
+        return response(400,{success:false,error:'At least one service address required.'});
+      }
+      if(JSON.stringify(record).length>20000)return response(413,{success:false,error:'Test record too large.'});
+      const inserted=await client.query(
+        `INSERT INTO suite_civil_california_test_cases(tenant_id,case_number,record,created_by)
+         VALUES($1,$2,$3::jsonb,$4) RETURNING id,stage`,
+        [targetTenantId,String(record.caseNumber).slice(0,150),JSON.stringify({...record,testOnly:true}),auth.userId]
+      );
+      await platformEvent(client,auth,targetTenantId,'Created California TEST summons '+inserted.rows[0].id);
+      return response(200,{success:true,data:{case:inserted.rows[0]}});
+    }
+    if(operation==='transition'){
+      const id=String(body?.id||'');
+      const stage=String(body?.stage||'');
+      const allowed={intake:['assigned'],assigned:['attempted','served'],attempted:['attempted','served'],
+        served:['reviewed'],reviewed:['closed']};
+      const existing=await client.query(
+        `SELECT id,record,stage FROM suite_civil_california_test_cases WHERE tenant_id=$1 AND id=$2`,
+        [targetTenantId,id]
+      );
+      if(!existing.rows.length)return response(404,{success:false,error:'Test case not found.'});
+      const current=existing.rows[0];
+      if(!allowed[current.stage]?.includes(stage)){
+        return response(409,{success:false,error:'Invalid test workflow transition.'});
+      }
+      const evidence=body?.evidence;
+      if(['attempted','served','reviewed','closed'].includes(stage) &&
+         (!evidence || typeof evidence!=='object' || !String(evidence.note||'').trim())){
+        return response(400,{success:false,error:'Documented evidence note required.'});
+      }
+      if(stage==='served' && (!evidence.serviceMethod || !evidence.servedDate ||
+         !evidence.servedOnName || !evidence.serverIdentity)){
+        return response(400,{success:false,error:'Service evidence incomplete.'});
+      }
+      const updated=await client.query(
+        `UPDATE suite_civil_california_test_cases
+          SET stage=$3,record=jsonb_set(record,'{testHistory}',
+            COALESCE(record->'testHistory','[]'::jsonb)||$4::jsonb,true),updated_at=now()
+          WHERE tenant_id=$1 AND id=$2 AND stage=$5 RETURNING id,stage`,
+        [targetTenantId,id,stage,JSON.stringify([{stage,evidence,actor:auth.userId,at:new Date().toISOString()}]),current.stage]
+      );
+      if(!updated.rows.length)return response(409,{success:false,error:'Test case changed; reload.'});
+      await platformEvent(client,auth,targetTenantId,'California TEST summons '+id+' -> '+stage);
+      return response(200,{success:true,data:{case:updated.rows[0]}});
+    }
+    return response(400,{success:false,error:'Unsupported California test operation.'});
+  }
+
   if (action === 'list_subdomain_origins') {
     const denied = platformOnly(auth); if (denied) return denied;
     const q = await client.query(
