@@ -3159,6 +3159,8 @@ function renderCivilJurisdictionTab(body){
           <button class="btn btn-primary" id="civilJurisdictionSaveRemote" style="margin-left:8px">Save Draft to Tenant</button>
           <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
           <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
+          <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
+          <div id="civilJurisdictionTestCasesOutput" style="margin-top:10px"></div>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
         </div></div>
@@ -3210,6 +3212,20 @@ function renderCivilJurisdictionTab(body){
       }catch(error){output.textContent='Unable to change test mode: '+error.message;}
     });
   }
+  body.querySelector('#civilJurisdictionTestCases')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    output.textContent='Loading isolated Demo test cases...';
+    try{
+      const ctx=SuiteStore.remoteContext?.();
+      const raw=await SuiteStore.api('/tenant-admin',{method:'POST',body:JSON.stringify({
+        action:'california_test_summons',tenantId:ctx.tenantId,operation:'list'
+      })});
+      const cases=raw?.data?.cases||[];
+      output.textContent=cases.length
+        ? cases.map(c=>c.case_number+' — '+c.stage+' (TEST)').join(' | ')
+        : 'No California Demo test cases have been created.';
+    }catch(error){output.textContent='Unable to list test cases: '+error.message;}
+  });
   body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
     const id=body.querySelector('#civilJurisdictionDraftProfile').value;
     const county=body.querySelector('#civilJurisdictionDraftCounty').value.trim();
