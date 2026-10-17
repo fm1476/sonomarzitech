@@ -162,11 +162,21 @@ window.CaliforniaCivilView = (() => {
           ["Court receipt", c.returnPacket.receiptReference],
         ])
       : "<p>No court return prepared.</p>";
-    return `<hr><h3>${esc(r.caseNumber)} · ${esc(r.stage)}</h3><p>${esc(r.plaintiff)} / ${esc(r.defendant)} · ${esc(r.courtOfOrigin)}</p>
-      <div class="form-2col"><p>Assigned server: <strong>${esc(person(r.assignedServerId))}</strong><br>Return due: ${esc(r.returnByDate ? date(r.returnByDate) : "Pending review")}</p><p>Case balance: <strong>${money(balance)}</strong><br>Released funds: ${money(current.availableCents ?? balance)}</p></div>
-      <p style="color:var(${c.holds.some((h) => !h.resolvedAt) ? "--red" : "--green"})">Open claims/stays: ${c.holds.filter((h) => !h.resolvedAt).length}</p>
-      <div class="panel ca-next-step" style="border-left:3px solid var(--blue)"><div class="panel-body"><h4>Next step</h4><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
-      <p>Packet forms: ${esc(workflow.forms.join(", "))}. Return: ${esc(workflow.returns.join(", "))}.</p><div id="ca-actions"></div>
+    const stages=["Intake","Ready","Assigned","Attempting","Served","Return Prepared","Reviewed","Returned to Court","Closed"];
+    const at=stages.indexOf(r.stage);
+    const progress=stages.map((step,i)=>'<div class="ca-progress-step" data-complete="'+(at>=i&&at>=0)+'" data-current="'+(r.stage===step)+'"><span class="ca-progress-dot"></span><small>'+esc(step)+'</small></div>').join("");
+    return `<header class="ca-workspace-heading"><div><div class="ca-workspace-kicker">Civil case workspace</div><h2>${esc(r.caseNumber)}</h2><p>${esc(workflow.label)} · ${esc(r.courtOfOrigin)}</p></div><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></header>
+      <div class="ca-case-summary">
+        <div><small>Parties</small><strong>${esc(r.plaintiff)} / ${esc(r.defendant)}</strong></div>
+        <div><small>Assigned server</small><strong>${esc(person(r.assignedServerId))}</strong></div>
+        <div><small>Return due</small><strong>${esc(r.returnByDate ? date(r.returnByDate) : "Pending review")}</strong></div>
+        <div><small>Case balance</small><strong>${money(balance)}</strong></div>
+        <div><small>Released funds</small><strong>${money(current.availableCents ?? balance)}</strong></div>
+        <div><small>Open claims / stays</small><strong>${c.holds.filter(h=>!h.resolvedAt).length}</strong></div>
+      </div>
+      <section class="ca-progress"><div class="ca-progress-title"><h4>Case progress</h4><span>${esc(r.stage)}</span></div><div class="ca-progress-track">${progress}</div></section>
+      <div class="panel ca-next-step"><div class="panel-body"><div class="ca-next-heading"><h4>Recommended next step</h4><span>Guided workflow</span></div><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
+      <p class="ca-form-reference">Packet forms: ${esc(workflow.forms.join(", "))}. Return: ${esc(workflow.returns.join(", "))}.</p><div id="ca-actions"></div>
       <h4>Documents</h4><div id="ca-documents"></div><h4>Case record</h4>
       ${section(
         "Intake and service addresses",
