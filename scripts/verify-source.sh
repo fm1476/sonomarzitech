@@ -63,5 +63,6 @@ fi
 node scripts/verify-shift-bids.mjs
 node scripts/verify-special-event-assignments.mjs
 node scripts/verify-staffing-categories.mjs
+node tests/civil-jurisdiction-profiles.test.js
 
 echo "Source checks passed."
