@@ -22,7 +22,11 @@ jobs:
       - name: Install isolated Civil integration test dependencies
         run: npm ci --prefix tests/civil-support --ignore-scripts --no-audit --no-fund
 
+      - name: Install API dependencies for official return template checks
+        run: npm ci --prefix lambdas/api --ignore-scripts --no-audit --no-fund
+
       - name: Verify California PostgreSQL and staff forms
         run: |
           node tests/civil-california-postgres.test.mjs
           node tests/civil-california-view.test.mjs
+          node tests/civil-california-returns.test.mjs

@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-location": "3.895.0",
+    "pdf-lib": "1.17.1",
     "web-push": "3.6.7"
   }
 }

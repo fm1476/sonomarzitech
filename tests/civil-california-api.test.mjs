@@ -1,7 +1,10 @@
+import {SONOMA_FEE_REFERENCE} from '../lambdas/api/lib/civil-california-fees.mjs';
+import {californiaFinancialReport} from '../lambdas/api/lib/civil-california-reporting.mjs';
+import {readinessStatus,saveReadinessEvidence} from '../lambdas/api/lib/civil-california-readiness.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import * as domain from '../lambdas/api/lib/civil-california-domain.mjs';
 const tenant='f15865be-cf46-41e0-9d60-7cd753437501',agency=randomUUID(),person=randomUUID();
 let records=new Map(),audit=[],failAudit=false,snapshot,admin=true,profile={profileId:'US-CA',status:'test',county:'Sonoma'},grants=['civil_paper_view_own'],licensed=true,attachmentValid=true;
@@ -16,7 +19,7 @@ const db={query:async(sql,p=[])=>{
  if(sql.includes('FROM suite_memberships'))return {rows:p[2]===person?[{exists:1}]:[]};
  throw Error('Unexpected SQL: '+sql);
 }};
-const context={...domain,randomUUID,Intl,Date,Map,JSON,DEMO_TENANT_ID:tenant,response:(status,body)=>({status,body}),resolveWorkspaceMembership:async(c,a,t,g)=>t===tenant&&g===agency?{personId:person,admin,enabledModules:licensed?['civil']:[],roleIds:['staff']}:{error:{status:403}},loadRoleAbilityMap:async()=>new Map(),roleHasAbility:(map,roles,a)=>grants.includes(a),verifyAttachmentForParent:async(t,g,k,col,id)=>{assert.equal(col,'civil.papers');assert.ok(records.has(JSON.stringify([['civil','papers'],id])));if(!attachmentValid)throw Object.assign(Error('Wrong parent'),{statusCode:403});},ensureAuditSchema:async()=>{},appendAuditEvent:async(c,a,event)=>{if(failAudit)throw Error('Audit unavailable');audit.push({actor:a.userId,...event});}};
+const context={...domain,SONOMA_FEE_REFERENCE,californiaFinancialReport,readinessStatus,saveReadinessEvidence,createHash,randomUUID,Intl,Date,Map,JSON,DEMO_TENANT_ID:tenant,response:(status,body)=>({status,body}),resolveWorkspaceMembership:async(c,a,t,g)=>t===tenant&&g===agency?{personId:person,admin,enabledModules:licensed?['civil']:[],roleIds:['staff']}:{error:{status:403}},loadRoleAbilityMap:async()=>new Map(),roleHasAbility:(map,roles,a)=>grants.includes(a),verifyAttachmentForParent:async(t,g,k,col,id)=>{assert.equal(col,'civil.papers');assert.ok(records.has(JSON.stringify([['civil','papers'],id])));if(!attachmentValid)throw Object.assign(Error('Wrong parent'),{statusCode:403});},ensureAuditSchema:async()=>{},appendAuditEvent:async(c,a,event)=>{if(failAudit)throw Error('Audit unavailable');audit.push({actor:a.userId,...event});}};
 vm.createContext(context);const source=fs.readFileSync('lambdas/api/civil-california.mjs','utf8').replace(/^import .*;\n/gm,'').replace('export async function californiaCivilApi','async function californiaCivilApi')+'\nglobalThis.api=californiaCivilApi;';vm.runInContext(source,context);
 const call=(extra={},actor='actor-a')=>context.api(db,{userId:actor},{tenantId:tenant,agencyId:agency,...extra});
 assert.equal((await call({tenantId:randomUUID()})).status,403);licensed=false;assert.equal((await call()).status,403);licensed=true;profile.status='draft';assert.equal((await call({operation:'list'})).status,409);profile.status='test';
