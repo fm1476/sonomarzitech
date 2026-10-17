@@ -3160,6 +3160,8 @@ function renderCivilJurisdictionTab(body){
           <button class="btn btn-outline" id="civilJurisdictionEnableTest" style="margin-left:8px">Enable Demo Test Mode</button>
           <button class="btn btn-outline" id="civilJurisdictionDisableTest" style="margin-left:8px">Disable Demo Test Mode</button>
           <button class="btn btn-outline" id="civilJurisdictionTestCases" style="margin-left:8px">View Demo Test Cases</button>
+          <button class="btn btn-primary" id="civilJurisdictionCreateTestCase" style="margin-left:8px">Create Fictional Summons</button>
+          <button class="btn btn-outline" id="civilJurisdictionAdvanceTestCase" style="margin-left:8px">Advance Test Case</button>
           <div id="civilJurisdictionTestCasesOutput" style="margin-top:10px"></div>
           <div id="civilJurisdictionDraftResult" style="margin-top:12px;color:var(--text-dim)"></div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Preview is local. Saving requires Platform Admin access and persists a draft to the selected AWS tenant; activation remains disabled.</div>
@@ -3225,6 +3227,57 @@ function renderCivilJurisdictionTab(body){
         ? cases.map(c=>c.case_number+' — '+c.stage+' (TEST)').join(' | ')
         : 'No California Demo test cases have been created.';
     }catch(error){output.textContent='Unable to list test cases: '+error.message;}
+  });
+  const californiaTestRequest=async(payload)=>{
+    const ctx=SuiteStore.remoteContext?.();
+    if(!ctx?.tenantId) throw Error('Select the Demo tenant.');
+    const result=await SuiteStore.api('/tenant-admin',{method:'POST',
+      body:JSON.stringify({action:'california_test_summons',tenantId:ctx.tenantId,...payload})});
+    if(result?.success===false) throw Error(result.error||'Test operation failed.');
+    return result?.data;
+  };
+  body.querySelector('#civilJurisdictionCreateTestCase')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    const caseNumber=prompt('Fictional test case number (e.g. TEST-CA-001):','TEST-CA-001');
+    if(!caseNumber)return;
+    const defendant=prompt('Fictional defendant name:','Demo Defendant');
+    if(!defendant)return;
+    const address=prompt('Fictional service address:','123 Example Street, Demo City, CA');
+    if(!address)return;
+    const record={caseNumber,courtOfOrigin:'Demo Superior Court (FICTIONAL)',
+      receivedDate:new Date().toISOString().slice(0,10),
+      plaintiff:'Demo Plaintiff',defendant,signedInstructions:'FICTIONAL DEMO INSTRUCTIONS',
+      serviceAddresses:[{address}],testOnly:true};
+    try{
+      const data=await californiaTestRequest({operation:'create',record});
+      output.textContent='Created TEST case '+caseNumber+' ('+data?.case?.id+').';
+    }catch(error){output.textContent='Creation failed: '+error.message;}
+  });
+  body.querySelector('#civilJurisdictionAdvanceTestCase')?.addEventListener('click',async()=>{
+    const output=body.querySelector('#civilJurisdictionTestCasesOutput');
+    try{
+      const data=await californiaTestRequest({operation:'list'});
+      const cases=data?.cases||[];
+      if(!cases.length){output.textContent='Create a fictional test case first.';return;}
+      const id=prompt('Enter test case ID:',cases[0].id);
+      if(!id)return;
+      const selected=cases.find(c=>c.id===id);
+      if(!selected)throw Error('Case ID is not in the Demo test list.');
+      const next={intake:'assigned',assigned:'attempted',attempted:'served',
+        served:'reviewed',reviewed:'closed'}[selected.stage];
+      if(!next)throw Error('Case already closed or transition unavailable.');
+      const note=prompt('Evidence note for '+next+':','Fictional test evidence — no real service performed');
+      if(!note)return;
+      const evidence={note};
+      if(next==='served'){
+        evidence.serviceMethod='FICTIONAL TEST ONLY';
+        evidence.servedDate=new Date().toISOString().slice(0,10);
+        evidence.servedOnName='Demo Defendant';
+        evidence.serverIdentity='Demo Test Operator';
+      }
+      const result=await californiaTestRequest({operation:'transition',id,stage:next,evidence});
+      output.textContent='TEST case '+id+' moved to '+result?.case?.stage+'. No real service performed.';
+    }catch(error){output.textContent='Transition failed: '+error.message;}
   });
   body.querySelector('#civilJurisdictionDraftPreview')?.addEventListener('click',()=>{
     const id=body.querySelector('#civilJurisdictionDraftProfile').value;
