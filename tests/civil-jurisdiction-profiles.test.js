@@ -25,3 +25,10 @@ assert.equal(profiles.reviewIntake('possession',{
 }).ready,true);
 assert.equal(profiles.reviewService({serviceMethod:'Substituted Service',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).ready,false);
 assert.equal(profiles.reviewService({serviceMethod:'Posting (Nail and Mail)',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).ready,false);
+
+assert.equal(profiles.resolveWorkflow('Writ of Possession'),'possession');
+assert.equal(profiles.resolveWorkflow('Other'),null);
+assert.equal(profiles.reviewCase({paperType:'Other'}).ready,false);
+assert.equal(profiles.reviewService({serviceMethod:'Personal Service',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).approved,false);
+assert.equal(profiles.validateSelection(profiles.prepareSelection('US-CA','')).valid,false);
+assert.equal(profiles.validateSelection({...profiles.prepareSelection('US-CA','Sonoma'),status:'active'}).valid,false);
