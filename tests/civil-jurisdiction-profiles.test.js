@@ -32,3 +32,9 @@ assert.equal(profiles.reviewCase({paperType:'Other'}).ready,false);
 assert.equal(profiles.reviewService({serviceMethod:'Personal Service',servedDate:'2026-10-17',servedTime:'09:00',servedOnName:'Person',serverIdentity:'Deputy'}).approved,false);
 assert.equal(profiles.validateSelection(profiles.prepareSelection('US-CA','')).valid,false);
 assert.equal(profiles.validateSelection({...profiles.prepareSelection('US-CA','Sonoma'),status:'active'}).valid,false);
+
+assert.equal(profiles.reviewWrit({issuedDate:'2026-02-30',writExpirationDate:'2026-12-01',writDocument:'doc',courtOfOrigin:'court'},'2026-10-17').ready,false);
+assert.equal(profiles.reviewWrit({issuedDate:'2026-01-01',writExpirationDate:'2026-02-01',writDocument:'doc',courtOfOrigin:'court'},'2026-10-17').ready,false);
+assert.equal(profiles.reviewWrit({issuedDate:'2026-01-01',writExpirationDate:'2026-12-01',writDocument:'doc',courtOfOrigin:'court'},'2026-10-17').ready,true);
+assert.equal(profiles.reviewDisbursement({amount:200,availableTrustBalance:100,payee:'Payee',accountingReference:'A1',reconciledBy:'Reviewer'}).ready,false);
+assert.equal(profiles.reviewDisbursement({amount:50,availableTrustBalance:100,payee:'Payee',accountingReference:'A1',reconciledBy:'Reviewer'}).approved,false);
