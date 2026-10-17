@@ -118,14 +118,15 @@
   function reviewDisbursement(record){
     const input=record && typeof record==='object'?record:{};
     const errors=[];
-    const amount=Number(input.amount);
-    const available=Number(input.availableTrustBalance);
+    const amount=input.amount===null || input.amount===undefined || input.amount===''?NaN:Number(input.amount);
+    const available=input.availableTrustBalance===null || input.availableTrustBalance===undefined || input.availableTrustBalance===''?NaN:Number(input.availableTrustBalance);
     if(!Number.isFinite(amount)||amount<=0) errors.push('Disbursement amount must be positive');
     if(!Number.isFinite(available)||available<0) errors.push('Verified trust balance required');
     if(Number.isFinite(amount)&&Number.isFinite(available)&&amount>available) errors.push('Disbursement exceeds trust balance');
     if(!nonEmpty(input.payee)) errors.push('Payee required');
     if(!nonEmpty(input.accountingReference)) errors.push('Accounting reference required');
     if(!nonEmpty(input.reconciledBy)) errors.push('Reconciliation reviewer required');
+    if(!nonEmpty(input.approvalReference)) errors.push('Disbursement approval reference required');
     return {ready:errors.length===0,approved:false,requiresHumanReview:true,errors};
   }
   const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,resolveWorkflow,reviewCase,reviewIntake,reviewService,reviewWrit,reviewDisbursement});
