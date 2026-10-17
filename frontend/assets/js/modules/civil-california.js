@@ -462,7 +462,9 @@ window.CaliforniaCivil = (() => {
               "receivedDate:date",
               "address",
             ]
-              .map((s) => input(s))
+              .map((s) => s === "courtOfOrigin"
+                ? '<label class="form-row">Court of Origin <input name="courtOfOrigin" list="ca-courts-origin" placeholder="Start typing a California county or enter another court" autocomplete="off"><datalist id="ca-courts-origin">' + ["Alameda","Alpine","Amador","Butte","Calaveras","Colusa","Contra Costa","Del Norte","El Dorado","Fresno","Glenn","Humboldt","Imperial","Inyo","Kern","Kings","Lake","Lassen","Los Angeles","Madera","Marin","Mariposa","Mendocino","Merced","Modoc","Mono","Monterey","Napa","Nevada","Orange","Placer","Plumas","Riverside","Sacramento","San Benito","San Bernardino","San Diego","San Francisco","San Joaquin","San Luis Obispo","San Mateo","Santa Barbara","Santa Clara","Santa Cruz","Shasta","Sierra","Siskiyou","Solano","Sonoma","Stanislaus","Sutter","Tehama","Trinity","Tulare","Tuolumne","Ventura","Yolo","Yuba"].map(c=>'<option value="'+esc(c)+' County Superior Court"></option>').join('') + '</datalist><small style="color:var(--text-dim)">California courts are suggested. Courts from other jurisdictions may be entered manually.</small></label>'
+                : input(s))
               .join(""),
           async (data) => {
             const record = Object.fromEntries(data);
@@ -737,6 +739,23 @@ window.CaliforniaCivil = (() => {
                 : []),
               "reconcile",
             );
+        }
+        const nextActions = {
+          Intake: "intake_details", Ready: "assign", Assigned: "attempt",
+          Attempting: "attempt", Served: "prepare_return",
+          "Unable to Serve": "prepare_return", "Return Prepared": "review_return",
+          Reviewed: "record_return", "Returned to Court": "reconcile"
+        };
+        const recommended=nextActions[r.stage];
+        const nextPanel=panel.querySelector(".ca-next-step");
+        if(nextPanel && recommended && actions.includes(recommended)){
+          const launch=document.createElement("button");
+          launch.type="button";
+          launch.className="btn btn-primary";
+          launch.textContent="Go to next step: "+labels[recommended];
+          launch.dataset.nextAction=recommended;
+          nextPanel.append(launch);
+          launch.onclick=()=>panel.querySelector('[data-action="'+recommended+'"]')?.click();
         }
         panel.querySelector("#ca-actions").innerHTML = actions
           .map(
