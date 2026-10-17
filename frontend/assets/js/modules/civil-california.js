@@ -14,6 +14,20 @@ window.CaliforniaCivil = (() => {
     );
   let generation = 0;
   let preferredCaseView = "cards";
+  const deadlineStatus = (due,stage) => {
+    if (['Closed','Cancelled','Returned to Court'].includes(stage)) return 'clear';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(due||''))) return 'unknown';
+    const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const get=k=>parts.find(p=>p.type===k).value;
+    const today=Date.UTC(Number(get('year')),Number(get('month'))-1,Number(get('day')));
+    const [y,m,d]=due.split('-').map(Number);
+    const value=Date.UTC(y,m-1,d);
+    if(new Date(value).toISOString().slice(0,10)!==due)return 'unknown';
+    const days=Math.round((value-today)/86400000);
+    return days<0?'overdue':days<=7?'soon':'clear';
+  };
+  const deadlineLabel = status => ({overdue:'Overdue',soon:'Due within 7 days',clear:'On track',unknown:'Due date pending'})[status];
+
   const workspace = () => SuiteStore.remoteContext?.();
   async function api(operation, extra = {}, scope = workspace()) {
     if (!scope?.tenantId || !scope?.agencyId)
@@ -260,6 +274,14 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-view-controls [aria-pressed="true"]{background:rgba(48,125,222,.22);border-color:var(--ca-accent);color:var(--heading,var(--text))}
 .ca-classic .ca-case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:15px}
 .ca-classic .ca-case-card{padding:18px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(145deg,rgba(55,121,212,.10),rgba(24,162,153,.035) 75%),var(--ca-surface);box-shadow:0 5px 15px rgba(0,0,0,.06);min-width:0}
+.ca-classic .ca-case-card[data-deadline="overdue"]{border-left:5px solid #e45965}
+.ca-classic .ca-case-card[data-deadline="soon"]{border-left:5px solid #e7b340}
+.ca-classic .ca-case-card[data-deadline="clear"]{border-left:5px solid #21bd85}
+.ca-classic .ca-deadline{display:inline-flex;font-weight:700;font-size:12px;border-radius:99px;padding:3px 9px;border:1px solid currentColor}
+.ca-classic .ca-deadline[data-deadline="overdue"]{color:#f06b73;background:rgba(240,107,115,.10)}
+.ca-classic .ca-deadline[data-deadline="soon"]{color:#f1c15b;background:rgba(241,193,91,.10)}
+.ca-classic .ca-deadline[data-deadline="clear"]{color:#35ca9b;background:rgba(53,202,155,.10)}
+.ca-classic .ca-deadline[data-deadline="unknown"]{color:var(--text-dim)}
 .ca-classic .ca-case-card:hover{border-color:var(--ca-accent);box-shadow:0 7px 24px rgba(30,105,190,.15)}
 .ca-classic .ca-case-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .ca-classic .ca-case-card h4{font-size:16px;line-height:1.35;overflow-wrap:anywhere;margin:0 0 8px;color:var(--heading,var(--text))}
@@ -310,11 +332,11 @@ window.CaliforniaCivil = (() => {
             ),
           );
         const cardHtml = selected.map(({record:r}) =>
-          `<article class="ca-case-card"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
-          <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl>
+          `<article class="ca-case-card" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
+          <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl><span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span>
           <button type="button" class="btn btn-primary ca-card-open" data-case="${esc(r.id)}">Open case</button></article>`
         ).join("");
-        const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")}</td></tr>`).join("")}</tbody></table></div>`;
+        const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")} <span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span></td></tr>`).join("")}</tbody></table></div>`;
         root.querySelector("#ca-list").innerHTML =
           (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>') +
           `<div class="ca-list-footer"><span>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</span>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}</div>`;
