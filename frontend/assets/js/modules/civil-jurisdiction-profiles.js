@@ -36,8 +36,9 @@
     if(selection?.status==='active') errors.push('Jurisdiction activation requires a validated server-side approval process');
     return {valid:errors.length===0,errors};
   }
-  function canActivate(selection){
-    return !!selection && selection.profileId==='US-CA' && false; // Block until statutory and operational signoff.
+  function canActivate(_selection){
+    // Fail closed until a server-side, auditable activation endpoint is implemented.
+    return false;
   }
   // Intake readiness is intentionally conservative: missing evidence blocks completion.
   const REQUIRED_BY_WORKFLOW=Object.freeze({
@@ -74,9 +75,24 @@
         if(!nonEmpty(input[field])) errors.push('Missing posting and mailing evidence: '+field);
       }
     }
-    return {ready:errors.length===0,errors,requiresHumanReview:true};
+    return {ready:errors.length===0,errors,requiresHumanReview:true,approved:false};
   }
-  const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,reviewIntake,reviewService});
+  // Immutable workflow routing, independent of legacy paper-type labels.
+  const WORKFLOW_BY_PAPER_TYPE=Object.freeze({
+    'Summons & Complaint':'summons',
+    'Wage Garnishment / Earnings Withholding':'earnings-withholding',
+    'Writ of Execution':'writ-execution',
+    'Writ of Possession':'possession'
+  });
+  function resolveWorkflow(paperType){
+    return WORKFLOW_BY_PAPER_TYPE[String(paperType||'')] || null;
+  }
+  function reviewCase(paper){
+    const workflowId=resolveWorkflow(paper?.paperType);
+    if(!workflowId) return {ready:false,approved:false,requiresHumanReview:true,errors:['Paper type requires California workflow mapping and supervisory review']};
+    return reviewIntake(workflowId,paper);
+  }
+  const api=Object.freeze({get,prepareSelection,validateSelection,canActivate,resolveWorkflow,reviewCase,reviewIntake,reviewService});
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   else root.SonoMarziCivilProfiles=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
