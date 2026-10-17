@@ -458,8 +458,20 @@ function renderUnifiedCivilDashboard(){
     ['civil-admin','Configuration','Courts, paper types, jurisdiction, and audits','gear','var(--gold)']
   ].filter(card=>items.some(item=>item.id===card[0]));
   const escDash=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const papers=STATE.civil?.papers||[];
+  const today=fmt(new Date());
+  const active=papers.filter(p=>!['Closed','Cancelled','Returned to Court'].includes(p.stage));
+  const overdue=active.filter(p=>p.returnByDate&&daysBetween(today,p.returnByDate)<0);
+  const soon=active.filter(p=>p.returnByDate&&daysBetween(today,p.returnByDate)>=0&&daysBetween(today,p.returnByDate)<=7);
+  const closed=papers.filter(p=>['Closed','Returned to Court'].includes(p.stage));
+  const metrics=[['Active Cases',active.length,'var(--blue)'],['Overdue',overdue.length,'var(--red)'],['Due in 7 Days',soon.length,'var(--gold)'],['Completed',closed.length,'var(--green)']];
+  const showLocalCounts=SuiteStore.mode()!=='shared';
   root.innerHTML=`<style>
     .civil-home{padding:22px 10px;max-width:1480px;margin:auto}
+    .civil-home-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px}
+    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:12px;padding:17px;background:var(--panel-bg,var(--bg-card,#172335))}
+    .civil-home-metric strong{display:block;font-size:26px;color:var(--metric-color);margin:7px 0}
+    .civil-home-metric span{font-size:12px;color:var(--text-dim)}
     .civil-home h2{margin:0 0 7px;color:var(--heading)}
     .civil-home-sub{margin:0 0 26px;color:var(--text-dim)}
     .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:16px}
@@ -469,7 +481,7 @@ function renderUnifiedCivilDashboard(){
     .civil-home-icon{width:43px;height:43px;border-radius:12px;background:color-mix(in srgb,var(--tile-color) 17%,transparent);color:var(--tile-color);display:grid;place-items:center}
     .civil-home-tile strong{font-size:17px}
     .civil-home-tile small{font-size:13px;color:var(--text-dim);line-height:1.5}
-  </style><section class="civil-home"><h2>Civil Process</h2><p class="civil-home-sub">One workspace for case management, service, court returns and oversight. Jurisdiction-specific requirements apply automatically.</p><div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small></button>`).join('')}</div></section>`;
+  </style><section class="civil-home"><h2>Civil Process</h2><p class="civil-home-sub">One workspace for case management, service, court returns and oversight. Jurisdiction-specific requirements apply automatically.</p>${showLocalCounts?'<div class="civil-home-metrics">'+metrics.map(([label,count,color])=>'<div class="civil-home-metric" style="--metric-color:'+color+'"><span>'+label+'</span><strong>'+count+'</strong></div>').join('')+'</div>':''}<div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small></button>`).join('')}</div></section>`;
   root.querySelectorAll('[data-civil-go]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.civilGo)));
 }
 
