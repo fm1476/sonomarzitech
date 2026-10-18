@@ -363,6 +363,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         "Court order",
         "Proof of service",
         "Court return",
+        "Unsigned return draft",
         "Fee authority",
         "Other",
       ].includes(payload.kind),

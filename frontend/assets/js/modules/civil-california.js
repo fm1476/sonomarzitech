@@ -1293,9 +1293,28 @@ window.CaliforniaCivil = (() => {
                       link.download = result.draft.filename;
                       link.click();
                       setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      status(
-                        "Unsigned draft downloaded. Complete remaining items, review, sign and upload the finished court form.",
-                      );
+                      // Store the unsigned working copy as a draft only. It must never
+                      // satisfy the signed proof/return prerequisite for court review.
+                      let archiveMessage="";
+                      try {
+                        const file=new File([bytes],result.draft.filename,{type:"application/pdf"});
+                        const uploaded=await AWS_ATTACHMENTS.upload(file,{collection:"civil.papers",itemId:caseId});
+                        const saved=await api("command",{
+                          id:caseId,expectedVersion:result.version,command:"attach_document",
+                          payload:{
+                            name:result.draft.filename,key:uploaded.storageKey,
+                            kind:"Unsigned return draft",
+                            note:"Archived unsigned "+result.draft.formName+" working copy; SHA-256 "+result.draft.sha256
+                          }
+                        },scope);
+                        const index=rows.findIndex(item=>item.record.id===caseId);
+                        if(index>=0)rows[index]=saved;
+                        draw();await detail(caseId);
+                        archiveMessage=" An unsigned working copy was saved in Documents.";
+                      } catch(saveError) {
+                        archiveMessage=" The downloaded draft was not saved to the case: "+saveError.message+". Upload it manually if needed.";
+                      }
+                      status("Unsigned draft downloaded."+archiveMessage+" Review, sign, and attach the completed court form before preparing the return.");
                     }
                   },
                 );
@@ -1343,6 +1362,7 @@ window.CaliforniaCivil = (() => {
               "Court order",
               "Proof of service",
               "Court return",
+              "Unsigned return draft",
               "Fee authority",
               "Other",
             ]) +
