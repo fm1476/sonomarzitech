@@ -55,10 +55,21 @@ jobs:
               pdf=fitz.open(source)
               pdf.save(target,garbage=4,deflate=True,encryption=fitz.PDF_ENCRYPT_NONE)
               pdf.close()
+          import hashlib,json,pathlib
+          manifestFile=pathlib.Path("lambdas/api/templates/civil/manifest.json")
+          manifest=json.loads(manifestFile.read_text())
+          for code in ("pos020","pos030","pos040"):
+              original=pathlib.Path("artifacts/official-pos/"+code+".pdf").read_bytes()
+              if hashlib.sha256(original).hexdigest()!=manifest[code]["sourceSha256"]:
+                  raise SystemExit("Court source PDF changed: "+code)
+              normalized=pathlib.Path("lambdas/api/templates/civil/"+code+".pdf").read_bytes()
+              manifest[code]["templateSha256"]=hashlib.sha256(normalized).hexdigest()
+              print(code,"normalized SHA:",manifest[code]["templateSha256"])
+          manifestFile.write_text(json.dumps(manifest,indent=2)+"\\n")
           PY
           git fetch origin "$TARGET_BRANCH"
           git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
-          git add lambdas/api/templates/civil/pos020.pdf lambdas/api/templates/civil/pos030.pdf lambdas/api/templates/civil/pos040.pdf
+          git add lambdas/api/templates/civil/pos020.pdf lambdas/api/templates/civil/pos030.pdf lambdas/api/templates/civil/pos040.pdf lambdas/api/templates/civil/manifest.json
           if ! git diff --cached --quiet; then
             git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Import official California POS-020/030/040 PDF templates"
             git push origin "HEAD:refs/heads/$TARGET_BRANCH"
