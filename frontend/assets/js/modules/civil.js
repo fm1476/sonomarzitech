@@ -1484,10 +1484,44 @@ function renderPaperDetailTabContent(p){
     }
 
   } else if(PAPER_DETAIL_TAB==='history'){
-    const rows = p.fieldHistory.slice().reverse().map(h=>`
-      <tr><td class="mono" style="font-size:12px;">${h.date}</td><td>${escapeHtml(h.field)}</td>
-      <td style="font-size:12px;">${escapeHtml(JSON.stringify(h.before))}</td><td style="font-size:12px;">${escapeHtml(JSON.stringify(h.after))}</td><td>${escapeHtml(h.changedBy)}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No tracked field changes yet.</td></tr>`;
-    body.innerHTML = `<table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const changes=(p.fieldHistory||[]).slice().reverse();
+    const printable=value=>{
+      if(value==null||value==='')return 'Not recorded';
+      if(typeof value==='string')return value;
+      try{return JSON.stringify(value,null,2);}catch{return String(value);}
+    };
+    body.innerHTML=`
+      <style>
+        #modalBox.civil-case-workspace .civil-history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 19px}
+        #modalBox.civil-case-workspace .civil-history-head h4{font-size:17px;margin:0}
+        #modalBox.civil-case-workspace .civil-history-count{font-size:12px;color:var(--text-dim)}
+        #modalBox.civil-case-workspace .civil-history-list{display:grid;gap:12px}
+        #modalBox.civil-case-workspace .civil-history-entry{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface,#152235);min-width:0}
+        #modalBox.civil-case-workspace .civil-history-entry summary{display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;padding:17px 19px;list-style:none}
+        #modalBox.civil-case-workspace .civil-history-entry summary::-webkit-details-marker{display:none}
+        #modalBox.civil-case-workspace .civil-history-entry summary:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+        #modalBox.civil-case-workspace .civil-history-entry summary::after{content:'+';font-size:20px;color:var(--blue);flex:none}
+        #modalBox.civil-case-workspace .civil-history-entry[open] summary::after{content:'−'}
+        #modalBox.civil-case-workspace .civil-history-title{display:block;font-size:14px;font-weight:750;overflow-wrap:anywhere}
+        #modalBox.civil-case-workspace .civil-history-meta{display:block;margin-top:5px;font-size:12px;color:var(--text-dim)}
+        #modalBox.civil-case-workspace .civil-history-diff{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 19px 18px}
+        #modalBox.civil-case-workspace .civil-history-value{border:1px solid var(--border);border-radius:10px;padding:12px;min-width:0}
+        #modalBox.civil-case-workspace .civil-history-value small{display:block;text-transform:uppercase;font-size:10px;font-weight:750;letter-spacing:.05em;color:var(--text-dim);margin-bottom:7px}
+        #modalBox.civil-case-workspace .civil-history-value pre{font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--text)}
+        #modalBox.civil-case-workspace .civil-history-empty{text-align:center;color:var(--text-dim);padding:42px 20px;border:1px dashed var(--border);border-radius:14px}
+        @media(max-width:600px){#modalBox.civil-case-workspace .civil-history-diff{grid-template-columns:1fr}}
+      </style>
+      <div class="civil-history-head"><h4>Change history</h4><span class="civil-history-count">${changes.length} tracked ${changes.length===1?'change':'changes'}</span></div>
+      ${changes.length?'<div class="civil-history-list">'+changes.map(h=>`
+        <details class="civil-history-entry">
+          <summary><span><span class="civil-history-title">${escapeHtml(h.field||'Record updated')}</span><span class="civil-history-meta">${escapeHtml(h.date||'Date unknown')} · ${escapeHtml(h.changedBy||'Unknown staff member')}</span></span></summary>
+          <div class="civil-history-diff">
+            <div class="civil-history-value"><small>Previous value</small><pre>${escapeHtml(printable(h.before))}</pre></div>
+            <div class="civil-history-value"><small>Updated value</small><pre>${escapeHtml(printable(h.after))}</pre></div>
+          </div>
+        </details>`).join('')+'</div>':'<div class="civil-history-empty">No recorded field changes for this case.</div>'}
+    `;
+
   }
 }
 
