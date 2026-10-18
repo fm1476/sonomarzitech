@@ -65,7 +65,7 @@ jobs:
               normalized=pathlib.Path("lambdas/api/templates/civil/"+code+".pdf").read_bytes()
               manifest[code]["templateSha256"]=hashlib.sha256(normalized).hexdigest()
               print(code,"normalized SHA:",manifest[code]["templateSha256"])
-          manifestFile.write_text(json.dumps(manifest,indent=2)+"\\n")
+          manifestFile.write_text(json.dumps(manifest,indent=2))
           PY
           git fetch origin "$TARGET_BRANCH"
           git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
