@@ -359,6 +359,18 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
 .ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
 @media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-return-review{border:1px solid var(--ca-border);border-radius:14px;padding:16px;background:linear-gradient(125deg,rgba(50,119,215,.11),transparent);margin-bottom:18px}
+.ca-classic .ca-return-review-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ca-classic .ca-return-review-top strong{font-size:15px}.ca-classic .ca-return-review-top span{font-size:11px;color:var(--text-dim)}
+.ca-classic .ca-return-review p,.ca-classic .ca-return-foot{font-size:12px;line-height:1.5;color:var(--text-dim)}
+.ca-classic .ca-return-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ca-classic .ca-return-facts>div{padding:10px 12px;border-radius:9px;background:var(--ca-surface);border:1px solid var(--ca-border);min-width:0}
+.ca-classic .ca-return-facts small{display:block;font-size:10px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px}
+.ca-classic .ca-return-facts strong{font-size:12px;overflow-wrap:anywhere}
+.ca-classic .ca-return-check{margin:14px 0;padding:10px 12px;font-size:12px;font-weight:650;border-radius:9px}
+.ca-classic .ca-return-good{color:var(--green,#29b87e);background:rgba(35,166,115,.1)}
+.ca-classic .ca-return-warn{color:var(--gold,#eba94c);background:rgba(214,151,38,.1)}
+@media(max-width:520px){.ca-classic .ca-return-facts{grid-template-columns:1fr}}
 .ca-classic .ca-forms-library{margin:16px 0 20px}
 .ca-classic .ca-forms-library[hidden]{display:none!important}
 .ca-classic .ca-forms-head h3{font-size:17px;margin:0 0 5px}
@@ -1143,6 +1155,28 @@ window.CaliforniaCivil = (() => {
                                           "Remittance",
                                         ]
                                 : undefined;
+                const returnActions=["prepare_return","review_return","record_return"];
+                const returnContext=returnActions.includes(action) ? (()=>{
+                  const outcomes=[c.service,c.nonService].filter(Boolean);
+                  const outcome=outcomes[0]||{};
+                  const hasDocument=(c.documents||[]).some(d=>["Proof of service","Court return"].includes(d.kind));
+                  const expected=context.workflows[c.workflowId]?.returns||[];
+                  const facts=[
+                    ["Case",r.caseNumber],["Court",r.courtOfOrigin],
+                    ["Plaintiff",r.plaintiff],["Defendant",r.defendant],
+                    ["Status",r.stage],["Assigned server",(context.people||[]).find(p=>p.person_id===r.assignedServerId)?.name||"Confirm assigned server"],
+                    ["Service date",outcome.date||"Not recorded"],
+                    ["Service address",outcome.address||(r.serviceAddresses||[])[0]?.address||"Confirm address"],
+                    ["Service method",outcome.method||"Review service record"],
+                    ["Return deadline",r.returnByDate||"Not recorded"]
+                  ];
+                  const safe=val=>esc(String(val??""));
+                  return '<div class="ca-return-review"><div class="ca-return-review-top"><strong>Return preparation checklist</strong><span>Case facts · review required</span></div>'+
+                    '<p>These facts come from the case record. Verify them against the actual service evidence and court instructions; this does not create or file a court form.</p>'+
+                    '<div class="ca-return-facts">'+facts.map(([label,value])=>'<div><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong></div>').join('')+'</div>'+
+                    '<div class="ca-return-check '+(hasDocument?'ca-return-good':'ca-return-warn')+'">'+(hasDocument?'✓ Supporting proof/return uploaded':'! Upload the signed proof of service or court return in Documents before preparing the packet')+'</div>'+
+                    '<div class="ca-return-foot">Expected return/template: '+safe(expected.join(" / ")||"Confirm with court")+'. The assigned reviewer must verify form version, service details and required signatures.</div></div>';
+                })() : "";
                 const actionFields = window.CaliforniaCivilView.fieldsForAction(
                   action,
                   r,
@@ -1150,11 +1184,13 @@ window.CaliforniaCivil = (() => {
                 );
                 form(
                   labels[action],
-                  actionFields
+                  returnContext + actionFields
                     .map((spec) => {
                       const key = spec.split(":")[0];
                       let value =
-                        key === "returnByDate"
+                        key === "formName" && action === "prepare_return" && (context.workflows[c.workflowId]?.returns||[]).length===1
+                          ? context.workflows[c.workflowId].returns[0]
+                        : key === "returnByDate"
                           ? r.returnByDate
                           : c.intakeDetails[key] || "";
                       if (key === "reviewedForms")
