@@ -1322,6 +1322,16 @@ function renderPaperDetailTabContent(p){
       catch(error){ toast(error.message||'Document could not be opened.',true); }
     }));
 
+    const documentReason = title => new Promise(resolve=>{
+      const layer=document.createElement('div');
+      layer.style.cssText='position:fixed;inset:0;background:rgba(3,10,22,.82);z-index:11000;display:grid;place-items:center;padding:18px;backdrop-filter:blur(4px)';
+      layer.innerHTML='<form style="background:var(--surface,#172335);color:var(--text);border:1px solid var(--border);border-radius:16px;width:min(470px,100%);padding:24px;box-shadow:0 25px 65px rgba(0,0,0,.45)"><h3 style="margin:0 0 14px"></h3><label class="form-row">Reason <textarea name="reason" required rows="3" maxlength="3000" placeholder="Explain this document change" style="width:100%"></textarea></label><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px"><button type="button" class="btn btn-outline" data-dismiss>Cancel</button><button type="submit" class="btn btn-primary">Continue</button></div></form>';
+      layer.querySelector('h3').textContent=title;
+      const done=value=>{layer.remove();resolve(value);};
+      layer.querySelector('[data-dismiss]').onclick=()=>done(null);
+      layer.querySelector('form').onsubmit=e=>{e.preventDefault();done(layer.querySelector('textarea').value.trim()||null);};
+      document.body.append(layer);layer.querySelector('textarea').focus();
+    });
     document.querySelectorAll('[data-replace-civil-doc]').forEach(b=>b.addEventListener('click',()=>{
       const doc=(p.attachedDocuments||[]).find(d=>d.id===b.dataset.replaceCivilDoc);
       if(!doc)return;
@@ -1330,7 +1340,7 @@ function renderPaperDetailTabContent(p){
       fileInput.onchange=async()=>{
         const file=fileInput.files?.[0];
         fileInput.remove();if(!file)return;
-        const reason=prompt('Reason for replacing this document (required):');
+        const reason=await documentReason('Replace document');
         if(!reason?.trim())return;
         b.disabled=true;
         try{
@@ -1348,10 +1358,10 @@ function renderPaperDetailTabContent(p){
       fileInput.addEventListener('cancel',()=>fileInput.remove(),{once:true});
     }));
 
-    document.querySelectorAll('[data-remove-civil-doc]').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('[data-remove-civil-doc]').forEach(b=>b.addEventListener('click',async()=>{
       const doc=(p.attachedDocuments||[]).find(d=>d.id===b.dataset.removeCivilDoc);
       if(!doc)return;
-      const reason=prompt('Reason for removing this document from the active case (required):');
+      const reason=await documentReason('Remove document from active case');
       if(!reason?.trim())return;
       doc.archivedAt=new Date().toISOString();doc.archiveReason=reason.trim();
       recordFieldChangeCivil(p,'Attached Document',doc.filename||doc.id,null);
