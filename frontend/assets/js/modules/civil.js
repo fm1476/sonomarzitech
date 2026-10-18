@@ -2485,10 +2485,25 @@ async function openIntakeModal(existingId){
     }));
   }
 
-  document.getElementById('modalBox').className = 'modal modal-wide';
+  document.getElementById('modalBox').className = 'modal modal-wide civil-intake-workspace';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>${editing?'Edit':'Intake New'} Civil Paper</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <style>
+      #modalBox.civil-intake-workspace{width:min(920px,calc(100vw - 34px));max-width:920px;max-height:92dvh;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--panel-bg,var(--bg-card,#162235))}
+      #modalBox.civil-intake-workspace .modal-head{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:20px 24px;background:linear-gradient(115deg,rgba(47,121,223,.16),rgba(30,167,150,.06))}
+      #modalBox.civil-intake-workspace .modal-body{padding:20px 24px;overflow-y:auto;flex:1;min-height:0}
+      #modalBox.civil-intake-workspace .modal-foot{padding:14px 24px;display:flex;gap:10px;justify-content:flex-end}
+      #modalBox.civil-intake-workspace .civil-form-section{margin:14px 0 18px;color:var(--blue);font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:9px}
+      #modalBox.civil-intake-workspace .form-2col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+      #modalBox.civil-intake-workspace .form-row{min-width:0;margin-bottom:15px}
+      #modalBox.civil-intake-workspace input:not([type=radio]),#modalBox.civil-intake-workspace select,#modalBox.civil-intake-workspace textarea{box-sizing:border-box;min-height:43px;border-radius:10px}
+      #modalBox.civil-intake-workspace .btn{border-radius:10px;min-height:40px}
+      #modalBox.civil-intake-workspace .civil-intake-sub{margin:0 0 14px;color:var(--text-dim);font-size:13px;line-height:1.5}
+      #modalBox.civil-intake-workspace .civil-intake-guidance{font-size:12px;line-height:1.5;color:var(--text-dim);background:rgba(54,125,219,.07);border:1px solid var(--border);border-radius:10px;padding:12px}
+      @media(max-width:650px){#modalBox.civil-intake-workspace{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}#modalBox.civil-intake-workspace .form-2col{grid-template-columns:1fr}#modalBox.civil-intake-workspace .modal-body{padding:16px}}
+    </style>
+    <div class="modal-head"><div><h3>${editing?'Edit':'Intake New'} Civil Paper</h3><p class="civil-intake-sub">Capture court details and parties, then complete service information.</p></div><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
+      <div class="civil-form-section">Court &amp; process</div>
       <div class="form-2col">
         <div class="form-row"><label>${fieldLabel('civil.caseNumber')}</label><input type="text" id="fCpCase" value="${escapeHtml(p.caseNumber)}" placeholder="e.g. CV2026-00123"></div>
         <div class="form-row"><label>${fieldLabel('civil.paperType')}</label><select id="fCpType">${STATE.civil.refData.paperTypes.map(t=>`<option ${p.paperType===t?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -2497,6 +2512,7 @@ async function openIntakeModal(existingId){
         <div class="form-row"><label>${fieldLabel('civil.courtOfOrigin')}</label><select id="fCpCourt">${STATE.civil.refData.courtsOfOrigin.map(c=>`<option ${p.courtOfOrigin===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="form-row"><label>Attorney of Record (or "Pro Se")</label><input type="text" id="fCpAttorney" value="${escapeHtml(p.attorneyOfRecord||'')}"></div>
       </div>
+      <div class="civil-form-section">Parties</div>
       <div class="form-2col">
         <div class="form-row"><label>${fieldLabel('civil.plaintiff')} / Petitioner</label><input type="text" id="fCpPlaintiff" value="${escapeHtml(p.plaintiff)}"></div>
         <div class="form-row"><label>${fieldLabel('civil.defendant')} / Respondent</label><input type="text" id="fCpDefendant" value="${escapeHtml(p.defendant)}"></div>
@@ -2519,6 +2535,7 @@ async function openIntakeModal(existingId){
         <button type="button" class="btn btn-sm btn-outline" id="btnCpAddWitness" style="margin-top:2px;">${ICONS.plus} Add a witness</button>
         <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Common for civil subpoenas and cases naming more than one party on the same side.</div>
       </div>
+      <div class="civil-form-section">Service &amp; assignment</div>
       <div class="form-row">
         <label>Service Address(es)</label>
         <div id="cpAddressList"></div>
@@ -2531,7 +2548,7 @@ async function openIntakeModal(existingId){
       </div>
       <div class="form-row"><label>Assign To (optional)</label><select id="fCpAssign"><option value="">Leave unassigned</option>${STATE.personnel.map(person=>`<option value="${person.id}" ${p.assignedServerId===person.id?'selected':''}>${escapeHtml(person.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Notes</label><textarea id="fCpNotes" rows="2">${escapeHtml(p.notes||'')}</textarea></div>
-      <div style="font-size:11px;color:var(--text-dim);">Per Arizona practice, all requests for service must be accompanied by signed instructions from the attorney of record or self-represented party \u2014 keep those on file with the physical paper.</div>
+      <div class="civil-intake-guidance">Per Arizona practice, all requests for service must be accompanied by signed instructions from the attorney of record or self-represented party \u2014 keep those on file with the physical paper.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save':'Intake Paper'}</button></div>
   `;
