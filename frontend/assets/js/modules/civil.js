@@ -852,6 +852,19 @@ function renderPaperDetailModal(){
       #modalBox.civil-case-workspace .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
       #modalBox.civil-case-workspace .modal-head h3{font-size:22px;letter-spacing:-.3px;overflow-wrap:anywhere}
       #modalBox.civil-case-workspace .civil-workspace-head-right{display:flex;align-items:center;gap:15px}
+      #modalBox.civil-case-workspace .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:12px;margin:12px 0 20px!important}
+      #modalBox.civil-case-workspace .detail-grid>div{min-width:0;background:var(--surface,#152235);border:1px solid var(--border);padding:16px;border-radius:12px}
+      #modalBox.civil-case-workspace .detail-grid .k{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;font-weight:700}
+      #modalBox.civil-case-workspace .detail-grid .v{font-size:15px;font-weight:650;overflow-wrap:anywhere}
+      #modalBox.civil-case-workspace .modal-body>.panel{border-radius:13px;overflow:hidden}
+      #modalBox.civil-case-workspace .modal-body .panel-head{padding:14px 18px}
+      #modalBox.civil-case-workspace .modal-body .panel-head h2{font-size:16px}
+      #modalBox.civil-case-workspace .modal-body .btn{border-radius:9px;min-height:39px}
+      #modalBox.civil-case-workspace .civil-workspace-tabs [aria-selected="true"]{background:rgba(44,121,218,.18);color:var(--text);border-color:var(--blue)!important}
+      #modalBox.civil-case-workspace .modal-body table{font-size:13px}
+      #modalBox.civil-case-workspace .modal-body table th{font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+      @media(max-width:700px){#modalBox.civil-case-workspace .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#modalBox.civil-case-workspace .detail-grid>div{padding:11px}#modalBox.civil-case-workspace .civil-workspace-tabs{padding:10px 12px}}
+
 \n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
     <div class="modal-head">
       <div>
