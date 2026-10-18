@@ -506,6 +506,31 @@ ${SonoMarziCivilRecordUI.styles}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
 .ca-classic .ca-shared-board-controls{margin:16px 0}.ca-classic .ca-board-mode{display:flex;justify-content:flex-end;margin:12px 0}.ca-classic .ca-view-controls[hidden]{display:none!important}.ca-classic.ca-workspace-open .ca-shared-board-controls{display:none!important}.ca-classic.ca-workspace-open .ca-board-mode{display:none!important}
 .ca-classic .civil-board{gap:13px;align-items:stretch}.ca-classic .civil-card{cursor:pointer;min-height:110px;display:block;margin-bottom:9px}.ca-classic .civil-card:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}.ca-classic .civil-card-meta{gap:6px;flex-wrap:wrap}.ca-classic .ca-service-map{border:1px solid var(--ca-border);border-radius:14px;background:var(--ca-surface);padding:16px;margin:15px 0}.ca-classic .ca-service-map-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.ca-classic .ca-service-map-head h4{margin:0}.ca-classic .ca-service-map-location{font-size:12px;color:var(--text-dim);margin:10px 0}.ca-classic .ca-service-map iframe{display:block;border:0;border-radius:10px;width:100%;height:250px}.ca-classic .ca-service-map p{font-size:11px;color:var(--text-dim);margin-bottom:0}.ca-classic .ca-safety-alert{border:1px solid var(--red,#e56770);border-radius:12px;padding:14px 16px;background:rgba(230,60,65,.09);margin-bottom:14px}.ca-classic .ca-safety-alert strong{color:var(--red,#e56770)}.ca-classic .ca-safety-manager{border:1px solid var(--ca-border);border-radius:14px;padding:16px;margin:14px 0}.ca-classic .ca-safety-manager-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}.ca-classic .ca-safety-manager h4{margin:0}.ca-classic .ca-safety-manager p,.ca-classic .ca-safety-manager small{font-size:12px;color:var(--text-dim)}.ca-classic .ca-safety-entry{padding:10px 0;border-top:1px solid var(--ca-border)}.ca-classic .ca-safety-entry strong{color:var(--red,#e56770)}.ca-classic .ca-safety-entry .btn{display:block;margin-top:8px}.ca-classic .ca-safety-alert p{font-size:12px;margin:6px 0 0}
+
+/* Civil readability scale: shared California workspaces, including Forms. */
+.ca-classic .ca-section-dialog-body{font-size:15px;line-height:1.55}
+.ca-classic .ca-section-dialog-body p,.ca-classic .ca-section-dialog-body li,
+.ca-classic .ca-section-dialog-body td,.ca-classic .ca-section-dialog-body dd,
+.ca-classic .ca-section-dialog-body .muted{font-size:max(15px,1em);line-height:1.6}
+.ca-classic .ca-section-dialog-body h3,.ca-classic .ca-forms-head h3{font-size:20px;line-height:1.35}
+.ca-classic .ca-section-dialog-body h4,.ca-classic .ca-pos-heading h4,.ca-classic .ca-pos-title h4{font-size:18px;line-height:1.4}
+.ca-classic .ca-forms-head p,.ca-classic .ca-form-disclaimer,.ca-classic .ca-form-notice,
+.ca-classic .ca-pos-catalog p,.ca-classic .ca-form-resource small,
+.ca-classic .ca-draft-feature-copy p,.ca-classic .ca-pos-preflight p,
+.ca-classic .ca-proof-progress p,.ca-classic .ca-proof-progress strong,
+.ca-classic .ca-section-content .ca-field-help{font-size:15px;line-height:1.6}
+.ca-classic .ca-pos-preflight strong,.ca-classic .ca-draft-feature-copy strong{font-size:16px;line-height:1.5}
+.ca-classic .ca-form-resource strong{font-size:16px;line-height:1.45}
+.ca-classic .ca-form-code,.ca-classic .ca-pos-suggested{font-size:13px}
+.ca-classic .ca-section-dialog .btn,.ca-classic .ca-form-resource .btn{font-size:15px;line-height:1.4;min-height:43px}
+.ca-classic .ca-section-dialog-body summary,.ca-classic .ca-section-dialog-body label,
+.ca-classic .ca-section-dialog-body input,.ca-classic .ca-section-dialog-body select,
+.ca-classic .ca-section-dialog-body textarea{font-size:15px;line-height:1.5}
+.ca-classic .ca-section-dialog-head p,.ca-classic .ca-section-dialog-foot span{font-size:13px}
+.ca-classic .ca-form-resource-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,275px),1fr))}
+.ca-classic .ca-form-resource{min-width:0}
+@media(max-width:680px){.ca-classic .ca-section-dialog-body h3{font-size:19px}.ca-classic .ca-form-resource-grid{grid-template-columns:minmax(0,1fr)}}
+
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
