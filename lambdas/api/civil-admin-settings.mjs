@@ -1,4 +1,4 @@
-import {response,resolveWorkspaceMembership} from './core.mjs';
+import {response,resolveWorkspaceMembership,loadRoleAbilityMap,roleHasAbility} from './core.mjs';
 import {appendAuditEvent} from './audit.mjs';
 import {validateCivilAdminSetting} from './lib/civil-admin-validation.mjs';
 
@@ -10,7 +10,10 @@ export async function civilAdminSettingsApi(client,auth,body){
   const access=await resolveWorkspaceMembership(client,auth,tenantId,agencyId);
   if(access.error)return access.error;
   if(!access.enabledModules.includes('civil'))return response(403,{success:false,error:'Civil Process is not licensed.'});
-  if(!access.admin)return response(403,{success:false,error:'Civil administration access is required.'});
+  const abilityMap=access.admin?new Map():await loadRoleAbilityMap(client,tenantId,agencyId,access.roleIds);
+  const canConfigure=access.admin||roleHasAbility(abilityMap,access.roleIds,'civil_admin_categories');
+  const canAudit=access.admin||roleHasAbility(abilityMap,access.roleIds,'civil_admin_audit');
+  if(!canConfigure && !(body.operation==='load'&&canAudit))return response(403,{success:false,error:'Civil administration access is required.'});
   if(JSON.stringify(body).length>45000)return response(413,{success:false,error:'Configuration is too large.'});
   const saving=body.operation==='save';
   if(!['load','save'].includes(body.operation))return response(400,{success:false,error:'Unknown configuration operation.'});
