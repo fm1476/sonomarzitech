@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
+const src=await readFile(new URL('../frontend/assets/js/modules/civil-case-ui.js',import.meta.url),'utf8');
+const context={window:{}};vm.createContext(context);vm.runInContext(src,context);
+const ui=context.window.SonoMarziCivilCaseUI;
+const header=ui.header({caseNumber:'TEST-1',paperType:'Summons',court:'Demo Court',stage:'Assigned',safety:true});
+assert.match(header,/TEST-1/);assert.match(header,/SAFETY FLAG/);assert.match(header,/Assigned/);
+assert.doesNotMatch(ui.header({caseNumber:'<script>',paperType:'Test',court:'Demo',stage:'Open'}),/<script>/);
+const facts=ui.facts([{label:'Defendant',value:'Test & Example'},{label:'Return by',value:'2026-10-25'}]);
+assert.match(facts,/Test &amp; Example/);assert.match(facts,/Return by/);
+const general=await readFile(new URL('../frontend/assets/js/modules/civil.js',import.meta.url),'utf8');
+const california=await readFile(new URL('../frontend/assets/js/modules/civil-california-view.js',import.meta.url),'utf8');
+assert.match(general,/SonoMarziCivilCaseUI\.facts/);
+assert.match(california,/SonoMarziCivilCaseUI\.facts/);
+assert.match(california,/SonoMarziCivilCaseUI\.header/);
+console.log('Shared Civil case record components and escaped facts passed.');
