@@ -528,7 +528,9 @@ window.CaliforniaCivil = (() => {
           });
           trigger.onclick=()=>{const open=trigger.getAttribute("aria-expanded")==="true";trigger.setAttribute("aria-expanded",String(!open));list.hidden=open;if(!open)list.querySelector("button")?.focus();};
           list.onkeydown=e=>{if(e.key==="Escape"){list.hidden=true;trigger.setAttribute("aria-expanded","false");trigger.focus();}if(["ArrowDown","ArrowUp"].includes(e.key)){e.preventDefault();const all=[...list.querySelectorAll("button")];const n=all.indexOf(document.activeElement);all[(n+(e.key==="ArrowDown"?1:all.length-1))%all.length]?.focus();}};
-          kindSelect.hidden=true;
+          kindSelect.style.setProperty("display","none","important");
+          kindSelect.setAttribute("aria-hidden","true");
+          kindSelect.tabIndex=-1;
           kindSelect.after(host);
         }
         const fileInput=target.querySelector('input[type="file"]');
