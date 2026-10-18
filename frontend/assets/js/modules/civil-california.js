@@ -1250,7 +1250,9 @@ ${SonoMarziCivilRecordUI.styles}
           });
           tabs.append(button);
         });
-        panel.querySelector("#ca-actions")?.after(tabs);
+        // Place the navigation immediately below the case heading, ahead of progress and summary.
+        // Keep workflow action buttons in their existing guarded action region.
+        panel.querySelector(".ca-workspace-heading")?.after(tabs);
         activateGroup(activeCaseSection);
         const closed = ["Closed", "Cancelled"].includes(r.stage),
           actions = [];
