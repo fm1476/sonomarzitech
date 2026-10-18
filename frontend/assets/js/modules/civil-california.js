@@ -343,6 +343,13 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
 .ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
 .ca-classic #ca-detail .ca-case-content{display:block}
+.ca-classic .ca-action-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ca-classic .ca-action-row>.btn,.ca-classic .ca-action-row>.ca-action-menu>summary{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:42px;min-height:42px;padding:0 16px;margin:0;border-radius:10px;font-size:13px;line-height:1.2;font-weight:650;white-space:nowrap}
+.ca-classic .ca-action-row>.ca-action-menu{border:0;padding:0;margin:0;background:transparent;box-shadow:none}
+.ca-classic .ca-action-row>.ca-action-menu>summary{border:1px solid var(--ca-border);background:var(--ca-surface);color:var(--text);cursor:pointer}
+.ca-classic .ca-case-tabs{align-items:stretch;gap:8px}
+.ca-classic .ca-case-tabs>.btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:40px;height:40px;padding:0 14px;margin:0;border:1px solid var(--ca-border);border-radius:10px;font-size:13px;line-height:1.2;font-weight:650}
+@media(max-width:600px){.ca-classic .ca-action-row>.btn,.ca-classic .ca-action-row>.ca-action-menu>summary{min-height:44px;height:44px}.ca-classic .ca-case-tabs>.btn{min-height:42px;height:42px}}
 .ca-classic .ca-action-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
 .ca-classic .ca-action-menu{position:relative;max-width:100%}
 .ca-classic .ca-action-menu summary{list-style:none;cursor:pointer;display:inline-block}
