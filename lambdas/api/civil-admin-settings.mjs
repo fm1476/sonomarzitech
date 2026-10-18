@@ -5,11 +5,11 @@ const uuid = value => typeof value==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a
 const LIST_KEYS = new Set(['paperTypes','courtsOfOrigin','serviceMethods','attemptResults','propertyTypes','propertyDisposalMethods','propertyStorageLocations','propertySeizureStatuses','realPropertyTypes','realPropertyLevyStatuses']);
 const SETTINGS_KEYS = new Set(['notifySettings','feeSchedule','feeCategoryGLCodes','paymentMethodGLCodes','financialSettings',...LIST_KEYS]);
 const plain = v => v!==null && typeof v==='object' && !Array.isArray(v) && Object.getPrototypeOf(v)===Object.prototype;
-function validate(section,value){
+export function validateCivilAdminSetting(section,value){
   if(!SETTINGS_KEYS.has(section))throw Error('Unsupported Civil administration setting.');
   if(section==='financialSettings'){
     if(!plain(value)||Object.keys(value).sort().join(',')!=='feeCategoryGLCodes,feeSchedule,paymentMethodGLCodes')throw Error('Invalid financial settings.');
-    return {feeSchedule:validate('feeSchedule',value.feeSchedule),feeCategoryGLCodes:validate('feeCategoryGLCodes',value.feeCategoryGLCodes),paymentMethodGLCodes:validate('paymentMethodGLCodes',value.paymentMethodGLCodes)};
+    return {feeSchedule:validateCivilAdminSetting('feeSchedule',value.feeSchedule),feeCategoryGLCodes:validateCivilAdminSetting('feeCategoryGLCodes',value.feeCategoryGLCodes),paymentMethodGLCodes:validateCivilAdminSetting('paymentMethodGLCodes',value.paymentMethodGLCodes)};
   }
   if(LIST_KEYS.has(section)){
     if(!Array.isArray(value)||value.length>150||value.some(v=>typeof v!=='string'||!v.trim()||v.length>160))throw Error('Invalid Civil reference list.');
@@ -52,7 +52,7 @@ export async function civilAdminSettingsApi(client,auth,body){
   const saving=body.operation==='save';
   if(!['load','save'].includes(body.operation))return response(400,{success:false,error:'Unknown configuration operation.'});
   let validated;
-  if(saving){try{validated=validate(body.section,body.value);}catch(e){return response(400,{success:false,error:e.message});}}
+  if(saving){try{validated=validateCivilAdminSetting(body.section,body.value);}catch(e){return response(400,{success:false,error:e.message});}}
   await client.query('BEGIN');
   try{
     const q=await client.query("SELECT metadata FROM suite_tenants WHERE id=$1 FOR UPDATE",[tenantId]);
