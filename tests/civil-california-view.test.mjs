@@ -34,6 +34,11 @@ for(const tab of caseTabs){
 assert.ok([...sectionCounts.values()].every(count=>count===1),'Each case section must appear in precisely one workspace tab');
 await click('[data-section="Forms"]');
 assert.equal(root.querySelector('[data-section="Forms"]').getAttribute('aria-pressed'),'true');
+const supplemental=root.querySelector('.ca-pos-supplementals');
+assert.ok(supplemental,'California Forms must describe official POS continuation attachments');
+for(const code of ['POS-020(D)','POS-020(P)','POS-030(D)','POS-030(P)','POS-040(D)','POS-040(P)'])
+ assert.ok(supplemental.textContent.includes(code),'Missing continuation form '+code);
+assert.equal(supplemental.open,false,'Supplemental forms should remain collapsed by default');
 await click('.ca-signed-upload');
 assert.equal(root.querySelector('[data-section="Documents"]').getAttribute('aria-pressed'),'true','Proof upload shortcut should open Documents');
 assert.ok(root.querySelector('#ca-form form'),'Proof upload shortcut should open the attachment dialog');
@@ -48,5 +53,23 @@ assert.ok(requests.every(r=>r.tenantId===scope.tenantId&&r.agencyId===scope.agen
 await w.CaliforniaCivil.route(root,'civil-reports');assert.match(root.querySelector('#ca-totals').textContent,/\$24.68/);assert.ok(root.querySelector('#ca-more'));await click('#ca-more');assert.equal(root.querySelectorAll('[data-case]').length,2);
 root.querySelector('#ca-export-kind').value='ledger';reportCalls=0;await click('#ca-export');assert.equal(blobs.length,1);const csv=await blobs[0].text();assert.match(csv,/case-2/);assert.match(csv,/'=DEMO-SECOND/);assert.match(root.textContent,/Complete export generated/);
 exportConflict=true;reportCalls=0;await click('#ca-export');assert.equal(blobs.length,1,'Concurrent changes must prevent downloading an inconsistent export');assert.match(root.textContent,/changed during export/);
+record={...record,stage:'Served',california:{...record.california,workflowId:'subpoena',service:{
+ method:'Personal service',recipient:'Demo Defendant',address:'123 Fictional Lane',date:'2026-10-17',time:'10:30'
+}}};version++;paged=false;exportConflict=false;
+await w.CaliforniaCivil.route(root,'civil-board');await click('[data-case]');await click('[data-section="Forms"]');
+assert.ok(root.querySelector('#ca-generate-draft'),'Eligible non-summons personal service should permit a POS draft');
+await click('#ca-generate-draft');
+assert.ok(root.querySelector('.ca-court-form-picker'),'Court proof form must have an in-dialog selection list');
+await click('.ca-court-form-picker .ca-kind-trigger');
+const chooseForm=(code)=>[...root.querySelectorAll('.ca-court-form-picker .ca-kind-option')].find(el=>el.dataset.value===code);
+assert.ok(chooseForm('POS-020'));assert.ok(chooseForm('POS-040'));assert.equal(chooseForm('POS-030'),undefined);
+chooseForm('POS-020').click();assert.equal(root.querySelector('[name=formCode]').value,'POS-020');
+await click('#ca-cancel-form');
+record.california.service.method='First-class mail';version++;
+await w.CaliforniaCivil.route(root,'civil-board');await click('[data-case]');await click('[data-section="Forms"]');await click('#ca-generate-draft');
+await click('.ca-court-form-picker .ca-kind-trigger');
+assert.ok(chooseForm('POS-030'),'First-class mailed non-summons papers must offer POS-030');
+assert.equal(chooseForm('POS-020'),undefined);
+await click('#ca-cancel-form');
 console.log('DOM reports: all-case totals, load-more, complete ledger CSV, formula escaping and changed-export rejection passed.');
 console.log('DOM workflow: empty state, intake, forms, blocked approval, assignment roster, stale save retry, cents parsing and balance rendering passed.');w.close();

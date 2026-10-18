@@ -25,7 +25,8 @@ for(const name of ['civil-california-view','civil-california-calendar','civil-ca
 await page.evaluate(()=>window.CaliforniaCivil.route(document.querySelector('#view-civil-board'),'civil-board'));
 await page.locator('[data-case]').first().click();
 await page.locator('[data-section="Forms"]').click();
-const forms=await page.locator('.ca-pos-catalog').innerText();
+const forms=await page.locator('.ca-pos-catalog').textContent();
+assert.equal(await page.locator('.ca-pos-catalog .ca-form-resource').count(),4,'Expected exactly four POS cards');
 for(const code of ['POS-010','POS-020','POS-030','POS-040'])assert.ok(forms.includes(code),'Missing '+code);
 await page.locator('.ca-pos-catalog').scrollIntoViewIfNeeded();
 await page.locator('.ca-pos-catalog').screenshot({path:'artifacts/civil-forms-catalog-desktop.png'});

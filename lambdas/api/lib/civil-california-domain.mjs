@@ -520,6 +520,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         "Personal service",
         "Substituted service",
         "Court-authorized alternative",
+        "First-class mail",
       ].includes(payload.method),
       "Choose a service method.",
     );
@@ -536,6 +537,9 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
           : [];
     for (const field of required)
       requireValue(text(payload[field]), "Missing service evidence: " + field);
+    if(payload.method==="First-class mail")
+      requireValue(!["summons","small-claims"].includes(c.workflowId),
+        "First-class mail cannot substitute for court-approved summons or small-claims personal service.");
     if (payload.method === "Substituted service")
       requireValue(
         ["summons", "small-claims"].includes(c.workflowId),
@@ -582,9 +586,11 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     permission(ctx, "civil_document_generate");
     note();
     requireValue(
-      r.stage === "Served" &&
-        ["summons", "small-claims"].includes(c.workflowId),
-      "A served summons or small-claims case is required.",
+      r.stage === "Served" && (
+        (["summons","small-claims"].includes(c.workflowId) && !["POS-020","POS-030","POS-040"].includes(payload.formCode)) ||
+        (!["summons","small-claims"].includes(c.workflowId) && ["POS-020","POS-030","POS-040"].includes(payload.formCode))
+      ),
+      "Choose an allowed court form for this served case.",
       409,
     );
     requireValue(
@@ -595,7 +601,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     c.draftReturns ??= [];
     c.draftReturns.push({
       id: ctx.eventId,
-      formName: c.workflowId === "summons" ? "POS-010" : "SC-104",
+      formName: payload.formCode || (c.workflowId === "summons" ? "POS-010" : "SC-104"),
       sha256: payload.pdfHash,
       templateSha256: payload.templateHash,
       unsigned: true,

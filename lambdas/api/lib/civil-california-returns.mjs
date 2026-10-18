@@ -2,11 +2,13 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { CivilError } from "./civil-california-domain.mjs";
+import {generateAdditionalCaliforniaPosDraft} from "./civil-california-pos-additional.mjs";
 const templateUrls = {
   summons: new URL("../templates/civil/pos010.pdf", import.meta.url),
   "small-claims": new URL("../templates/civil/sc104.pdf", import.meta.url),
 };
 export async function generateCaliforniaReturnDraft(record, input) {
+  if(["POS-020","POS-030","POS-040"].includes(input?.formCode))return generateAdditionalCaliforniaPosDraft(record,input);
   const c = record.california,
     service = c?.service,
     workflow = c?.workflowId;
@@ -34,9 +36,14 @@ export async function generateCaliforniaReturnDraft(record, input) {
       throw new CivilError(
         "Server name, address and phone are required for the draft.",
       );
-  const bytes = await readFile(templateUrls[workflow]),
-    pdf = await PDFDocument.load(bytes),
-    form = pdf.getForm();
+  const bytes=await readFile(templateUrls[workflow]);
+  const templateSha256=createHash("sha256").update(bytes).digest("hex");
+  const manifest=JSON.parse(await readFile(new URL("../templates/civil/manifest.json",import.meta.url),"utf8"));
+  const approved=manifest[workflow==="summons"?"pos010":"sc104"];
+  if(!approved?.templateSha256||templateSha256!==approved.templateSha256)
+    throw new CivilError("The approved California court PDF template changed. Draft generation is paused pending template review.",409);
+  const pdf=await PDFDocument.load(bytes),
+    form=pdf.getForm();
   // XFA can hide AcroForm values in some viewers. Keep one editable AcroForm.
   form.deleteXFA();
   const font = await pdf.embedFont(StandardFonts.Helvetica),
@@ -180,6 +187,6 @@ export async function generateCaliforniaReturnDraft(record, input) {
     contentType: "application/pdf",
     base64: Buffer.from(output).toString("base64"),
     sha256: createHash("sha256").update(output).digest("hex"),
-    templateSha256: createHash("sha256").update(bytes).digest("hex"),
+    templateSha256,
   };
 }

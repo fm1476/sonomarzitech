@@ -99,6 +99,10 @@ window.CaliforniaCivil = (() => {
       "courtCityZip",
       "courtBranch",
       "smallClaimsDocument",
+      "formCode",
+      "documentsServed",
+      "mailingCityState",
+      "mailingMethod",
     ],
     reopen_return: [],
     deadline: ["title", "kind", "dueDate:date", "authorityReference"],
@@ -182,6 +186,7 @@ window.CaliforniaCivil = (() => {
     ],
     method: [
       "Personal service",
+      "First-class mail",
       "Substituted service",
       "Court-authorized alternative",
     ],
@@ -410,6 +415,10 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-proof-needed{color:#ebad55;background:rgba(235,173,85,.13)}
 .ca-classic .ca-proof-progress p{font-size:12px;line-height:1.6;color:var(--text-dim);margin:9px 0 0}
 .ca-classic .ca-signed-upload{margin-top:16px;min-height:43px}
+.ca-classic .ca-pos-supplementals{margin:16px 0 0;border:1px solid var(--ca-border);border-radius:12px;padding:12px 15px}
+.ca-classic .ca-pos-supplementals summary{font-size:12px;font-weight:750;cursor:pointer}
+.ca-classic .ca-pos-supplemental-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:9px;margin-top:12px}
+.ca-classic .ca-pos-supplemental-grid span{font-size:12px;line-height:1.45}
 .ca-classic .ca-pos-catalog{margin:24px 0 20px;border-top:1px solid var(--ca-border);padding-top:20px}
 .ca-classic .ca-pos-heading,.ca-classic .ca-pos-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .ca-classic .ca-pos-heading h4{font-size:15px;margin:0}
@@ -651,6 +660,39 @@ window.CaliforniaCivil = (() => {
             }
           };
           workflowSelect.replaceWith(workflowValue,container);
+        }
+        const courtFormSelect=target.querySelector('select[name="formCode"]');
+        if(courtFormSelect){
+          const host=document.createElement("div");
+          host.className="ca-kind-picker ca-court-form-picker";
+          const value=document.createElement("input");
+          value.type="hidden";value.name="formCode";value.value=courtFormSelect.value;
+          host.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-haspopup="listbox" aria-expanded="false">Choose official court form <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" aria-label="Official court forms" hidden></div>';
+          const trigger=host.querySelector(".ca-kind-trigger"),menu=host.querySelector(".ca-kind-options");
+          [...courtFormSelect.options].filter(option=>option.value).forEach(option=>{
+            const item=document.createElement("button");
+            item.type="button";item.className="ca-kind-option";item.dataset.value=option.value;
+            item.textContent=option.textContent;item.setAttribute("role","option");
+            item.onclick=()=>{
+              value.value=option.value;trigger.firstChild.textContent=option.textContent+" ";
+              trigger.setAttribute("aria-expanded","false");menu.hidden=true;trigger.focus();
+            };
+            menu.append(item);
+          });
+          trigger.onclick=()=>{
+            const expanded=trigger.getAttribute("aria-expanded")==="true";
+            trigger.setAttribute("aria-expanded",String(!expanded));menu.hidden=expanded;
+            if(!expanded)menu.querySelector("button")?.focus();
+          };
+          menu.onkeydown=event=>{
+            if(event.key==="Escape"){event.preventDefault();menu.hidden=true;trigger.setAttribute("aria-expanded","false");trigger.focus();}
+            if(["ArrowUp","ArrowDown"].includes(event.key)){
+              event.preventDefault();const all=[...menu.querySelectorAll("button")];
+              const index=all.indexOf(document.activeElement);
+              all[(index+(event.key==="ArrowDown"?1:all.length-1)+all.length)%all.length]?.focus();
+            }
+          };
+          courtFormSelect.replaceWith(value,host);
         }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
@@ -973,6 +1015,14 @@ window.CaliforniaCivil = (() => {
           ["POS-030","Other civil papers served by first-class mail"],
           ["POS-040","Other civil papers: select the applicable permitted service method"]
         ];
+        const posSupplemental=[
+          ["POS-020(D)","Additional documents served"],
+          ["POS-020(P)","Additional persons served"],
+          ["POS-030(D)","Additional documents mailed"],
+          ["POS-030(P)","Additional mail recipients"],
+          ["POS-040(D)","Additional documents served"],
+          ["POS-040(P)","Additional persons served"]
+        ];
         const serviceMethod=c.service?.method||c.nonService?.method||"";
         // Proof of service selection is advisory, never a filing determination.
         // Small claims normally uses SC-104, not the general POS series.
@@ -993,9 +1043,11 @@ window.CaliforniaCivil = (() => {
           :"No reliable POS-series recommendation can be made from the recorded service method. Review the official instructions or agency-approved return.";
         const formLibrary=document.createElement("section");
         formLibrary.className="ca-forms-library";
-        const draftSupported=["summons","small-claims"].includes(c.workflowId);
-        const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served"&&c.service?.method==="Personal service";
-        const draftHint=!draftSupported?"An approved agency return or process-specific form is required for this workflow."
+        const standardDraft=["summons","small-claims"].includes(c.workflowId);
+        const draftSupported=standardDraft?c.service?.method==="Personal service":
+          ["Personal service","First-class mail"].includes(c.service?.method);
+        const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served";
+        const draftHint=!draftSupported?"This recorded service method requires a manually completed or agency-approved court return."
           :r.stage!=="Served"?"Record completed personal service before generating a draft."
           :c.service?.method!=="Personal service"?"Automatic drafts currently support personal service only. Use the official form for this service method."
           :!can("civil_document_generate")?"Your role does not allow court-form generation.":"";
@@ -1004,7 +1056,7 @@ window.CaliforniaCivil = (() => {
           (canDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">Generate unsigned draft →</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
           '<div class="ca-pos-catalog"><div class="ca-pos-heading"><h4>California proof-of-service forms</h4><span>Four common Judicial Council forms</span></div><p>Choose based on the papers and the actual method of service. A recommendation is not a legal determination.</p>'+
           '<div class="ca-pos-preflight"><strong>Form selection review</strong><p>'+esc(selectionGuidance)+'</p>'+
-          (missingProofFacts.length?'<p class="ca-pos-missing">Before preparing a return, verify: '+missingProofFacts.map(esc).join('; ')+'</p>':'<p class="ca-pos-ready">Core case and service facts are recorded. Confirm server qualifications, documents served, declarations and signature before filing.</p>')+'</div><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div></div>'+
+          (missingProofFacts.length?'<p class="ca-pos-missing">Before preparing a return, verify: '+missingProofFacts.map(esc).join('; ')+'</p>':'<p class="ca-pos-ready">Core case and service facts are recorded. Confirm server qualifications, documents served, declarations and signature before filing.</p>')+'</div><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div><details class="ca-pos-supplementals"><summary>Need to list additional documents or people served?</summary><p>These are official continuation forms used when the relevant proof-of-service form needs additional space. They are separate from the four main POS forms.</p><div class="ca-pos-supplemental-grid">'+posSupplemental.map(([code,description])=>'<span><strong>'+esc(code)+'</strong> · '+esc(description)+'</span>').join('')+'</div></details></div>'+
           '<div class="ca-forms-head"><h4>Forms listed for this workflow</h4></div><div class="ca-form-resource-grid">'+applicable.map(code=>{
             const found=formSources[code];
             return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
@@ -1143,11 +1195,7 @@ window.CaliforniaCivil = (() => {
           if (can("civil_document_generate"))
             actions.push(
               "notice",
-              ...(r.stage === "Served" &&
-              ["summons", "small-claims"].includes(c.workflowId) &&
-              c.service?.method === "Personal service"
-                ? ["generate_return_draft"]
-                : []),
+              ...(canDraft ? ["generate_return_draft"] : []),
               ...(["Served", "Unable to Serve"].includes(r.stage)
                 ? ["prepare_return"]
                 : []),
@@ -1311,8 +1359,16 @@ window.CaliforniaCivil = (() => {
                   roster = people.map((p) => [p.person_id, p.name || p.email]);
                 }
                 const choice = (key) =>
-                  key === "method" && action === "serve" && !["summons", "small-claims"].includes(c.workflowId)
-                    ? options.method.filter(method => method !== 'Substituted service')
+                  key === "formCode"
+                    ? c.workflowId==="summons"?[["POS-010","POS-010 · Proof of Service of Summons"]]
+                      :c.workflowId==="small-claims"?[["SC-104","SC-104 · Proof of Service—Small Claims"]]
+                      :c.service?.method==="First-class mail"?[["POS-030","POS-030 · First-Class Mail—Civil"]]
+                      :[["POS-020","POS-020 · Personal Service—Civil"],["POS-040","POS-040 · Proof of Service—Civil"]]
+                  :key === "mailingMethod" ? ["USPS deposit","Business collection"]
+                  :key === "method" && action === "serve"
+                    ? options.method.filter(method=>["summons","small-claims"].includes(c.workflowId)
+                      ? method!=="First-class mail"
+                      : method!=="Substituted service")
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "deadlineId"
@@ -1387,7 +1443,7 @@ window.CaliforniaCivil = (() => {
                 const draftContext=action==="generate_return_draft" ? (()=>{
                   const service=c.service||{};
                   const facts=[
-                    ["Official form",c.workflowId==="summons"?"POS-010":"SC-104"],
+                    ["Official form",c.workflowId==="summons"?"POS-010":c.workflowId==="small-claims"?"SC-104":c.service?.method==="First-class mail"?"POS-030":"POS-020 / POS-040"],
                     ["Case number",r.caseNumber],["Court",r.courtOfOrigin],
                     ["Plaintiff",r.plaintiff],["Defendant",r.defendant],
                     ["Recipient",service.recipient],["Date served",service.date],
