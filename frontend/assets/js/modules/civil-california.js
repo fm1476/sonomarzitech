@@ -350,7 +350,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-case-tabs{align-items:stretch;gap:8px}
 .ca-classic .ca-case-tabs>.btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:40px;height:40px;padding:0 14px;margin:0;border:1px solid var(--ca-border);border-radius:10px;font-size:13px;line-height:1.2;font-weight:650}
 @media(max-width:600px){.ca-classic .ca-action-row>.btn,.ca-classic .ca-action-row>.ca-action-menu>summary{min-height:44px;height:44px}.ca-classic .ca-case-tabs>.btn{min-height:42px;height:42px}}
-.ca-classic .ca-action-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.ca-classic .ca-action-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ca-classic .ca-action-row>.btn{height:42px;min-height:42px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 16px;line-height:1.2;margin:0;border-radius:10px}
+.ca-classic .ca-action-row>.ca-secondary-actions{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px}
+.ca-classic .ca-action-row>.ca-secondary-actions[hidden]{display:none!important}
+
 .ca-classic .ca-action-menu{position:relative;max-width:100%}
 .ca-classic .ca-action-menu summary{list-style:none;cursor:pointer;display:inline-block}
 .ca-classic .ca-action-menu summary::-webkit-details-marker{display:none}
@@ -885,9 +889,18 @@ window.CaliforniaCivil = (() => {
         panel.querySelector("#ca-actions").innerHTML =
           '<div class="ca-action-row">' +
           (primaryAction ? '<button type="button" class="btn btn-primary" data-action="'+primaryAction+'">'+esc(labels[primaryAction])+'</button>' : '') +
-          '<details class="ca-action-menu"><summary class="btn btn-outline">More actions ('+(actions.length-(primaryAction?1:0))+')</summary><div class="ca-secondary-actions">' +
+          '<button type="button" class="btn btn-outline ca-more-trigger" aria-expanded="false" aria-controls="ca-more-actions">More actions ('+(actions.length-(primaryAction?1:0))+')</button><div id="ca-more-actions" class="ca-secondary-actions" hidden>' +
           actions.filter(a=>a!==primaryAction).map(a=>'<button type="button" class="btn btn-outline" data-action="'+a+'">'+esc(labels[a])+'</button>').join('') +
-          '</div></details></div>';
+          '</div></div>';
+        const moreTrigger=panel.querySelector(".ca-more-trigger");
+        const morePanel=panel.querySelector("#ca-more-actions");
+        if(moreTrigger&&morePanel){
+          moreTrigger.onclick=()=>{
+            const expanded=moreTrigger.getAttribute("aria-expanded")==="true";
+            moreTrigger.setAttribute("aria-expanded",String(!expanded));
+            morePanel.hidden=expanded;
+          };
+        }
         async function command(action, payload) {
           try {
             const next = await api(
