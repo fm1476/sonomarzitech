@@ -30,7 +30,17 @@ jobs:
           node tests/civil-california-postgres.test.mjs
           node tests/civil-california-view.test.mjs
           node tests/civil-california-presentation.test.mjs
-          node tests/civil-california-returns.test.mjs
+          mkdir -p artifacts/civil-pdf
+          CIVIL_PDF_QA_DIR=artifacts/civil-pdf node tests/civil-california-returns.test.mjs
+
+      - name: Preserve example unsigned Judicial Council form drafts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: civil-official-form-pdf-previews
+          path: artifacts/civil-pdf/*.pdf
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Install Chromium UI smoke test tools
         run: |
