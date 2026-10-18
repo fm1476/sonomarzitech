@@ -337,7 +337,13 @@ window.CaliforniaCivil = (() => {
 @media(max-width:800px){.ca-classic .ca-case-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.ca-classic .ca-progress-track{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:10px}}
 @media(max-width:460px){.ca-classic .ca-case-summary{grid-template-columns:1fr 1fr}.ca-classic .ca-case-summary>div{padding:10px}.ca-classic .ca-case-summary strong{font-size:12px}}
 .ca-classic .ca-workspace-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 0}
-.ca-classic .ca-case-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0}
+.ca-classic .ca-case-tabs{display:flex;gap:7px;overflow-x:auto;flex-wrap:nowrap;margin:18px 0;padding-bottom:12px;scrollbar-width:thin}
+.ca-classic .ca-case-tabs>.btn{flex:0 0 auto}
+.ca-classic .ca-case-tabs button[aria-current="page"]{background:rgba(49,123,221,.18);border-color:var(--ca-accent);color:var(--heading,var(--text))}
+.ca-classic #ca-detail details[hidden],.ca-classic #ca-documents[hidden]{display:none!important}
+.ca-classic #ca-detail details{max-width:100%;overflow-x:auto}
+.ca-classic #ca-detail details table{font-size:13px}
+
 .ca-classic .ca-case-tabs button[aria-selected="true"]{background:rgba(45,120,215,.19);border-color:var(--ca-accent);color:var(--heading)}
 .ca-classic .ca-case-tabs button:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
@@ -814,27 +820,43 @@ window.CaliforniaCivil = (() => {
           panel.innerHTML="";
         };
         const sections=[...panel.querySelectorAll("details")];
-        if(sections.length){
-          const tabs=document.createElement("div");
-          tabs.className="ca-case-tabs";
-          tabs.setAttribute("role","tablist");
-          const names=["Overview","Service","Documents","Deadlines","Enforcement","Claims","Financials","Forms","History"];
-          const activate=index=>{
-            sections.forEach((section,i)=>{
-              section.open=i===index;
-              section.hidden=i!==index;
-            });
-            tabs.querySelectorAll("button").forEach((button,i)=>button.setAttribute("aria-selected",String(i===index)));
-          };
-          sections.forEach((section,i)=>{
-            const button=document.createElement("button");
-            button.type="button";button.className="btn btn-outline";
-            button.setAttribute("role","tab");button.textContent=names[i]||section.querySelector("summary")?.textContent||"Details";
-            button.onclick=()=>activate(i);tabs.append(button);
-          });
-          panel.querySelector("#ca-actions")?.after(tabs);
-          activate(0);
-        }
+        const titles=sections.map(section=>section.querySelector("summary")?.textContent?.trim()||"Case record");
+        const documentSection=panel.querySelector("#ca-documents");
+        const documentHeading=documentSection?.previousElementSibling;
+        const recordHeading=sections[0]?.previousElementSibling;
+        const tabs=document.createElement("nav");
+        tabs.className="ca-case-tabs";tabs.setAttribute("aria-label","Case workspace sections");
+        const groups=[
+          {label:"Overview",parts:[0]},
+          {label:"Service",parts:titles.map((t,i)=>/service attempts|service outcome/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"Documents",parts:[]},
+          {label:"Deadlines",parts:titles.map((t,i)=>/deadline|notice/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"Enforcement",parts:titles.map((t,i)=>/enforcement/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"Claims",parts:titles.map((t,i)=>/claim|stay/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"Financials",parts:titles.map((t,i)=>/ledger|disburse/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"Forms",parts:titles.map((t,i)=>/court.form|draft|return/i.test(t)?i:-1).filter(i=>i>=0)},
+          {label:"History",parts:titles.map((t,i)=>/history/i.test(t)?i:-1).filter(i=>i>=0)}
+        ];
+        const allocated=new Set(groups.flatMap(g=>g.parts));
+        groups[0].parts.push(...sections.map((_,i)=>i).filter(i=>!allocated.has(i)));
+        const activateGroup=label=>{
+          const group=groups.find(g=>g.label===label)||groups[0];
+          sections.forEach((section,i)=>{section.hidden=!group.parts.includes(i);section.open=group.parts.includes(i);});
+          const showDocs=label==="Documents";
+          if(documentSection)documentSection.hidden=!showDocs;
+          if(documentHeading)documentHeading.hidden=!showDocs;
+          if(recordHeading)recordHeading.hidden=showDocs;
+          tabs.querySelectorAll("button").forEach(button=>button.setAttribute("aria-current",button.dataset.section===label?"page":"false"));
+        };
+        groups.forEach(group=>{
+          const button=document.createElement("button");button.type="button";
+          button.className="btn btn-outline";button.dataset.section=group.label;
+          button.textContent=group.label;
+          button.onclick=()=>activateGroup(group.label);
+          tabs.append(button);
+        });
+        panel.querySelector("#ca-actions")?.after(tabs);
+        activateGroup("Overview");
         const closed = ["Closed", "Cancelled"].includes(r.stage),
           actions = [];
         if (!closed) {

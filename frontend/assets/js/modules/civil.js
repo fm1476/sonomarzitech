@@ -852,6 +852,19 @@ function renderPaperDetailModal(){
       #modalBox.civil-case-workspace .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
       #modalBox.civil-case-workspace .modal-head h3{font-size:22px;letter-spacing:-.3px;overflow-wrap:anywhere}
       #modalBox.civil-case-workspace .civil-workspace-head-right{display:flex;align-items:center;gap:15px}
+      #modalBox.civil-case-workspace .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:12px;margin:12px 0 20px!important}
+      #modalBox.civil-case-workspace .detail-grid>div{min-width:0;background:var(--surface,#152235);border:1px solid var(--border);padding:16px;border-radius:12px}
+      #modalBox.civil-case-workspace .detail-grid .k{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;font-weight:700}
+      #modalBox.civil-case-workspace .detail-grid .v{font-size:15px;font-weight:650;overflow-wrap:anywhere}
+      #modalBox.civil-case-workspace .modal-body>.panel{border-radius:13px;overflow:hidden}
+      #modalBox.civil-case-workspace .modal-body .panel-head{padding:14px 18px}
+      #modalBox.civil-case-workspace .modal-body .panel-head h2{font-size:16px}
+      #modalBox.civil-case-workspace .modal-body .btn{border-radius:9px;min-height:39px}
+      #modalBox.civil-case-workspace .civil-workspace-tabs [aria-selected="true"]{background:rgba(44,121,218,.18);color:var(--text);border-color:var(--blue)!important}
+      #modalBox.civil-case-workspace .modal-body table{font-size:13px}
+      #modalBox.civil-case-workspace .modal-body table th{font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+      @media(max-width:700px){#modalBox.civil-case-workspace .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#modalBox.civil-case-workspace .detail-grid>div{padding:11px}#modalBox.civil-case-workspace .civil-workspace-tabs{padding:10px 12px}}
+
 \n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
     <div class="modal-head">
       <div>
@@ -1232,7 +1245,7 @@ function renderPaperDetailTabContent(p){
     body.innerHTML = `
       ${canUpload ? `
       <div id="civilPhotoDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
-        <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.camera || ICONS.paperclip}</span>
+        <span style="width:34px;height:34px;display:inline-block;color:var(--blue);">${ICONS.camera || ICONS.paperclip}</span>
         <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop photos here, or click to browse</div>
         <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">On a phone, this also lets you take a new photo directly with your camera.</div>
         <input type="file" id="civilPhotoFileInput" accept="image/*" multiple style="display:none;">
@@ -1291,10 +1304,10 @@ function renderPaperDetailTabContent(p){
     const attached = (p.attachedDocuments||[]).filter(d=>!d.archivedAt).slice().reverse();
     body.innerHTML = `
       ${canDoc ? `
-      <div id="civilDocumentDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
+      <div id="civilDocumentDropZone" role="button" tabindex="0" aria-label="Add Civil case documents" style="border:2px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;cursor:pointer;margin-bottom:18px;background:var(--surface);transition:border-color .15s;">
         <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.paperclip||ICONS.download}</span>
-        <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop documents here, or click to browse</div>
-        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">PDFs, court documents, scans, photos, and other files are stored privately in AWS S3. Maximum 500 MB per file.</div>
+        <div style="font-weight:700;font-size:13px;margin-top:8px;">Add case documents</div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">Select files or drag them here. Privately stored in AWS S3. Up to 500 MB per file.</div>
         <input type="file" id="civilDocumentFileInput" multiple style="display:none;">
       </div>` : ''}
       <style>
