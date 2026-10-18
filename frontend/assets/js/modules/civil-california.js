@@ -359,6 +359,16 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
 .ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
 @media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-forms-library{margin:16px 0 20px}
+.ca-classic .ca-forms-library[hidden]{display:none!important}
+.ca-classic .ca-forms-head h3{font-size:17px;margin:0 0 5px}
+.ca-classic .ca-forms-head p,.ca-classic .ca-form-disclaimer{font-size:12px;color:var(--text-dim);line-height:1.5}
+.ca-classic .ca-form-resource-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;margin:14px 0}
+.ca-classic .ca-form-resource{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:16px;background:var(--ca-surface);border:1px solid var(--ca-border);border-radius:13px}
+.ca-classic .ca-form-code{font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--ca-accent);background:rgba(54,121,217,.12);padding:5px 8px;border-radius:7px}
+.ca-classic .ca-form-resource strong{font-size:14px;line-height:1.35}
+.ca-classic .ca-form-resource .btn{margin-top:auto;border-radius:9px;min-height:39px}
+.ca-classic .ca-form-notice{font-size:12px;color:var(--text-dim)}
 .ca-classic .ca-intake-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
 .ca-classic .ca-intake-intro{margin:0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.6}
 .ca-classic .ca-intake-section{grid-column:1/-1;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ca-accent);border-bottom:1px solid var(--ca-border);padding-bottom:9px;margin-top:10px}
@@ -828,6 +838,26 @@ window.CaliforniaCivil = (() => {
           shell?.classList.remove("ca-workspace-open");
           panel.innerHTML="";
         };
+        const formSources={
+          "POS-010":["Proof of Service of Summons","https://selfhelp.courts.ca.gov/jcc-form/POS-010"],
+          "POS-020":["Proof of Personal Service—Civil","https://selfhelp.courts.ca.gov/jcc-form/POS-020"],
+          "POS-030":["Proof of Service by First-Class Mail—Civil","https://selfhelp.courts.ca.gov/jcc-form/POS-030"],
+          "SC-104":["Proof of Service—Small Claims","https://selfhelp.courts.ca.gov/jcc-form/SC-104"],
+          "SER-001":["Request for Sheriff to Serve Court Papers","https://selfhelp.courts.ca.gov/jcc-form/SER-001"],
+          "SER-001A":["Special Instructions for Writs and Levies","https://selfhelp.courts.ca.gov/jcc-form/SER-001A"],
+          "WG-005":["Employer's Return","https://selfhelp.courts.ca.gov/jcc-form/WG-005"]
+        };
+        const applicable=[...new Set([...(context.workflows[c.workflowId]?.forms||[]),...(context.workflows[c.workflowId]?.returns||[])])];
+        const formLibrary=document.createElement("section");
+        formLibrary.className="ca-forms-library";
+        formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Reference forms for this workflow. Confirm the current form and applicable requirements before filing.</p></div></div>'+
+          '<div class="ca-form-resource-grid">'+applicable.map(code=>{
+            const found=formSources[code];
+            return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
+              (found?'<a class="btn btn-outline" href="'+found[1]+'" target="_blank" rel="noopener noreferrer">View official form ↗</a>':'<span class="ca-form-notice">Confirm the approved form or local return template for this process.</span>')+'</article>';
+          }).join('')+'</div><p class="ca-form-disclaimer">Form links open California Courts resources. Automated prefill, legal review, and signature handling are not yet enabled.</p>';
+        formLibrary.hidden=true;
+        panel.querySelector("#ca-actions")?.after(formLibrary);
         const sections=[...panel.querySelectorAll("details")];
         const titles=sections.map(section=>section.querySelector("summary")?.textContent?.trim()||"Case record");
         const documentSection=panel.querySelector("#ca-documents");
@@ -854,6 +884,7 @@ window.CaliforniaCivil = (() => {
           const showDocs=label==="Documents";
           if(documentSection)documentSection.hidden=!showDocs;
           if(documentHeading)documentHeading.hidden=!showDocs;
+          formLibrary.hidden=label!=="Forms";
           if(recordHeading)recordHeading.hidden=showDocs;
           tabs.querySelectorAll("button").forEach(button=>button.setAttribute("aria-current",button.dataset.section===label?"page":"false"));
         };
