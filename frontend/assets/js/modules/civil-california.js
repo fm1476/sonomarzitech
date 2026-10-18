@@ -544,6 +544,11 @@ ${SonoMarziCivilRecordUI.styles}
 .ca-classic .ca-reviewed-option:focus-within{outline:2px solid var(--ca-accent);outline-offset:2px}
 @media(max-width:550px){.ca-classic .ca-reviewed-forms{padding:12px}.ca-classic .ca-reviewed-option{align-items:flex-start}.ca-classic .ca-reviewed-link{margin-left:32px}}
 
+
+.ca-classic .ca-assignee-field{display:flex;flex-direction:column;gap:9px}
+.ca-classic .ca-assignee-search,.ca-classic .ca-assignee-field select{font-size:15px;min-height:45px;width:100%}
+.ca-classic .ca-assignee-field select{cursor:pointer}
+
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
@@ -690,6 +695,14 @@ ${SonoMarziCivilRecordUI.styles}
         route(root, id);
       };
       draw();
+      root.addEventListener("input", event=>{
+        if(!event.target.matches(".ca-assignee-search"))return;
+        const selector=event.target.closest(".ca-assignee-field")?.querySelector('select[name="personId"]');
+        if(!selector)return;
+        const term=event.target.value.trim().toLocaleLowerCase();
+        for(const option of selector.options)if(option.value)option.hidden=!option.textContent.toLocaleLowerCase().includes(term);
+        if(selector.selectedOptions[0]?.hidden)selector.value="";
+      });
       function form(title, html, save) {
         const target = root.querySelector("#ca-form");
         if (target.querySelector("form")) {
@@ -1574,7 +1587,8 @@ ${SonoMarziCivilRecordUI.styles}
                 if (action === "assign") {
                   const people = (await api("roster", {}, scope)).people;
                   context.people = [...context.people, ...people];
-                  roster = people.map((p) => [p.person_id, p.name || p.email]);
+                  roster = [...new Map(people.filter(p=>p.person_id).map(p=>[p.person_id,[p.person_id,p.name||p.email||p.person_id]])).values()]
+                    .sort((a,b)=>a[1].localeCompare(b[1]));
                 }
                 const choice = (key) =>
                   key === "formCode"
@@ -1712,6 +1726,13 @@ ${SonoMarziCivilRecordUI.styles}
                         : key === "returnByDate"
                           ? r.returnByDate
                           : c.intakeDetails[key] || "";
+                      if (key === "personId" && action === "assign") {
+                        return '<label class="form-row ca-assignee-field">Assignee'+
+                          '<input type="search" class="ca-assignee-search" placeholder="Search agency personnel..." aria-label="Search available assignees" autocomplete="off">'+
+                          '<select name="personId" required aria-label="Assignee"><option value="">Select assignee...</option>'+
+                          roster.map(([id,label])=>'<option value="'+esc(id)+'">'+esc(label)+'</option>').join('')+
+                          '</select></label>';
+                      }
                       if (key === "reviewedForms") {
                         const required=context.workflows[c.workflowId]?.forms||[];
                         const checked=new Set(Array.isArray(value)?value:[]);
@@ -1751,6 +1772,8 @@ ${SonoMarziCivilRecordUI.styles}
                       const [key, type] = spec.split(":");
                       if (type === "money") payload[key] = cents(payload[key]);
                     }
+                    if(action==="assign" && !roster.some(([id])=>id===payload.personId))
+                      throw Error("Select an active assignee from the agency roster.");
                     if (action === "intake_details") {
                       const required=context.workflows[c.workflowId]?.forms||[];
                       const selected=data.getAll("reviewedForms").map(value=>String(value));
