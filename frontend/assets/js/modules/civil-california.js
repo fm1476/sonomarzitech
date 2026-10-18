@@ -615,7 +615,7 @@ window.CaliforniaCivil = (() => {
           target.querySelector("form"),
         );
         const dialog=target.querySelector('[role="dialog"]');
-        const dismiss=()=>{target.innerHTML="";document.removeEventListener("keydown",onDialogKey);};
+        const dismiss=()=>{if(dialog?.dataset.saving==="true")return;target.innerHTML="";document.removeEventListener("keydown",onDialogKey);};
         const onDialogKey=event=>{
           if(!dialog?.isConnected)return;
           if(event.key==="Escape"){event.preventDefault();dismiss();return;}
@@ -633,6 +633,7 @@ window.CaliforniaCivil = (() => {
           e.preventDefault();
           const button = e.submitter || e.target.querySelector('[type="submit"]');
           button.disabled = true;
+          dialog.dataset.saving="true";
           button.dataset.previousLabel=button.textContent;
           button.textContent="Saving…";
           try {
@@ -643,6 +644,7 @@ window.CaliforniaCivil = (() => {
             if (alert) alert.textContent = err.message;
             else status(err.message);
           } finally {
+            dialog.dataset.saving="false";
             button.disabled = false;
             button.textContent=button.dataset.previousLabel||"Save changes";
           }
