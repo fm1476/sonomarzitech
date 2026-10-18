@@ -47,7 +47,8 @@ const AWS_ATTACHMENTS = (() => {
   async function upload(file, parent){
     if(!file || !file.size) throw Error('Choose a file first.');
     if(!parent?.collection || !parent?.itemId) throw Error('Attachment parent record is required.');
-    if(file.size > 25 * 1024 * 1024) throw Error('Attachments are limited to 25 MB.');
+    const maxBytes = parent.collection === 'civil.papers' ? 500 * 1024 * 1024 : 25 * 1024 * 1024;
+    if(file.size > maxBytes) throw Error(`Attachments are limited to ${maxBytes / 1024 / 1024} MB for this module.`);
 
     const ctx = context();
     const reservation = await api('/attachments/upload-url', {
@@ -60,6 +61,7 @@ const AWS_ATTACHMENTS = (() => {
       parent_id: parent.itemId
     });
 
+    if(file.size > Number(reservation.max_size_bytes || maxBytes)) throw Error('This attachment exceeds the server upload limit.');
     const put = await fetch(reservation.upload_url, {
       method: 'PUT',
       headers: {
