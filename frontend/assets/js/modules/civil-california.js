@@ -907,7 +907,7 @@ window.CaliforniaCivil = (() => {
         shell?.classList.add("ca-workspace-open");
         const bar=document.createElement("div");
         bar.className="ca-workspace-bar";
-        bar.innerHTML='<button type="button" class="btn btn-outline" data-back-cases>← Back to cases</button><span class="ca-status-pill" data-stage="'+esc(r.stage)+'">'+esc(r.stage)+'</span>';
+        bar.innerHTML='<button type="button" class="btn btn-outline" data-back-cases>← Back to cases</button>';
         panel.prepend(bar);
         bar.querySelector("[data-back-cases]").onclick=()=>{
           if(root.querySelector("#ca-form form")){status("Save or cancel the current action before returning to cases.");return;}
