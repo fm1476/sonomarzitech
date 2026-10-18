@@ -352,6 +352,12 @@ ${SonoMarziCivilRecordUI.styles}
 @media(max-width:800px){.ca-classic .ca-case-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.ca-classic .ca-progress-track{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:10px}}
 @media(max-width:460px){.ca-classic .ca-case-summary{grid-template-columns:1fr 1fr}.ca-classic .ca-case-summary>div{padding:10px}.ca-classic .ca-case-summary strong{font-size:12px}}
 .ca-classic .ca-workspace-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 0}
+.ca-section-overlay{position:fixed;inset:0;z-index:9000;background:rgba(4,10,22,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:2.5vh 2.5vw;box-sizing:border-box}
+.ca-section-dialog{width:min(1600px,95vw);height:95dvh;max-height:95dvh;background:var(--surface,var(--bg-card,#172335));border:1px solid var(--border);box-shadow:0 24px 85px rgba(0,0,0,.5);border-radius:17px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.ca-section-dialog-head,.ca-section-dialog-foot{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-shrink:0;padding:17px 24px;background:var(--surface,var(--bg-card,#172335))}
+.ca-section-dialog-head{border-bottom:1px solid var(--border)}.ca-section-dialog-head p{color:var(--text-dim);font-size:12px;margin:0 0 5px}.ca-section-dialog-head h2{font-size:24px;margin:0}.ca-section-dialog-foot{border-top:1px solid var(--border)}.ca-section-dialog-foot span{font-size:12px;color:var(--text-dim)}
+.ca-section-dialog-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:22px 26px}.ca-section-content{max-width:1400px;margin:auto}.ca-section-content>details,.ca-section-content>#ca-documents,.ca-section-content>.ca-forms-library{margin:16px 0}.ca-section-dialog .ca-action-row{margin:0 0 14px}.ca-section-dialog .ca-section-close{width:44px;height:44px;min-width:44px;padding:0;font-size:22px}.ca-section-dialog .ca-section-content>h4{font-size:17px}
+@media(max-width:680px){.ca-section-overlay{padding:0}.ca-section-dialog{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}.ca-section-dialog-head,.ca-section-dialog-foot{padding:12px 16px}.ca-section-dialog-body{padding:14px}.ca-section-dialog-foot span{display:none}}
 .ca-classic .ca-case-tabs{display:flex;gap:7px;overflow-x:auto;flex-wrap:nowrap;margin:18px 0;padding-bottom:12px;scrollbar-width:thin}
 .ca-classic .ca-case-tabs>.btn{flex:0 0 auto}
 .ca-classic .ca-case-tabs button[aria-current="page"]{background:rgba(49,123,221,.18);border-color:var(--ca-accent);color:var(--heading,var(--text))}
@@ -1212,23 +1218,98 @@ ${SonoMarziCivilRecordUI.styles}
         titles.forEach((title,index)=>{
           groups.find(group=>group.label===categoryFor(title)).parts.push(index);
         });
+        // Section workspaces reuse the EXISTING live DOM nodes and event handlers.
+        // Never clone case forms, documents, actions or jurisdiction-specific content.
+        let activeSectionDialog=null;
+        const sectionOrigins=new Map();
+        const restoreSections=()=>{
+          for(const [node,anchor] of sectionOrigins){
+            if(anchor.parentNode)anchor.parentNode.replaceChild(node,anchor);
+          }
+          sectionOrigins.clear();
+          activeSectionDialog?.remove();
+          activeSectionDialog=null;
+        };
+        const moveInto=(node,destination)=>{
+          if(!node||sectionOrigins.has(node))return;
+          const marker=document.createComment('Civil section origin');
+          node.parentNode?.replaceChild(marker,node);
+          sectionOrigins.set(node,marker);
+          node.hidden=false;
+          destination.append(node);
+        };
         const activateGroup=label=>{
+          if(root.querySelector("#ca-form form")){
+            status("Save or cancel your open form before changing case sections.");
+            return;
+          }
+          restoreSections();
           const group=groups.find(g=>g.label===label)||groups[0];
           activeCaseSection=group.label;
-          sections.forEach((section,i)=>{section.hidden=!group.parts.includes(i);section.open=group.parts.includes(i);});
-          const showDocs=label==="Documents";
+          const inDialog=group.label!=="Overview";
+          sections.forEach((section,i)=>{
+            section.hidden=inDialog?!group.parts.includes(i):!group.parts.includes(i);
+            section.open=group.parts.includes(i);
+          });
+          const showDocs=group.label==="Documents";
           if(documentSection)documentSection.hidden=!showDocs;
           if(documentHeading)documentHeading.hidden=!showDocs;
-          formLibrary.hidden=label!=="Forms";
-          // The Case record heading belongs to Overview; avoid showing a
-          // disconnected heading above unrelated tabs.
-          if(recordHeading)recordHeading.hidden=label!=="Overview";
+          formLibrary.hidden=group.label!=="Forms";
+          if(recordHeading)recordHeading.hidden=group.label!=="Overview";
           tabs.querySelectorAll("button").forEach(button=>{
             const active=button.dataset.section===label;
             button.setAttribute("aria-current",active?"page":"false");
             button.setAttribute("aria-pressed",String(active));
             button.tabIndex=active?0:-1;
           });
+          if(!inDialog)return;
+          const dialog=document.createElement("div");
+          dialog.className="ca-section-overlay";
+          dialog.innerHTML='<div class="ca-section-dialog" role="dialog" aria-modal="true" aria-labelledby="ca-section-title" tabindex="-1">'+
+            '<header class="ca-section-dialog-head"><div><p>Civil Process · '+esc(r.caseNumber)+'</p><h2 id="ca-section-title">'+esc(group.label)+'</h2></div>'+
+            '<button type="button" class="btn btn-outline ca-section-close" aria-label="Close '+esc(group.label)+' workspace">✕</button></header>'+
+            '<div class="ca-section-dialog-body"><div class="ca-section-content"></div></div>'+
+            '<footer class="ca-section-dialog-foot"><span>California jurisdiction controls and permissions remain active.</span><button type="button" class="btn btn-outline ca-section-dismiss">Back to case overview</button></footer></div>';
+          panel.append(dialog);
+          activeSectionDialog=dialog;
+          const content=dialog.querySelector(".ca-section-content");
+          const actionArea=panel.querySelector("#ca-actions");
+          // All case actions remain the same live controls, never duplicate handlers.
+          if(actionArea)moveInto(actionArea,content);
+          if(showDocs){
+            moveInto(documentHeading,content);
+            moveInto(documentSection,content);
+          }else if(group.label==="Forms"){
+            moveInto(formLibrary,content);
+          }else{
+            group.parts.forEach(index=>moveInto(sections[index],content));
+          }
+          if(!content.querySelector("details, #ca-documents, .ca-forms-library")){
+            const empty=document.createElement("p");empty.className="muted";
+            empty.textContent="No additional "+group.label.toLowerCase()+" information has been recorded for this case.";
+            content.append(empty);
+          }
+          const dismiss=()=>{
+            if(root.querySelector("#ca-form form")){
+              status("Save or cancel your open form before closing the section.");
+              return;
+            }
+            activateGroup("Overview");
+            tabs.querySelector('[data-section="Overview"]')?.focus();
+          };
+          dialog.querySelector(".ca-section-close").onclick=dismiss;
+          dialog.querySelector(".ca-section-dismiss").onclick=dismiss;
+          dialog.addEventListener("click",event=>{if(event.target===dialog)dismiss();});
+          dialog.addEventListener("keydown",event=>{
+            if(event.key==="Escape"){event.preventDefault();dismiss();return;}
+            if(event.key!=="Tab")return;
+            const focusable=[...dialog.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')].filter(node=>!node.hidden&&node.getClientRects().length);
+            if(!focusable.length)return;
+            const first=focusable[0],last=focusable[focusable.length-1];
+            if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+            else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+          });
+          dialog.querySelector(".ca-section-close").focus();
         };
         groups.forEach(group=>{
           const button=document.createElement("button");button.type="button";
