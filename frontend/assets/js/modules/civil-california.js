@@ -1135,7 +1135,15 @@ window.CaliforniaCivil = (() => {
               activateGroup("Documents");
               panel.querySelector("#ca-upload")?.click();
             }else{
-              panel.querySelector('[data-action="'+recommended+'"]')?.click();
+              const actionButton=panel.querySelector('[data-action="'+recommended+'"]');
+              if(actionButton){
+                const hiddenTray=actionButton.closest("#ca-more-actions");
+                if(hiddenTray?.hidden){
+                  hiddenTray.hidden=false;
+                  panel.querySelector(".ca-more-trigger")?.setAttribute("aria-expanded","true");
+                }
+                actionButton.click();
+              }
             }
           };
         }
