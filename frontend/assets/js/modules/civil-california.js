@@ -638,6 +638,7 @@ window.CaliforniaCivil = (() => {
           button.textContent="Saving…";
           try {
             await save(new FormData(e.target));
+            dialog.dataset.saving="false";
             dismiss();
           } catch (err) {
             const alert = target.querySelector("[role=alert]");
