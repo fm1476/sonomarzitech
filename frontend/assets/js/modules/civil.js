@@ -1245,7 +1245,7 @@ function renderPaperDetailTabContent(p){
     body.innerHTML = `
       ${canUpload ? `
       <div id="civilPhotoDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
-        <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.camera || ICONS.paperclip}</span>
+        <span style="width:34px;height:34px;display:inline-block;color:var(--blue);">${ICONS.camera || ICONS.paperclip}</span>
         <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop photos here, or click to browse</div>
         <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">On a phone, this also lets you take a new photo directly with your camera.</div>
         <input type="file" id="civilPhotoFileInput" accept="image/*" multiple style="display:none;">
@@ -1304,10 +1304,10 @@ function renderPaperDetailTabContent(p){
     const attached = (p.attachedDocuments||[]).filter(d=>!d.archivedAt).slice().reverse();
     body.innerHTML = `
       ${canDoc ? `
-      <div id="civilDocumentDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
+      <div id="civilDocumentDropZone" role="button" tabindex="0" aria-label="Add Civil case documents" style="border:2px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;cursor:pointer;margin-bottom:18px;background:var(--surface);transition:border-color .15s;">
         <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.paperclip||ICONS.download}</span>
-        <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop documents here, or click to browse</div>
-        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">PDFs, court documents, scans, photos, and other files are stored privately in AWS S3. Maximum 500 MB per file.</div>
+        <div style="font-weight:700;font-size:13px;margin-top:8px;">Add case documents</div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">Select files or drag them here. Privately stored in AWS S3. Up to 500 MB per file.</div>
         <input type="file" id="civilDocumentFileInput" multiple style="display:none;">
       </div>` : ''}
       <style>
