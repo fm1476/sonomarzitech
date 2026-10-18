@@ -171,6 +171,7 @@ window.CaliforniaCivilView = (() => {
     const progress=stages.map((step,i)=>'<div class="ca-progress-step" data-complete="'+(at>=i&&at>=0)+'" data-current="'+(r.stage===step)+'"><span class="ca-progress-dot"></span><small>'+esc(step)+'</small></div>').join("");
     return `<header class="ca-workspace-heading"><div><div class="ca-workspace-kicker">Civil case workspace</div><h2>${esc(r.caseNumber)}</h2><p>${esc(workflow.label)} · ${esc(r.courtOfOrigin)}</p></div><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></header>
       ${safetyNote}
+      <section class="ca-progress"><div class="ca-progress-title"><h4>Case progress</h4><span>${esc(r.stage)}</span></div><div class="ca-progress-track">${progress}</div></section>
       ${SonoMarziCivilRecordUI.facts([
         {label:'Plaintiff / Petitioner',value:r.plaintiff},
         {label:'Defendant / Respondent',value:r.defendant},
@@ -184,8 +185,7 @@ window.CaliforniaCivilView = (() => {
         {label:'Available Funds',value:money(current.availableCents??balance)},
         {label:'Open Claims / Stays',value:c.holds.filter(h=>!h.resolvedAt).length}
       ])}
-      ${serviceMap}
-      <section class="ca-progress"><div class="ca-progress-title"><h4>Case progress</h4><span>${esc(r.stage)}</span></div><div class="ca-progress-track">${progress}</div></section>
+
       <div class="panel ca-next-step"><div class="panel-body"><div class="ca-next-heading"><h4>Recommended next step</h4><span>Guided workflow</span></div><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
       <p class="ca-form-reference">Packet forms: ${esc(workflow.forms.join(", "))}. Return: ${esc(workflow.returns.join(", "))}.</p><div id="ca-actions"></div>
       <h4>Documents</h4><div id="ca-documents"></div><h4>Case record</h4>
@@ -356,7 +356,8 @@ window.CaliforniaCivilView = (() => {
           ]),
           "No history recorded.",
         ),
-      )}`;
+      )}
+      ${serviceMap}`;
   }
   function fieldsForAction(action, record, definitions) {
     const workflow = record.california.workflowId;
