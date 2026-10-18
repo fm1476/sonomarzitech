@@ -17,7 +17,7 @@ window.STATE={personnel:[{id:'demo',name:'Demo Deputy'}]};
 window.AWS_ATTACHMENTS={upload:async()=>({storageKey:'demo/file'}),download:async()=>{}};
 window.SuiteStore={mode:()=> 'shared',remoteContext:()=>({tenantId:'demo',agencyId:'demo'}),api:async(_path,opt)=>{
 const b=JSON.parse(opt.body);
-const data=b.operation==='context'?{profile:{profileId:'US-CA',status:'test',county:'Sonoma'},workflows,admin:true,personId:'demo',abilities:[],people:[]}:b.operation==='list'?{cases:[{record,version:1}],nextCursor:null}:b.operation==='get'?{record,version:1}:b.operation==='calendar'?{events:[]}:b.operation==='roster'?{people:[]}:null;
+const data=b.operation==='context'?{profile:{profileId:'US-CA',status:'test',county:'Sonoma'},workflows,admin:true,personId:'demo',abilities:[],people:[]}:b.operation==='filters'?{types:[record.paperType],locations:[record.courtOfOrigin]}:b.operation==='list'?{cases:[{record,version:1}],nextCursor:null}:b.operation==='get'?{record,version:1}:b.operation==='calendar'?{events:[]}:b.operation==='roster'?{people:[]}:null;
 if(!data)throw Error('Unexpected operation: '+b.operation);return {success:true,data};
 }};
 },{record,workflows:CA_WORKFLOWS});
