@@ -57,14 +57,6 @@ export async function civilAdminSettingsApi(client,auth,body){
     if(!Number.isSafeInteger(body.expectedRevision)||body.expectedRevision!==(entry.revision||0)){
       await client.query('ROLLBACK');return response(409,{success:false,error:'Civil administration settings changed. Reload this screen.'});
     }
-    if(body.section==='notifySettings'){
-      const roles=await client.query('SELECT role_id FROM suite_roles WHERE tenant_id=$1 AND agency_id=$2',[tenantId,agencyId]);
-      // Current built-in and agency-defined role IDs must exist within the agency.
-      const known=new Set(roles.rows.map(r=>r.role_id));
-      if(known.size && Object.values(validated).some(id=>!known.has(id))){
-        await client.query('ROLLBACK');return response(400,{success:false,error:'Select an existing notification role for this agency.'});
-      }
-    }
     const next={revision:(entry.revision||0)+1,values:{...(entry.values||{}),[body.section]:validated}};
     await client.query(`UPDATE suite_tenants SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{civilAdminSettings}',COALESCE(metadata->'civilAdminSettings','{}'::jsonb)||jsonb_build_object($2::text,$3::jsonb),true) WHERE id=$1`,[tenantId,agencyId,JSON.stringify(next)]);
     await appendAuditEvent(client,auth,{tenantId,agencyId,personId:access.personId,module:'Civil',entityType:'civil_configuration',description:'Updated California Civil administration: '+body.section+' (revision '+next.revision+').'});
