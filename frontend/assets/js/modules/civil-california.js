@@ -983,13 +983,20 @@ window.CaliforniaCivil = (() => {
           if(documentSection)documentSection.hidden=!showDocs;
           if(documentHeading)documentHeading.hidden=!showDocs;
           formLibrary.hidden=label!=="Forms";
-          if(recordHeading)recordHeading.hidden=showDocs;
-          tabs.querySelectorAll("button").forEach(button=>button.setAttribute("aria-current",button.dataset.section===label?"page":"false"));
+          // The Case record heading belongs to Overview; avoid showing a
+          // disconnected heading above unrelated tabs.
+          if(recordHeading)recordHeading.hidden=label!=="Overview";
+          tabs.querySelectorAll("button").forEach(button=>{
+            const active=button.dataset.section===label;
+            button.setAttribute("aria-current",active?"page":"false");
+            button.setAttribute("aria-pressed",String(active));
+          });
         };
         groups.forEach(group=>{
           const button=document.createElement("button");button.type="button";
           button.className="btn btn-outline";button.dataset.section=group.label;
           button.textContent=group.label;
+          button.setAttribute("aria-pressed","false");
           button.onclick=()=>activateGroup(group.label);
           tabs.append(button);
         });
