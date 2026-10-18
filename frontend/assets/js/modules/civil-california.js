@@ -1123,11 +1123,7 @@ window.CaliforniaCivil = (() => {
           if (can("civil_document_generate"))
             actions.push(
               "notice",
-              ...(r.stage === "Served" &&
-              ["summons", "small-claims"].includes(c.workflowId) &&
-              c.service?.method === "Personal service"
-                ? ["generate_return_draft"]
-                : []),
+              ...(canDraft ? ["generate_return_draft"] : []),
               ...(["Served", "Unable to Serve"].includes(r.stage)
                 ? ["prepare_return"]
                 : []),
