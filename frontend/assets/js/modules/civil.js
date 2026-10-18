@@ -775,7 +775,7 @@ function openCourtReturnConfirmation(paperId){
   box.querySelector('#mSave').onclick=()=>{
     const date=box.querySelector('#fReturnDate').value;
     const reference=box.querySelector('#fReturnReference').value.trim();
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!reference){
+    if(date.length!==10||!Number.isFinite(Date.parse(date))||!reference){
       box.querySelector('#civilReturnError').textContent='Enter the actual filing date and court receipt or delivery reference.';
       return;
     }
