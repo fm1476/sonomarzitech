@@ -2675,8 +2675,17 @@ async function openIntakeModal(existingId){
 function openGenerateDocReasonModal(p){
   const isNonService = p.stage==='Unable to Serve';
   const docType = isNonService ? 'Affidavit of Non-Service' : 'Return of Service';
-  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').className = 'modal civil-return-entry';
   document.getElementById('modalBox').innerHTML = `
+    <style>
+      #modalBox.civil-return-entry{width:min(570px,calc(100vw - 32px));max-width:570px;display:flex;flex-direction:column;border-radius:18px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#172335))}
+      #modalBox.civil-return-entry .modal-head{padding:21px 24px;background:linear-gradient(115deg,rgba(51,125,225,.17),rgba(20,155,139,.08));border-bottom:1px solid var(--border)}
+      #modalBox.civil-return-entry .modal-body{padding:24px}
+      #modalBox.civil-return-entry .modal-foot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:9px}
+      #modalBox.civil-return-entry textarea{box-sizing:border-box;width:100%;min-height:114px;border-radius:10px;resize:vertical}
+      #modalBox.civil-return-entry .btn{border-radius:10px;min-height:42px}
+      @media(max-width:600px){#modalBox.civil-return-entry{width:100vw;max-height:100dvh;border-radius:0}}
+    </style>
     <div class="modal-head"><h3>Generate ${docType}</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Reason for Generating This Copy</label>
