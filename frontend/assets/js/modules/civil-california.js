@@ -235,6 +235,8 @@ window.CaliforniaCivil = (() => {
       if (context.profile.profileId !== "US-CA") return false;
       const can = (a) => context.admin || context.abilities.includes(a);
       let selection = 0;
+      let activeCaseId = null;
+      let activeCaseSection = "Overview";
       let calendarController;
       const firstPage = await api(
         "list",
@@ -875,6 +877,7 @@ window.CaliforniaCivil = (() => {
           0,
         );
       async function detail(caseId) {
+        if(activeCaseId !== caseId){activeCaseId=caseId;activeCaseSection="Overview";}
         const selected = ++selection;
         const current = await api("get", { id: caseId }, scope);
         if (token !== generation || selected !== selection) return;
@@ -897,6 +900,8 @@ window.CaliforniaCivil = (() => {
         bar.querySelector("[data-back-cases]").onclick=()=>{
           if(root.querySelector("#ca-form form")){status("Save or cancel the current action before returning to cases.");return;}
           ++selection;
+          activeCaseId=null;
+          activeCaseSection="Overview";
           shell?.classList.remove("ca-workspace-open");
           panel.innerHTML="";
         };
@@ -993,6 +998,7 @@ window.CaliforniaCivil = (() => {
         });
         const activateGroup=label=>{
           const group=groups.find(g=>g.label===label)||groups[0];
+          activeCaseSection=group.label;
           sections.forEach((section,i)=>{section.hidden=!group.parts.includes(i);section.open=group.parts.includes(i);});
           const showDocs=label==="Documents";
           if(documentSection)documentSection.hidden=!showDocs;
@@ -1029,7 +1035,7 @@ window.CaliforniaCivil = (() => {
           tabs.append(button);
         });
         panel.querySelector("#ca-actions")?.after(tabs);
-        activateGroup("Overview");
+        activateGroup(activeCaseSection);
         const closed = ["Closed", "Cancelled"].includes(r.stage),
           actions = [];
         if (!closed) {
