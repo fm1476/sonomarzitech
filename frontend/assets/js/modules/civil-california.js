@@ -968,19 +968,29 @@ window.CaliforniaCivil = (() => {
         const recordHeading=sections[0]?.previousElementSibling;
         const tabs=document.createElement("nav");
         tabs.className="ca-case-tabs";tabs.setAttribute("aria-label","Case workspace sections");
+        // Assign each case-record section to exactly one workspace. Regex
+        // overlaps previously caused service outcome and court return sections
+        // to appear in multiple tabs, often disconnected from their actions.
         const groups=[
-          {label:"Overview",parts:[0]},
-          {label:"Service",parts:titles.map((t,i)=>/service attempts|service outcome/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"Documents",parts:[]},
-          {label:"Deadlines",parts:titles.map((t,i)=>/deadline|notice/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"Enforcement",parts:titles.map((t,i)=>/enforcement/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"Claims",parts:titles.map((t,i)=>/claim|stay/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"Financials",parts:titles.map((t,i)=>/ledger|disburse/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"Forms",parts:titles.map((t,i)=>/court.form|draft|return/i.test(t)?i:-1).filter(i=>i>=0)},
-          {label:"History",parts:titles.map((t,i)=>/history/i.test(t)?i:-1).filter(i=>i>=0)}
+          {label:"Overview",parts:[]},{label:"Service",parts:[]},
+          {label:"Documents",parts:[]},{label:"Deadlines",parts:[]},
+          {label:"Enforcement",parts:[]},{label:"Claims",parts:[]},
+          {label:"Financials",parts:[]},{label:"Forms",parts:[]},
+          {label:"History",parts:[]}
         ];
-        const allocated=new Set(groups.flatMap(g=>g.parts));
-        groups[0].parts.push(...sections.map((_,i)=>i).filter(i=>!allocated.has(i)));
+        const categoryFor=title=>{
+          if(/history|audit/i.test(title))return "History";
+          if(/court.form|form drafts|return packet/i.test(title))return "Forms";
+          if(/service attempts|service outcome|court return/i.test(title))return "Service";
+          if(/deadline|delivered notices/i.test(title))return "Deadlines";
+          if(/enforcement/i.test(title))return "Enforcement";
+          if(/claim|stay/i.test(title))return "Claims";
+          if(/ledger|disburse|financial/i.test(title))return "Financials";
+          return "Overview";
+        };
+        titles.forEach((title,index)=>{
+          groups.find(group=>group.label===categoryFor(title)).parts.push(index);
+        });
         const activateGroup=label=>{
           const group=groups.find(g=>g.label===label)||groups[0];
           sections.forEach((section,i)=>{section.hidden=!group.parts.includes(i);section.open=group.parts.includes(i);});
