@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -25,55 +25,6 @@ jobs:
       - name: Install API dependencies for official return template checks
         run: npm ci --prefix lambdas/api --ignore-scripts --no-audit --no-fund
 
-      - name: Retrieve official POS PDFs for controlled form mapping
-        continue-on-error: true
-        run: |
-          mkdir -p artifacts/official-pos
-          for code in pos020 pos030 pos040; do
-            curl --fail --location --retry 2 --connect-timeout 10 --max-time 40 \
-              "https://www.courts.ca.gov/documents/${code}.pdf" -o "artifacts/official-pos/${code}.pdf" || \
-            curl --fail --location --retry 2 --connect-timeout 10 --max-time 40 \
-              "https://courts.ca.gov/sites/default/files/courts/default/2024-11/${code}.pdf" -o "artifacts/official-pos/${code}.pdf" || true
-          done
-          file artifacts/official-pos/* || true
-          sha256sum artifacts/official-pos/*.pdf || true
-      - name: Import verified official PDF binaries into isolated forms branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          TARGET_BRANCH: ${{ github.head_ref }}
-        run: |
-          set -e
-          test "$TARGET_BRANCH" = "civil-pos-020-030-040-preflight"
-          for code in pos020 pos030 pos040; do test -s "artifacts/official-pos/${code}.pdf"; done
-          mkdir -p lambdas/api/templates/civil
-          python -m pip install --quiet --disable-pip-version-check PyMuPDF==1.26.7
-          python - <<'PY'
-          import fitz
-          for code in ("pos020","pos030","pos040"):
-              source="artifacts/official-pos/"+code+".pdf"
-              target="lambdas/api/templates/civil/"+code+".pdf"
-              pdf=fitz.open(source)
-              pdf.save(target,garbage=4,deflate=True,encryption=fitz.PDF_ENCRYPT_NONE)
-              pdf.close()
-          import hashlib,json,pathlib
-          manifestFile=pathlib.Path("lambdas/api/templates/civil/manifest.json")
-          manifest=json.loads(manifestFile.read_text())
-          for code in ("pos020","pos030","pos040"):
-              original=pathlib.Path("artifacts/official-pos/"+code+".pdf").read_bytes()
-              if hashlib.sha256(original).hexdigest()!=manifest[code]["sourceSha256"]:
-                  raise SystemExit("Court source PDF changed: "+code)
-              normalized=pathlib.Path("lambdas/api/templates/civil/"+code+".pdf").read_bytes()
-              manifest[code]["templateSha256"]=hashlib.sha256(normalized).hexdigest()
-              print(code,"normalized SHA:",manifest[code]["templateSha256"])
-          manifestFile.write_text(json.dumps(manifest,indent=2))
-          PY
-          git fetch origin "$TARGET_BRANCH"
-          git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
-          git add lambdas/api/templates/civil/pos020.pdf lambdas/api/templates/civil/pos030.pdf lambdas/api/templates/civil/pos040.pdf lambdas/api/templates/civil/manifest.json
-          if ! git diff --cached --quiet; then
-            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Import official California POS-020/030/040 PDF templates"
-            git push origin "HEAD:refs/heads/$TARGET_BRANCH"
-          fi
       - name: Verify California PostgreSQL and staff forms
         run: |
           node tests/civil-california-postgres.test.mjs
@@ -99,12 +50,3 @@ jobs:
           path: artifacts/civil-*.png
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Upload official POS PDFs for field inspection
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: california-pos-source-pdfs
-          path: artifacts/official-pos/*.pdf
-          if-no-files-found: ignore
-          retention-days: 1
