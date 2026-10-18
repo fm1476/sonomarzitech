@@ -1279,31 +1279,26 @@ function renderPaperDetailTabContent(p){
 
   } else if(PAPER_DETAIL_TAB==='documents'){
     const docs = (p.generatedDocuments||[]).slice().reverse();
-    const attached = (p.attachedDocuments||[]).slice().reverse();
+    const attached = (p.attachedDocuments||[]).filter(d=>!d.archivedAt).slice().reverse();
     body.innerHTML = `
       ${canDoc ? `
       <div id="civilDocumentDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:16px;">
         <span style="width:26px;height:26px;display:inline-block;color:var(--text-dim);">${ICONS.paperclip||ICONS.download}</span>
         <div style="font-weight:700;font-size:13px;margin-top:8px;">Drag &amp; drop documents here, or click to browse</div>
-        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">PDFs, court documents, scans, photos, and other files are stored privately in AWS S3. Maximum 25 MB per file.</div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">PDFs, court documents, scans, photos, and other files are stored privately in AWS S3. Maximum 500 MB per file.</div>
         <input type="file" id="civilDocumentFileInput" multiple style="display:none;">
       </div>` : ''}
-      <div class="panel" style="box-shadow:none;margin-bottom:16px;"><div class="panel-head"><h2>Uploaded Documents</h2><span class="hint">${attached.length} file${attached.length===1?'':'s'}</span></div>
-        <div class="panel-body" style="padding:0;">
-          <table><thead><tr><th>File</th><th>Uploaded</th><th>Uploaded By</th><th>Size</th><th></th></tr></thead><tbody>
-          ${attached.map(d=>`<tr>
-            <td>${escapeHtml(d.filename||'Document')}</td>
-            <td class="mono" style="font-size:12.5px;">${escapeHtml(d.uploadedDate||'')}</td>
-            <td>${escapeHtml(d.uploadedBy||'')}</td>
-            <td>${d.sizeKb?escapeHtml(String(d.sizeKb))+' KB':'—'}</td>
-            <td><div class="cell-actions">
-              <button class="btn btn-sm btn-outline" data-open-civil-doc="${d.id}">Open</button>
-              ${canDoc? `<button class="btn btn-sm btn-danger" data-remove-civil-doc="${d.id}">${ICONS.trash||''} Remove</button>` : ''}
-            </div></td>
-          </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No documents uploaded yet.</td></tr>`}
-          </tbody></table>
-        </div>
-      </div>
+      <style>
+      .civil-document-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:12px;margin:12px 0 22px}
+      .civil-document-card{padding:17px;border:1px solid var(--border);background:var(--surface);border-radius:13px;display:flex;flex-direction:column;gap:12px;min-width:0}
+      .civil-document-card strong{overflow-wrap:anywhere}.civil-document-card small{color:var(--text-dim);font-size:12px}
+      .civil-document-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+      .civil-document-actions .btn{border-radius:9px;min-height:39px}
+      .civil-document-section-title{display:flex;justify-content:space-between;align-items:center;gap:12px}
+      .civil-document-empty{border:1px dashed var(--border);padding:22px;border-radius:12px;color:var(--text-dim);margin:12px 0 20px}
+      </style>
+      <div class="civil-document-section-title"><h3>Uploaded Documents</h3><span class="hint">${attached.length} files</span></div>
+      ${attached.length?'<div class="civil-document-cards">'+attached.map(d=>`<article class="civil-document-card"><strong>${escapeHtml(d.filename||'Document')}</strong><small>${escapeHtml(d.uploadedDate||'')} · ${escapeHtml(d.uploadedBy||'')} · ${d.sizeKb?escapeHtml(String(d.sizeKb))+' KB':'Size unavailable'}</small><div class="civil-document-actions"><button class="btn btn-outline" data-open-civil-doc="${d.id}">Open</button>${canDoc?`<button class="btn btn-outline" data-replace-civil-doc="${d.id}">Replace</button><button class="btn btn-outline" data-remove-civil-doc="${d.id}">Remove</button>`:''}</div></article>`).join('')+'</div>':'<div class="civil-document-empty">No files uploaded. Use Add documents above to attach court packets and supporting records.</div>'}
       ${canDoc ? `<button class="btn btn-sm btn-primary" style="margin-bottom:14px;" id="btnGenerateROS">${ICONS.download} Generate Return of Service</button>` : ''}
       ${!p.servedDate ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">A Return of Service can be generated once the paper has been marked served (or unable to serve, for an Affidavit of Non-Service).</div>` : ''}
       <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Generated Returns &amp; Affidavits</h2></div>
@@ -1327,22 +1322,51 @@ function renderPaperDetailTabContent(p){
       catch(error){ toast(error.message||'Document could not be opened.',true); }
     }));
 
-    document.querySelectorAll('[data-remove-civil-doc]').forEach(b=>b.addEventListener('click', async ()=>{
+    const documentReason = title => new Promise(resolve=>{
+      const layer=document.createElement('div');
+      layer.style.cssText='position:fixed;inset:0;background:rgba(3,10,22,.82);z-index:11000;display:grid;place-items:center;padding:18px;backdrop-filter:blur(4px)';
+      layer.innerHTML='<form style="background:var(--surface,#172335);color:var(--text);border:1px solid var(--border);border-radius:16px;width:min(470px,100%);padding:24px;box-shadow:0 25px 65px rgba(0,0,0,.45)"><h3 style="margin:0 0 14px"></h3><label class="form-row">Reason <textarea name="reason" required rows="3" maxlength="3000" placeholder="Explain this document change" style="width:100%"></textarea></label><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px"><button type="button" class="btn btn-outline" data-dismiss>Cancel</button><button type="submit" class="btn btn-primary">Continue</button></div></form>';
+      layer.querySelector('h3').textContent=title;
+      const done=value=>{layer.remove();resolve(value);};
+      layer.querySelector('[data-dismiss]').onclick=()=>done(null);
+      layer.querySelector('form').onsubmit=e=>{e.preventDefault();done(layer.querySelector('textarea').value.trim()||null);};
+      document.body.append(layer);layer.querySelector('textarea').focus();
+    });
+    document.querySelectorAll('[data-replace-civil-doc]').forEach(b=>b.addEventListener('click',()=>{
+      const doc=(p.attachedDocuments||[]).find(d=>d.id===b.dataset.replaceCivilDoc);
+      if(!doc)return;
+      const fileInput=document.createElement('input');
+      fileInput.type='file';fileInput.style.display='none';document.body.append(fileInput);
+      fileInput.onchange=async()=>{
+        const file=fileInput.files?.[0];
+        fileInput.remove();if(!file)return;
+        const reason=await documentReason('Replace document');
+        if(!reason?.trim())return;
+        b.disabled=true;
+        try{
+          const meta=await AWS_ATTACHMENTS.upload(file,{collection:'civil.papers',itemId:p.id});
+          const newer={id:'civdoc'+Date.now()+Math.random().toString(36).slice(2,7),...meta,replacesDocumentId:doc.id};
+          const previous={...doc};
+          doc.archivedAt=new Date().toISOString();doc.archiveReason=reason.trim();doc.replacedBy=newer.id;
+          p.attachedDocuments.push(newer);
+          recordFieldChangeCivil(p,'Attached Document',previous.filename,newer.filename);
+          logActivity(`Replaced document "${previous.filename||'Document'}" with "${newer.filename}" on ${p.caseNumber}. Reason: ${reason.trim()}`,'civil_paper',p.id);
+          persist();renderPaperDetailTabContent(p);toast('Replacement document saved.');
+        }catch(error){b.disabled=false;toast(error.message||'Replacement failed.',true);}
+      };
+      fileInput.click();
+      fileInput.addEventListener('cancel',()=>fileInput.remove(),{once:true});
+    }));
+
+    document.querySelectorAll('[data-remove-civil-doc]').forEach(b=>b.addEventListener('click',async()=>{
       const doc=(p.attachedDocuments||[]).find(d=>d.id===b.dataset.removeCivilDoc);
-      if(!doc || !confirm(`Remove "${doc.filename||'this document'}" from this civil paper?`)) return;
-      b.disabled=true;
-      try{
-        if(doc.storageKey) await AWS_ATTACHMENTS.remove(doc,{collection:'civil.papers',itemId:p.id});
-        p.attachedDocuments=(p.attachedDocuments||[]).filter(d=>d.id!==doc.id);
-        recordFieldChangeCivil(p,'Attached Document',doc.filename||doc.id,null);
-        logActivity(`Removed document "${doc.filename||'Document'}" from ${p.caseNumber}.`,"civil_paper",p.id);
-        persist();
-        toast('Document removed.');
-        renderPaperDetailTabContent(p);
-      }catch(error){
-        b.disabled=false;
-        toast(error.message||'Document could not be removed.',true);
-      }
+      if(!doc)return;
+      const reason=await documentReason('Remove document from active case');
+      if(!reason?.trim())return;
+      doc.archivedAt=new Date().toISOString();doc.archiveReason=reason.trim();
+      recordFieldChangeCivil(p,'Attached Document',doc.filename||doc.id,null);
+      logActivity(`Removed document "${doc.filename||'Document'}" from active case ${p.caseNumber}. Reason: ${reason.trim()}`,'civil_paper',p.id);
+      persist();renderPaperDetailTabContent(p);toast('Document removed from active view; original retained for audit.');
     }));
 
     const dropZone=document.getElementById('civilDocumentDropZone');
