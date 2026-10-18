@@ -343,6 +343,13 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
 .ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
 .ca-classic #ca-detail .ca-case-content{display:block}
+.ca-classic .ca-upload-drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:26px 18px;border:2px dashed var(--ca-border);border-radius:14px;background:rgba(54,122,215,.055);text-align:center;cursor:pointer;min-height:146px;overflow:hidden}
+.ca-classic .ca-upload-drop:hover,.ca-classic .ca-upload-drop:focus-within{border-color:var(--ca-accent);background:rgba(54,122,215,.10)}
+.ca-classic .ca-upload-drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.ca-classic .ca-upload-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:rgba(58,128,224,.2);color:var(--ca-accent);font-size:23px;font-weight:700}
+.ca-classic .ca-upload-hint,.ca-classic .ca-upload-filename{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere}
+.ca-classic .ca-upload-filename{color:var(--heading,var(--text));font-weight:600}
+.ca-classic .ca-upload-field small{color:var(--text-dim)}
 .ca-classic .ca-action-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ca-classic .ca-action-row>.btn,.ca-classic .ca-action-row>.ca-action-menu>summary{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:42px;min-height:42px;padding:0 16px;margin:0;border-radius:10px;font-size:13px;line-height:1.2;font-weight:650;white-space:nowrap}
 .ca-classic .ca-action-row>.ca-action-menu{border:0;padding:0;margin:0;background:transparent;box-shadow:none}
@@ -477,6 +484,13 @@ window.CaliforniaCivil = (() => {
           return;
         }
         target.innerHTML = `<form><h3>${esc(title)}</h3>${html}<p role="alert"></p><button class="btn btn-primary" type="submit">Save</button> <button class="btn btn-outline" type="button" id="ca-cancel-form">Cancel</button></form>`;
+        const fileInput=target.querySelector('input[type="file"]');
+        if(fileInput){
+          fileInput.addEventListener("change",()=>{
+            const label=target.querySelector(".ca-upload-filename");
+            if(label)label.textContent=fileInput.files?.[0]?.name || "No file selected";
+          });
+        }
         window.CaliforniaCivilView.bindServiceFields(
           target.querySelector("form"),
         );
@@ -1108,11 +1122,11 @@ window.CaliforniaCivil = (() => {
               "Fee authority",
               "Other",
             ]) +
-              '<label class="form-row">Document<input name="file" type="file" required></label>' +
-              input("note"),
+              '<label class="form-row ca-upload-field">Document<span class="ca-upload-drop"><span class="ca-upload-icon" aria-hidden="true">↑</span><strong>Choose a file to upload</strong><span class="ca-upload-hint">PDF, image or other supported file · Up to 500 MB</span><span class="ca-upload-filename" aria-live="polite">No file selected</span><input name="file" type="file" required aria-label="Choose case document"></span></label>' +
+              '<label class="form-row">Note <small>(optional)</small><input name="note" placeholder="Additional context for the record"></label>',
             async (data) => {
-              if (!data.get("kind") || !String(data.get("note") || "").trim())
-                throw Error("Choose a document kind and enter an action note.");
+              if (!data.get("kind"))
+                throw Error("Choose a document kind.");
               const file = data.get("file");
               if (!file?.size) throw Error("Choose a nonempty file.");
               const meta = await AWS_ATTACHMENTS.upload(file, {
@@ -1123,7 +1137,7 @@ window.CaliforniaCivil = (() => {
                 kind: data.get("kind"),
                 name: file.name,
                 key: meta.storageKey,
-                note: data.get("note"),
+                note: String(data.get("note") || "").trim() || "Document uploaded: " + file.name,
               });
             },
           ),
