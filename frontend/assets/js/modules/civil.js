@@ -2292,8 +2292,19 @@ function openLogAttemptModal(paperId){
   const now = new Date();
   const cfg = feeConfigFor(p.paperType);
   const attemptNumber = p.attempts.length + 1;
-  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').className = 'modal civil-attempt-entry';
   document.getElementById('modalBox').innerHTML = `
+    <style>
+      #modalBox.civil-attempt-entry{width:min(620px,calc(100vw - 32px));max-width:620px;max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--panel-bg,var(--bg-card,#172335))}
+      #modalBox.civil-attempt-entry .modal-head{padding:20px 24px;background:linear-gradient(105deg,rgba(45,119,221,.18),rgba(23,164,144,.07));border-bottom:1px solid var(--border)}
+      #modalBox.civil-attempt-entry .modal-body{padding:22px 24px;overflow-y:auto;min-height:0;flex:1}
+      #modalBox.civil-attempt-entry .modal-foot{padding:14px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--border)}
+      #modalBox.civil-attempt-entry .form-2col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+      #modalBox.civil-attempt-entry .form-row{min-width:0;margin-bottom:16px}
+      #modalBox.civil-attempt-entry input,#modalBox.civil-attempt-entry select,#modalBox.civil-attempt-entry textarea{box-sizing:border-box;max-width:100%;width:100%;border-radius:10px;min-height:43px}
+      #modalBox.civil-attempt-entry .btn{border-radius:10px;min-height:40px}
+      @media(max-width:600px){#modalBox.civil-attempt-entry{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}#modalBox.civil-attempt-entry .form-2col{grid-template-columns:1fr}}
+    </style>
     <div class="modal-head"><h3>Log Service Attempt \u2014 ${escapeHtml(p.caseNumber)}</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">This will be attempt #${attemptNumber}${cfg.requiredAttempts?` (agency guideline for ${escapeHtml(p.paperType)}: ${cfg.requiredAttempts} attempt${cfg.requiredAttempts===1?'':'s'} before returning unable to serve)`:''}.</div>
