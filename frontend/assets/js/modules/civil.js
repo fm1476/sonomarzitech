@@ -1065,6 +1065,17 @@ function renderPaperDetailTabContent(p){
     const glCodes = STATE.civil.refData.feeCategoryGLCodes||{};
     const payGlCodes = STATE.civil.refData.paymentMethodGLCodes||{};
     body.innerHTML = `
+      <style>
+      #modalBox.civil-case-workspace .civil-finance-layout .panel{border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px!important;background:var(--surface)}
+      #modalBox.civil-case-workspace .civil-finance-layout .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 18px;border-bottom:1px solid var(--border)}
+      #modalBox.civil-case-workspace .civil-finance-layout .panel-head h2{font-size:16px;font-weight:750}
+      #modalBox.civil-case-workspace .civil-finance-layout .panel-body{overflow-x:auto;max-width:100%}
+      #modalBox.civil-case-workspace .civil-finance-layout .panel-body>table{min-width:620px}
+      #modalBox.civil-case-workspace .civil-finance-layout .panel-body>table td{vertical-align:middle;white-space:normal}
+      #modalBox.civil-case-workspace .civil-finance-layout>.detail-grid{margin-bottom:22px!important}
+      @media(max-width:650px){#modalBox.civil-case-workspace .civil-finance-layout .panel-head{padding:13px}}
+      </style>
+      <div class="civil-finance-layout">
       <div class="detail-grid" style="margin-bottom:16px;">
         <div><div class="k">Total Fees Owed</div><div class="v" style="font-size:17px;">${moneyPrecise(owed)}</div></div>
         <div><div class="k">Total Received</div><div class="v" style="font-size:17px;color:var(--green);">${moneyPrecise(received)}</div></div>
@@ -1097,6 +1108,7 @@ function renderPaperDetailTabContent(p){
         ${p.feePayments.map((pay,pi)=>`<tr style="${pay.voided?'opacity:0.5;':''}"><td>${pay.date}</td><td>${moneyPrecise(pay.amount)}</td><td><span class="badge badge-role">${escapeHtml(pay.method)}</span></td><td class="mono" style="font-size:11.5px;">${payGlCodes[pay.method]?escapeHtml(payGlCodes[pay.method]):'—'}</td><td class="mono" style="font-size:11.5px;">${(pay.referenceNumber ? escapeHtml(pay.referenceNumber) : '—')}</td><td>${escapeHtml(pay.receivedBy)}</td><td style="font-size:12px;">${pay.voided?`<strong style="color:var(--red);">VOIDED: ${escapeHtml(pay.voidReason||'')}</strong>`:escapeHtml(pay.notes||'')}</td>
           <td>${(canFee && !pay.voided)?`<button class="btn-icon" data-void-payment="${pi}" title="Void">${ICONS.trash}</button>`:''}</td></tr>`).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:14px;">No payments recorded yet.</td></tr>`}
         </tbody></table></div>
+      </div>
       </div>
     `;
     const addFeeBtn = document.getElementById('btnAddFeeLine');
