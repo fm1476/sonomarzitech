@@ -383,6 +383,28 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     };
     c.documents.push(d);
     r.attachedDocuments.push(d);
+  } else if (command === "replace_document") {
+    permission(ctx, "civil_document_generate");
+    note();
+    requireValue(!["Return Prepared","Reviewed","Returned to Court"].includes(r.stage),
+      "Reopen the court return review before replacing supporting documents.",409);
+    const index=c.documents.findIndex(d=>d.id===payload.documentId);
+    requireValue(index>=0,"Document not found.",404);
+    const previous=c.documents[index];
+    requireValue(!c.returnPacket?.documentId || c.returnPacket.documentId!==previous.id,
+      "This document is linked to the court return and cannot be replaced.",409);
+    requireValue(text(payload.name,255)&&text(payload.key,1500),"Replacement filename and uploaded object key are required.");
+    requireValue(!c.documents.some(d=>d.key===payload.key),"Document is already attached.",409);
+    const next={id:ctx.eventId,name:payload.name,key:payload.key,kind:previous.kind,uploadedBy:ctx.userId,at:ctx.at,replacesDocumentId:previous.id};
+    c.documents[index]=next;
+    r.attachedDocuments=(r.attachedDocuments||[]).filter(d=>d.id!==previous.id);
+    r.attachedDocuments.push(next);
+    c.removedDocuments??=[];
+    c.removedDocuments.push({...previous,removedAt:ctx.at,removedBy:ctx.userId,reason:payload.note,replacedBy:next.id});
+    if(r.stage==="Ready"&&["Court packet","Signed instructions","Writ"].includes(previous.kind)){
+      r.stage="Intake";
+      delete c.intakeApproval;
+    }
   } else if (command === "remove_document") {
     permission(ctx, "civil_document_generate");
     note();
