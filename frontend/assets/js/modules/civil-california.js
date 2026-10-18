@@ -359,6 +359,14 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
 .ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
 @media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-intake-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+.ca-classic .ca-intake-intro{margin:0 0 18px;color:var(--text-dim);font-size:13px;line-height:1.6}
+.ca-classic .ca-intake-section{grid-column:1/-1;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ca-accent);border-bottom:1px solid var(--ca-border);padding-bottom:9px;margin-top:10px}
+.ca-classic .ca-intake-grid .form-row{margin:0}
+.ca-classic .ca-intake-grid .ca-wide{grid-column:1/-1}
+.ca-classic .ca-intake-grid input,.ca-classic .ca-intake-grid select{min-height:43px;box-sizing:border-box}
+.ca-classic .ca-intake-grid .ca-field-help{font-size:11px;color:var(--text-dim);line-height:1.4}
+@media(max-width:620px){.ca-classic .ca-intake-grid{grid-template-columns:1fr}.ca-classic .ca-intake-grid .ca-wide{grid-column:1}}
 .ca-classic .ca-kind-picker{position:relative;min-width:0}
 .ca-classic .ca-kind-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;min-height:44px;text-align:left}
 .ca-classic .ca-kind-options{position:relative;z-index:4;margin-top:6px;border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface);padding:5px;max-height:235px;overflow-y:auto;box-shadow:0 10px 22px rgba(0,0,0,.16)}
@@ -580,7 +588,7 @@ window.CaliforniaCivil = (() => {
       root.querySelector("#ca-new")?.addEventListener("click", () =>
         form(
           "New California case",
-          input(
+          '<p class="ca-intake-intro">Start with the court and parties. You can attach documents and complete required review details after creating the case.</p><div class="ca-intake-grid"><div class="ca-intake-section">Court & process</div>' + input(
             "workflowId",
             "",
             Object.entries(context.workflows).map(([v, w]) => [v, w.label]),
@@ -596,7 +604,7 @@ window.CaliforniaCivil = (() => {
               .map((s) => s === "courtOfOrigin"
                 ? '<label class="form-row">Court of Origin <input name="courtOfOrigin" list="ca-courts-origin" placeholder="Start typing a California county or enter another court" autocomplete="off"><datalist id="ca-courts-origin">' + ["Alameda","Alpine","Amador","Butte","Calaveras","Colusa","Contra Costa","Del Norte","El Dorado","Fresno","Glenn","Humboldt","Imperial","Inyo","Kern","Kings","Lake","Lassen","Los Angeles","Madera","Marin","Mariposa","Mendocino","Merced","Modoc","Mono","Monterey","Napa","Nevada","Orange","Placer","Plumas","Riverside","Sacramento","San Benito","San Bernardino","San Diego","San Francisco","San Joaquin","San Luis Obispo","San Mateo","Santa Barbara","Santa Clara","Santa Cruz","Shasta","Sierra","Siskiyou","Solano","Sonoma","Stanislaus","Sutter","Tehama","Trinity","Tulare","Tuolumne","Ventura","Yolo","Yuba"].map(c=>'<option value="'+esc(c)+' County Superior Court"></option>').join('') + '</datalist><small style="color:var(--text-dim)">California courts are suggested. Courts from other jurisdictions may be entered manually.</small></label>'
                 : input(s))
-              .join(""),
+              .join("") + "</div>",
           async (data) => {
             const record = Object.fromEntries(data);
             record.serviceAddresses = [{ address: record.address }];
