@@ -171,16 +171,20 @@ window.CaliforniaCivilView = (() => {
     const stages=["Intake","Ready","Assigned","Attempting","Served","Return Prepared","Reviewed","Returned to Court","Closed"];
     const at=stages.indexOf(r.stage);
     const progress=stages.map((step,i)=>'<div class="ca-progress-step" data-complete="'+(at>=i&&at>=0)+'" data-current="'+(r.stage===step)+'"><span class="ca-progress-dot"></span><small>'+esc(step)+'</small></div>').join("");
-    return `<header class="ca-workspace-heading"><div><div class="ca-workspace-kicker">Civil case workspace</div><h2>${esc(r.caseNumber)}</h2><p>${esc(workflow.label)} · ${esc(r.courtOfOrigin)}</p></div><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></header>
+    return `${SonoMarziCivilCaseUI.style}
+      ${SonoMarziCivilCaseUI.header({caseNumber:r.caseNumber,paperType:workflow.label,court:r.courtOfOrigin,stage:r.stage,priority:r.priority==='Immediate',safety:activeFlags.length>0})}
       ${safetyNote}
-      <div class="ca-case-summary">
-        <div><small>Parties</small><strong>${esc(r.plaintiff)} / ${esc(r.defendant)}</strong></div>
-        <div><small>Assigned server</small><strong>${esc(person(r.assignedServerId))}</strong></div>
-        <div><small>Return due</small><strong>${esc(r.returnByDate ? date(r.returnByDate) : "Pending review")}</strong></div>
-        <div><small>Case balance</small><strong>${money(balance)}</strong></div>
-        <div><small>Released funds</small><strong>${money(current.availableCents ?? balance)}</strong></div>
-        <div><small>Open claims / stays</small><strong>${c.holds.filter(h=>!h.resolvedAt).length}</strong></div>
-      </div>
+      ${SonoMarziCivilCaseUI.facts([
+        {label:'Plaintiff / Petitioner',value:r.plaintiff},
+        {label:'Defendant / Respondent',value:r.defendant},
+        {label:'Assigned server',value:person(r.assignedServerId)},
+        {label:'Received',value:date(r.receivedDate)},
+        {label:'Return by',value:r.returnByDate?date(r.returnByDate):'Pending review'},
+        {label:'Service method',value:c.service?.method||'Not yet determined'},
+        {label:'Case balance',value:money(balance)},
+        {label:'Released funds',value:money(current.availableCents??balance)},
+        {label:'Open claims / stays',value:c.holds.filter(h=>!h.resolvedAt).length}
+      ])}
       ${serviceMap}
       <section class="ca-progress"><div class="ca-progress-title"><h4>Case progress</h4><span>${esc(r.stage)}</span></div><div class="ca-progress-track">${progress}</div></section>
       <div class="panel ca-next-step"><div class="panel-body"><div class="ca-next-heading"><h4>Recommended next step</h4><span>Guided workflow</span></div><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>
