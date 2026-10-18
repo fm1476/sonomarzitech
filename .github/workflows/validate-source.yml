@@ -27,6 +27,7 @@ jobs:
 
       - name: Verify California PostgreSQL and staff forms
         run: |
+          node tests/civil-admin-settings.test.mjs
           node tests/civil-california-postgres.test.mjs
           node tests/civil-california-view.test.mjs
           node tests/civil-california-presentation.test.mjs

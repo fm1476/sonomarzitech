@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {validateCivilAdminSetting as validate} from '../lambdas/api/lib/civil-admin-validation.mjs';
+assert.deepEqual(validate('notifySettings',{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'role_admin'}),{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'role_admin'});
+assert.throws(()=>validate('notifySettings',{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'<script>'}),/Invalid/);
+assert.throws(()=>validate('notifySettings',{returnDueRoleId:'role_admin'}),/Invalid/);
+assert.deepEqual(validate('courtsOfOrigin',['Sonoma Superior Court']),['Sonoma Superior Court']);
+assert.throws(()=>validate('courtsOfOrigin',['Court','court']),/Duplicate/);
+assert.throws(()=>validate('paperTypes',Array(151).fill('Paper')),/Invalid/);
+const feeSchedule={mileageRatePerMile:0.7,interestRateAnnualPercent:10,commissionRatePercent:5,feeWaiverApprovalThreshold:100,voidApprovalThreshold:100,byType:{Summons:{baseFee:45,additionalAttemptFee:15,defaultDeadlineDays:21,requiredAttempts:3,feeWaived:false,enforceable:false,allowedServiceMethods:['Personal Service']}}};
+const financialSettings={feeSchedule,feeCategoryGLCodes:{'Base Service Fee':'4010'},paymentMethodGLCodes:{Cash:'1010'}};
+assert.equal(validate('financialSettings',financialSettings).feeSchedule.byType.Summons.baseFee,45);
+assert.throws(()=>validate('financialSettings',{...financialSettings,feeSchedule:{...feeSchedule,mileageRatePerMile:-1}}),/Invalid/);
+assert.throws(()=>validate('financialSettings',{...financialSettings,feeSchedule:{...feeSchedule,byType:{Summons:{...feeSchedule.byType.Summons,unapproved:true}}}}),/Unknown/);
+assert.throws(()=>validate('civilJurisdictionProfile',{profileId:'US-GENERAL'}),/Unsupported/);
+assert.throws(()=>validate('papers',[]),/Unsupported/);
+console.log('California Civil configuration validates recipients, reference lists, fee settings and rejects case/jurisdiction writes.');

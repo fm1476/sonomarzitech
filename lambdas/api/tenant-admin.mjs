@@ -1,4 +1,5 @@
 import { californiaCivilApi } from "./civil-california.mjs";
+import { civilAdminSettingsApi } from "./civil-admin-settings.mjs";
 import { validateTestIntake, validateTestTransition } from "./lib/civil-test-validation.mjs";
 import { response, DEMO_TENANT_ID } from "./core.mjs";
 import { appendAuditEvent } from "./audit.mjs";
@@ -379,6 +380,7 @@ async function tenantAdminDbApi(client, auth, body) {
 
   if (!action) return response(400, { success: false, error: 'action is required.' });
   if(action==='california_civil')return await californiaCivilApi(client,auth,body);
+  if(action==='civil_admin_settings')return await civilAdminSettingsApi(client,auth,body);
   await ensureAgencySubdomainSchema(client);
 
   // Context discovery is intentionally available to any authenticated active user,
