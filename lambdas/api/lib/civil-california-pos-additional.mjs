@@ -119,6 +119,7 @@ export async function generateAdditionalCaliforniaPosDraft(record,input){
     put('FillText21[0]',documents);
     put('FillText22[0]',service.recipient);
     put('FillText23[0]',service.address);
+    tick('Page1[0].StdP1Header_sf[0].FormTitle[0].#area[0].CheckBox1[1]');
     tick('Page1[0].CheckBox6[0]');
     put('P2Header_gp[0].CaseNumber_ft[0]',record.caseNumber);
     put('P2Header_gp[0].Party_ft[0]',record.plaintiff+' v. '+record.defendant);
