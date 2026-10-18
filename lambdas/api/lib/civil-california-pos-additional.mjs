@@ -89,7 +89,7 @@ export async function generateAdditionalCaliforniaPosDraft(record,input){
       put('List3[0].Lib[0].FillText2[0]',service.address);
       put('List3[0].Lic[0].FillText3[0]',date);
       put('List3[0].Lid[0].TextField4[0]',service.time||'');
-      put('List5[0].item5[0].FillText21[0]',[serverName,serverAddress,input.serverPhone||''].filter(Boolean).join('\n'));
+      put('List5[0].item5[0].FillText21[0]',[serverName,serverAddress,input.serverPhone||''].filter(Boolean).join(', '));
       put('Sign[0].FillText31[0]',serverName);
       // Declaration (item 6), process-server registration, and signature
       // are intentionally not selected by the platform.
