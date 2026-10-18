@@ -23,6 +23,25 @@ if(!data)throw Error('Unexpected operation: '+b.operation);return {success:true,
 },{record,workflows:CA_WORKFLOWS});
 for(const name of ['civil-board-ui','civil-record-ui','civil-california-view','civil-california-calendar','civil-california'])await page.addScriptTag({content:fs.readFileSync('frontend/assets/js/modules/'+name+'.js','utf8')});
 await page.evaluate(()=>window.CaliforniaCivil.route(document.querySelector('#view-civil-board'),'civil-board'));
+// Verify laptop Kanban layout at 100% zoom and dark search styling before opening a case.
+const laptop=await page.evaluate(()=>{
+  const field=document.querySelector('.civil-shared-filters input[type="search"]');
+  const board=document.querySelector('.civil-board-scroll .civil-board');
+  const scroller=document.querySelector('.civil-board-scroll');
+  return {background:getComputedStyle(field).backgroundColor,columns:getComputedStyle(board).gridTemplateColumns.split(' ').length,scrollWidth:scroller.scrollWidth,clientWidth:scroller.clientWidth};
+});
+assert.notEqual(laptop.background,'rgb(255, 255, 255)','Search input must honor dark background');
+assert.equal(laptop.columns,3,'1440px laptop should wrap Kanban into 3 columns');
+assert.ok(laptop.scrollWidth<=laptop.clientWidth+2,'Kanban must not require horizontal scrolling at laptop width');
+await page.setViewportSize({width:1024,height:768});
+const compact=await page.evaluate(()=>{
+  const board=document.querySelector('.civil-board-scroll .civil-board');
+  const scroller=document.querySelector('.civil-board-scroll');
+  return {columns:getComputedStyle(board).gridTemplateColumns.split(' ').length,scrollWidth:scroller.scrollWidth,clientWidth:scroller.clientWidth};
+});
+assert.equal(compact.columns,2,'1024px window should wrap Kanban into 2 columns');
+assert.ok(compact.scrollWidth<=compact.clientWidth+2,'Compact Kanban must not require horizontal scrolling');
+await page.setViewportSize({width:1440,height:900});
 await page.locator('[data-case]').first().click();
 await page.locator('[data-section="Forms"]').click();
 const forms=await page.locator('.ca-pos-catalog').textContent();
