@@ -8,6 +8,10 @@ const browser=await chromium.launch({headless:true});const page=await browser.ne
 page.on('pageerror',e=>errors.push(e.message));
 try{
 await page.setContent('<main><div id="view-civil-board" class="view active"></div></main>');
+await page.evaluate(()=>document.documentElement.setAttribute('data-theme','dark'));
+for(const file of ['base','workspace','workspace-overrides']){
+  await page.addStyleTag({content:fs.readFileSync('frontend/assets/css/'+file+'.css','utf8')});
+}
 await page.evaluate(({record,workflows})=>{
 window.STATE={personnel:[{id:'demo',name:'Demo Deputy'}]};
 window.AWS_ATTACHMENTS={upload:async()=>({storageKey:'demo/file'}),download:async()=>{}};
@@ -30,5 +34,9 @@ assert.equal(await page.locator('#ca-form form').count(),1);
 await page.locator('#ca-cancel-form').click();
 await page.setViewportSize({width:390,height:844});
 await page.screenshot({path:'artifacts/civil-documents-mobile.png',fullPage:true});
+const mobileSize=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:window.innerWidth}));
+assert.ok(mobileSize.width<=mobileSize.viewport+2,'Civil mobile layout must avoid page-level horizontal overflow');
+await page.evaluate(()=>document.documentElement.setAttribute('data-theme','light'));
+await page.screenshot({path:'artifacts/civil-documents-mobile-light.png',fullPage:true});
 assert.deepEqual(errors,[]);console.log('Civil Chromium desktop/mobile smoke passed');
 }finally{await browser.close();}
