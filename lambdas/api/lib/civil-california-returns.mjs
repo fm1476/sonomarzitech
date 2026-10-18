@@ -2,11 +2,13 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { CivilError } from "./civil-california-domain.mjs";
+import {generateAdditionalCaliforniaPosDraft} from "./civil-california-pos-additional.mjs";
 const templateUrls = {
   summons: new URL("../templates/civil/pos010.pdf", import.meta.url),
   "small-claims": new URL("../templates/civil/sc104.pdf", import.meta.url),
 };
 export async function generateCaliforniaReturnDraft(record, input) {
+  if(["POS-020","POS-030","POS-040"].includes(input?.formCode))return generateAdditionalCaliforniaPosDraft(record,input);
   const c = record.california,
     service = c?.service,
     workflow = c?.workflowId;
