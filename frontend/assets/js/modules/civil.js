@@ -844,16 +844,25 @@ function renderPaperDetailModal(){
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-xl civil-case-workspace';
   box.innerHTML = `
-    <style id="civil-workspace-style">\n      #modalBox.civil-case-workspace{width:min(1500px,calc(100vw - 48px));max-width:1500px;max-height:calc(100vh - 38px);height:calc(100vh - 38px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#111d2f))}\n      #modalBox.civil-case-workspace .modal-head{background:linear-gradient(115deg,rgba(48,116,210,.16),rgba(21,165,147,.08));padding:20px 26px;flex-shrink:0}\n      #modalBox.civil-case-workspace .modal-body{flex:1;min-height:0;overflow-y:auto;padding:24px}\n      #modalBox.civil-case-workspace .modal-foot{flex-shrink:0;padding:13px 24px}\n      #modalBox.civil-case-workspace [data-pd-tab]{border-radius:9px!important;border:1px solid var(--border)!important;min-height:38px}\n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
+    <style id="civil-workspace-style">\n      #modalBox.civil-case-workspace{width:min(1500px,calc(100vw - 48px));max-width:1500px;max-height:calc(100vh - 38px);height:calc(100vh - 38px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#111d2f))}\n      #modalBox.civil-case-workspace .modal-head{background:linear-gradient(115deg,rgba(48,116,210,.16),rgba(21,165,147,.08));padding:20px 26px;flex-shrink:0}\n      #modalBox.civil-case-workspace .modal-body{flex:1;min-height:0;overflow-y:auto;padding:24px}\n      #modalBox.civil-case-workspace .modal-foot{flex-shrink:0;padding:13px 24px}\n      #modalBox.civil-case-workspace [data-pd-tab]{border-radius:10px!important;border:1px solid var(--border)!important;min-height:42px;padding:0 16px;font-size:13px;font-weight:650;white-space:nowrap;flex:none}
+      #modalBox.civil-case-workspace .civil-workspace-tabs{display:flex;gap:8px;padding:14px 24px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:thin}
+      #modalBox.civil-case-workspace .civil-workspace-subtitle{color:var(--text-dim);font-size:13px;margin-top:6px}
+      #modalBox.civil-case-workspace .civil-workspace-stage{display:inline-block;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--blue);background:rgba(55,130,224,.08);font-size:12px;font-weight:700;white-space:nowrap}
+      #modalBox.civil-case-workspace .civil-workspace-kicker{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);font-weight:750;margin-bottom:5px}
+      #modalBox.civil-case-workspace .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+      #modalBox.civil-case-workspace .modal-head h3{font-size:22px;letter-spacing:-.3px;overflow-wrap:anywhere}
+      #modalBox.civil-case-workspace .civil-workspace-head-right{display:flex;align-items:center;gap:15px}
+\n      #modalBox.civil-case-workspace [data-pd-tab]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}\n      @media(max-width:700px){#modalBox.civil-case-workspace{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}#modalBox.civil-case-workspace .modal-body{padding:14px}#modalBox.civil-case-workspace .modal-head{padding:14px}}\n    </style>
     <div class="modal-head">
       <div>
+        <div class="civil-workspace-kicker">Civil case workspace</div>
         <h3 style="margin-bottom:2px;">${escapeHtml(p.caseNumber)} ${p.priority==='Immediate'?'<span class="badge badge-missing" style="margin-left:8px;">PRIORITY</span>':''}</h3>
-        <div style="font-size:11.5px;color:var(--text-dim);">${escapeHtml(p.paperType)} &bull; ${escapeHtml(p.courtOfOrigin)}</div>
+        <div class="civil-workspace-subtitle">${escapeHtml(p.paperType)} &bull; ${escapeHtml(p.courtOfOrigin)}</div>
       </div>
-      <button class="modal-close" id="mClose">&times;</button>
+      <div class="civil-workspace-head-right"><span class="civil-workspace-stage">${escapeHtml(p.stage||'Open')}</span><button class="modal-close" id="mClose" aria-label="Close case workspace">&times;</button></div>
     </div>
-    <div style="display:flex;gap:6px;padding:12px 20px 0 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-      ${tabs.map(([tid,label])=>`<button class="btn btn-sm ${PAPER_DETAIL_TAB===tid?'btn-primary':'btn-outline'}" data-pd-tab="${tid}" style="border-radius:5px 5px 0 0;border-bottom:none;">${label}</button>`).join('')}
+    <div class="civil-workspace-tabs" role="tablist" aria-label="Case sections">
+      ${tabs.map(([tid,label])=>`<button class="btn btn-sm ${PAPER_DETAIL_TAB===tid?'btn-primary':'btn-outline'}" data-pd-tab="${tid}" role="tab" aria-selected="${PAPER_DETAIL_TAB===tid}">${label}</button>`).join('')}
     </div>
     <div class="modal-body" id="paperDetailBody"></div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back to cases</button></div>
