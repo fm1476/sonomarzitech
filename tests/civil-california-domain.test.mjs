@@ -39,4 +39,16 @@ r=step(r,'enforcement_event',{id:'spoofed',kind:'Levy',date:'2026-10-17',descrip
 r=step(r,'request_disbursement',{amountCents:10000,payee:'Demo',authority:'Order',reference:'D1'});const disbursementId=r.california.disbursements[0].id;fails(r,'approve_disbursement',{disbursementId});r=step(r,'approve_disbursement',{disbursementId},{...ctx,userId:'finance-reviewer'});r=step(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});assert.equal(ledgerBalance(r),0);fails(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});fails(r,'cancel');r=step(r,'reconcile',{verifiedBalanceCents:0,reference:'Bank reconciliation'});r=step(r,'cancel');assert.equal(r.stage,'Cancelled');
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});unserved=step(unserved,'unserved');assert.equal(unserved.stage,'Unable to Serve');
+let removeCase=ready('summons');
+const oldFile=removeCase.california.documents.find(d=>d.kind==='Court packet');
+fails(removeCase,'remove_document',{documentId:oldFile.id,note:''},ctx,/action note/);
+removeCase=step(removeCase,'remove_document',{documentId:oldFile.id,note:'Superseded by corrected packet'});
+assert.equal(removeCase.stage,'Intake','Removing required document must revoke approval');
+assert.equal(removeCase.california.documents.some(d=>d.id===oldFile.id),false);
+assert.ok(removeCase.california.removedDocuments.some(d=>d.id===oldFile.id&&d.reason==='Superseded by corrected packet'));
+assert.equal(removeCase.attachedDocuments.some(d=>d.id===oldFile.id),false);
+fails(removeCase,'approve_intake',{},ctx,/court packet/);
+removeCase=step(removeCase,'attach_document',{name:'replacement.pdf',key:'uploaded/replacement',kind:'Court packet'});
+removeCase=step(removeCase,'approve_intake');
+assert.equal(removeCase.stage,'Ready');
 console.log('California domain: 11 workflows, permissions, immutable rejections, dates, returns, holds and accounting passed.');
