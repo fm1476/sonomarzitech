@@ -378,6 +378,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-draft-feature-copy p{margin:5px 0 0;color:var(--text-dim);font-size:12px;line-height:1.5}
 .ca-classic .ca-draft-feature>.btn{flex-shrink:0;min-height:43px;border-radius:10px}
 @media(max-width:600px){.ca-classic .ca-draft-feature>.btn{width:100%}}
+.ca-classic .ca-pos-catalog{margin:24px 0 20px;border-top:1px solid var(--ca-border);padding-top:20px}
+.ca-classic .ca-pos-heading,.ca-classic .ca-pos-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ca-classic .ca-pos-heading h4{font-size:15px;margin:0}
+.ca-classic .ca-pos-heading span,.ca-classic .ca-pos-catalog p,.ca-classic .ca-form-resource small{font-size:12px;color:var(--text-dim);line-height:1.5}
+.ca-classic .ca-pos-suggested{font-size:10px;font-weight:700;color:var(--green,#1aab79);background:rgba(35,166,115,.12);padding:5px 8px;border-radius:7px}
 .ca-classic .ca-forms-library{margin:16px 0 20px}
 .ca-classic .ca-forms-library[hidden]{display:none!important}
 .ca-classic .ca-forms-head h3{font-size:17px;margin:0 0 5px}
@@ -861,12 +866,23 @@ window.CaliforniaCivil = (() => {
           "POS-010":["Proof of Service of Summons","https://selfhelp.courts.ca.gov/jcc-form/POS-010"],
           "POS-020":["Proof of Personal Service—Civil","https://selfhelp.courts.ca.gov/jcc-form/POS-020"],
           "POS-030":["Proof of Service by First-Class Mail—Civil","https://selfhelp.courts.ca.gov/jcc-form/POS-030"],
+          "POS-040":["Proof of Service—Civil","https://selfhelp.courts.ca.gov/jcc-form/POS-040"],
           "SC-104":["Proof of Service—Small Claims","https://selfhelp.courts.ca.gov/jcc-form/SC-104"],
           "SER-001":["Request for Sheriff to Serve Court Papers","https://selfhelp.courts.ca.gov/jcc-form/SER-001"],
           "SER-001A":["Special Instructions for Writs and Levies","https://selfhelp.courts.ca.gov/jcc-form/SER-001A"],
           "WG-005":["Employer's Return","https://selfhelp.courts.ca.gov/jcc-form/WG-005"]
         };
         const applicable=[...new Set([...(context.workflows[c.workflowId]?.forms||[]),...(context.workflows[c.workflowId]?.returns||[])])];
+        const posChoices=[
+          ["POS-010","Summons and complaint"],
+          ["POS-020","Other civil papers served personally"],
+          ["POS-030","Other civil papers served by first-class mail"],
+          ["POS-040","Other civil papers: select the applicable permitted service method"]
+        ];
+        const serviceMethod=c.service?.method||c.nonService?.method||"";
+        const suggestedPos=c.workflowId==="summons"?"POS-010"
+          :serviceMethod==="Personal service"?"POS-020"
+          :/mail/i.test(serviceMethod)?"POS-030":"POS-040";
         const formLibrary=document.createElement("section");
         formLibrary.className="ca-forms-library";
         const draftSupported=["summons","small-claims"].includes(c.workflowId);
@@ -878,7 +894,8 @@ window.CaliforniaCivil = (() => {
         formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Choose the appropriate form, review recorded facts and complete the required signatures before submitting to court.</p></div></div>'+
           '<div class="ca-draft-feature"><div class="ca-draft-feature-icon">▤</div><div class="ca-draft-feature-copy"><strong>Generate court return draft</strong><p>'+esc(canDraft?"Prefill an unsigned official PDF from the case record. Review all fields, certify, sign and upload the completed document.":draftHint)+'</p></div>'+
           (canDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">Generate unsigned draft →</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
-          '<div class="ca-form-resource-grid">'+applicable.map(code=>{
+          '<div class="ca-pos-catalog"><div class="ca-pos-heading"><h4>California proof-of-service forms</h4><span>Four common Judicial Council forms</span></div><p>Choose based on the papers and the actual method of service. A recommendation is not a legal determination. For small claims and specialized orders, use their process-specific forms when required.</p><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div></div>'+
+          '<div class="ca-forms-head"><h4>Forms listed for this workflow</h4></div><div class="ca-form-resource-grid">'+applicable.map(code=>{
             const found=formSources[code];
             return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
               (found?'<a class="btn btn-outline" href="'+found[1]+'" target="_blank" rel="noopener noreferrer">View official form ↗</a>':'<span class="ca-form-notice">Confirm the approved form or local return template for this process.</span>')+'</article>';
