@@ -3,7 +3,7 @@ import {appendAuditEvent} from './audit.mjs';
 
 const uuid = value => typeof value==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const LIST_KEYS = new Set(['paperTypes','courtsOfOrigin','serviceMethods','attemptResults','propertyTypes','propertyDisposalMethods','propertyStorageLocations','propertySeizureStatuses','realPropertyTypes','realPropertyLevyStatuses']);
-const SETTINGS_KEYS = new Set(['notifySettings','feeSchedule',...LIST_KEYS]);
+const SETTINGS_KEYS = new Set(['notifySettings','feeSchedule','feeCategoryGLCodes','paymentMethodGLCodes',...LIST_KEYS]);
 const plain = v => v!==null && typeof v==='object' && !Array.isArray(v) && Object.getPrototypeOf(v)===Object.prototype;
 function validate(section,value){
   if(!SETTINGS_KEYS.has(section))throw Error('Unsupported Civil administration setting.');
@@ -11,6 +11,10 @@ function validate(section,value){
     if(!Array.isArray(value)||value.length>150||value.some(v=>typeof v!=='string'||!v.trim()||v.length>160))throw Error('Invalid Civil reference list.');
     if(new Set(value.map(v=>v.trim().toLowerCase())).size!==value.length)throw Error('Duplicate Civil reference values.');
     return value.map(v=>v.trim());
+  }
+  if(section==='feeCategoryGLCodes'||section==='paymentMethodGLCodes'){
+    if(!plain(value)||Object.keys(value).length>60||Object.entries(value).some(([k,v])=>k.length>120||typeof v!=='string'||v.length>100))throw Error('Invalid GL codes.');
+    return value;
   }
   if(section==='notifySettings'){
     if(!plain(value)||Object.keys(value).sort().join(',')!=='priorityUnassignedRoleId,returnDueRoleId')throw Error('Invalid notification routing.');
