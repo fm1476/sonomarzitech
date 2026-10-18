@@ -351,6 +351,12 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-detail .ca-case-content{display:block}
 .ca-classic #ca-form:empty{display:none}
 .ca-classic #ca-form .ca-form-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(3,9,20,.78);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(5px)}
+.ca-classic .ca-form-fields input,.ca-classic .ca-form-fields select,.ca-classic .ca-form-fields textarea{width:100%;max-width:100%;box-sizing:border-box;min-height:43px;border-radius:10px}
+.ca-classic .ca-form-fields textarea{min-height:96px;resize:vertical}
+.ca-classic .ca-form-fields .form-row{font-size:13px;font-weight:650}
+.ca-classic .ca-form-heading h3{font-size:20px;letter-spacing:-.02em}
+.ca-classic .ca-form-footer{border-top:1px solid var(--ca-border)}
+@media(prefers-reduced-motion:reduce){.ca-classic .btn{transition:none;transform:none!important}}
 .ca-classic #ca-form .ca-form-backdrop>form{width:min(720px,100%);max-height:min(90dvh,900px);display:flex;flex-direction:column;padding:0;margin:0;overflow:hidden;background:var(--ca-surface,#172335);border:1px solid var(--ca-border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.4)}
 .ca-classic .ca-form-heading,.ca-classic .ca-form-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px;flex-shrink:0}
 .ca-classic .ca-form-heading{border-bottom:1px solid var(--ca-border)}.ca-classic .ca-form-heading h3{margin:0}
@@ -608,20 +614,37 @@ window.CaliforniaCivil = (() => {
         window.CaliforniaCivilView.bindServiceFields(
           target.querySelector("form"),
         );
-        target.querySelectorAll("#ca-cancel-form,[data-dismiss-form]").forEach(b=>b.onclick=()=>{target.innerHTML="";});
+        const dialog=target.querySelector('[role="dialog"]');
+        const dismiss=()=>{target.innerHTML="";document.removeEventListener("keydown",onDialogKey);};
+        const onDialogKey=event=>{
+          if(!dialog?.isConnected)return;
+          if(event.key==="Escape"){event.preventDefault();dismiss();return;}
+          if(event.key==="Tab"){
+            const focusable=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled):not([hidden]),select:not(:disabled):not([hidden]),textarea:not(:disabled),a[href]')].filter(el=>el.getClientRects().length&&getComputedStyle(el).visibility!=="hidden");
+            if(!focusable.length)return;
+            const first=focusable[0],last=focusable[focusable.length-1];
+            if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+            else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+          }
+        };
+        document.addEventListener("keydown",onDialogKey);
+        target.querySelectorAll("#ca-cancel-form,[data-dismiss-form]").forEach(b=>b.onclick=dismiss);
         target.querySelector("form").onsubmit = async (e) => {
           e.preventDefault();
-          const button = e.submitter;
+          const button = e.submitter || e.target.querySelector('[type="submit"]');
           button.disabled = true;
+          button.dataset.previousLabel=button.textContent;
+          button.textContent="Saving…";
           try {
             await save(new FormData(e.target));
-            target.innerHTML = "";
+            dismiss();
           } catch (err) {
             const alert = target.querySelector("[role=alert]");
             if (alert) alert.textContent = err.message;
             else status(err.message);
           } finally {
             button.disabled = false;
+            button.textContent=button.dataset.previousLabel||"Save changes";
           }
         };
         target.querySelector("form")?.querySelector("input:not([type=file]),select,textarea,button")?.focus();
