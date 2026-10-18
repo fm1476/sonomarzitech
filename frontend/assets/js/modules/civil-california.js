@@ -251,6 +251,7 @@ window.CaliforniaCivil = (() => {
       );
       let rows = firstPage.cases,
         nextCursor = firstPage.nextCursor;
+      const boardOptions=id==='civil-board'?await api('filters',{},scope):{types:[],locations:[]};
       if (token !== generation) return true;
       if (id === "civil-mine")
         rows = rows.filter(
@@ -498,7 +499,7 @@ window.CaliforniaCivil = (() => {
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
 .ca-classic .ca-shared-board-controls{margin:16px 0}.ca-classic .ca-board-mode{display:flex;justify-content:flex-end;margin:12px 0}.ca-classic .ca-view-controls[hidden]{display:none!important}.ca-classic.ca-workspace-open .ca-shared-board-controls{display:none!important}.ca-classic.ca-workspace-open .ca-board-mode{display:none!important}
 .ca-classic .civil-board{gap:13px;align-items:stretch}.ca-classic .civil-card{cursor:pointer;min-height:110px;display:block;margin-bottom:9px}.ca-classic .civil-card:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}.ca-classic .civil-card-meta{gap:6px;flex-wrap:wrap}.ca-classic .ca-service-map{border:1px solid var(--ca-border);border-radius:14px;background:var(--ca-surface);padding:16px;margin:15px 0}.ca-classic .ca-service-map-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.ca-classic .ca-service-map-head h4{margin:0}.ca-classic .ca-service-map-location{font-size:12px;color:var(--text-dim);margin:10px 0}.ca-classic .ca-service-map iframe{display:block;border:0;border-radius:10px;width:100%;height:250px}.ca-classic .ca-service-map p{font-size:11px;color:var(--text-dim);margin-bottom:0}.ca-classic .ca-safety-alert{border:1px solid var(--red,#e56770);border-radius:12px;padding:14px 16px;background:rgba(230,60,65,.09);margin-bottom:14px}.ca-classic .ca-safety-alert strong{color:var(--red,#e56770)}.ca-classic .ca-safety-manager{border:1px solid var(--ca-border);border-radius:14px;padding:16px;margin:14px 0}.ca-classic .ca-safety-manager-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}.ca-classic .ca-safety-manager h4{margin:0}.ca-classic .ca-safety-manager p,.ca-classic .ca-safety-manager small{font-size:12px;color:var(--text-dim)}.ca-classic .ca-safety-entry{padding:10px 0;border-top:1px solid var(--ca-border)}.ca-classic .ca-safety-entry strong{color:var(--red,#e56770)}.ca-classic .ca-safety-entry .btn{display:block;margin-top:8px}.ca-classic .ca-safety-alert p{font-size:12px;margin:6px 0 0}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:[...new Set(rows.map(x=>x.record.paperType))],locations:[...new Set(rows.map(x=>x.record.courtOfOrigin))]})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
@@ -553,6 +554,8 @@ window.CaliforniaCivil = (() => {
                 afterKey: nextCursor,
                 query: root.querySelector("#ca-search").value,
                 assignedOnly: id === "civil-mine",
+                ...(id==="civil-board"?{paperType:boardPaperType==="All"?"":boardPaperType,courtOfOrigin:boardLocation==="All"?"":boardLocation}:{}),
+                ...(id==="civil-board"?{paperType:boardPaperType==="All"?"":boardPaperType,courtOfOrigin:boardLocation==="All"?"":boardLocation}:{}),
               },
               scope,
             );
@@ -615,9 +618,23 @@ window.CaliforniaCivil = (() => {
         }, 200);
       };
       if(id==="civil-board"){
+        let filterEpoch=0;
         for(const [selector,setter] of [['#ca-type-filter',value=>boardPaperType=value],['#ca-location-filter',value=>boardLocation=value]]){
           const element=root.querySelector(selector);
-          if(element)element.onchange=()=>{setter(element.value);draw();};
+          if(element)element.onchange=async()=>{
+            setter(element.value);
+            const epoch=++filterEpoch;
+            status('Loading matching cases...');
+            try{
+              const page=await api('list',{
+                query:root.querySelector('#ca-search').value,
+                paperType:boardPaperType==='All'?'':boardPaperType,
+                courtOfOrigin:boardLocation==='All'?'':boardLocation
+              },scope);
+              if(token!==generation||epoch!==filterEpoch)return;
+              rows=page.cases;nextCursor=page.nextCursor;draw();status('');
+            }catch(error){if(epoch===filterEpoch)status('Unable to filter cases: '+error.message);}
+          };
         }
       }
             root.querySelector("#ca-refresh").onclick = () => {
