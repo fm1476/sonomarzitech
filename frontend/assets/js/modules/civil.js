@@ -731,7 +731,10 @@ function handleStageDrop(p, newStage){
     return;
   }
   if(newStage==='Returned to Court'){
-    p.returnFiledDate = fmt(new Date());
+    if(!can('civil_document_generate')&&!can('civil_paper_intake')){toast('Court return recording permission is required.',true);renderBoard();return;}
+    if(!['Served','Unable to Serve'].includes(p.stage)){toast('Record service or non-service before returning a case to court.',true);renderBoard();return;}
+    openCourtReturnConfirmation(p.id);
+    return;
   }
   recordFieldChangeCivil(p, 'stage', p.stage, newStage);
   p.stage = newStage;
@@ -739,6 +742,53 @@ function handleStageDrop(p, newStage){
   persist();
   toast(`Moved to "${newStage}".`);
   renderBoard();
+}
+
+function openCourtReturnConfirmation(paperId){
+  const p=paperFor(paperId);
+  if(!p)return;
+  const box=document.getElementById('modalBox');
+  box.className='modal civil-court-return-confirm';
+  box.innerHTML=`
+    <style>
+      #modalBox.civil-court-return-confirm{width:min(570px,calc(100vw - 32px));max-width:570px;border-radius:18px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#172335))}
+      #modalBox.civil-court-return-confirm .modal-head{padding:21px 24px;background:linear-gradient(110deg,rgba(46,115,221,.16),rgba(25,162,146,.07))}
+      #modalBox.civil-court-return-confirm .modal-body{padding:23px 24px}
+      #modalBox.civil-court-return-confirm .modal-foot{padding:15px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--border)}
+      #modalBox.civil-court-return-confirm input{width:100%;box-sizing:border-box;min-height:43px;border-radius:10px}
+      #modalBox.civil-court-return-confirm .civil-return-review{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;background:var(--surface)}
+      #modalBox.civil-court-return-confirm .civil-return-review strong{display:block;font-size:13px}
+      #modalBox.civil-court-return-confirm .civil-return-review p{font-size:12px;line-height:1.6;color:var(--text-dim);margin:7px 0 0}
+    </style>
+    <div class="modal-head"><h3>Record return to court</h3><button type="button" class="modal-close" id="mClose" aria-label="Cancel court return">&times;</button></div>
+    <div class="modal-body">
+      <div class="civil-return-review"><strong>${escapeHtml(p.caseNumber)} · ${escapeHtml(p.stage)}</strong><p>Only record this status after the completed proof or non-service return has actually been delivered or filed with the court. This action records the court reference; it does not transmit the document.</p></div>
+      <div class="form-row"><label for="fReturnDate">Date delivered or filed</label><input id="fReturnDate" type="date" required value="${fmt(new Date())}"></div>
+      <div class="form-row"><label for="fReturnReference">Court receipt or filing reference</label><input id="fReturnReference" maxlength="200" required placeholder="Court receipt, filing ID, or confirmed delivery reference"></div>
+      <p id="civilReturnError" role="alert" style="color:var(--red);font-size:12px"></p>
+    </div>
+    <div class="modal-foot"><button type="button" class="btn btn-outline" id="mCancel">Cancel</button><button type="button" class="btn btn-primary" id="mSave">Record court return</button></div>`;
+  openModal();
+  const cancel=()=>{closeModal();renderBoard();};
+  box.querySelector('#mClose').onclick=cancel;
+  box.querySelector('#mCancel').onclick=cancel;
+  box.querySelector('#mSave').onclick=()=>{
+    const date=box.querySelector('#fReturnDate').value;
+    const reference=box.querySelector('#fReturnReference').value.trim();
+    if(date.length!==10||!Number.isFinite(Date.parse(date))||!reference){
+      box.querySelector('#civilReturnError').textContent='Enter the actual filing date and court receipt or delivery reference.';
+      return;
+    }
+    recordFieldChangeCivil(p,'returnFiledDate',p.returnFiledDate,date);
+    recordFieldChangeCivil(p,'returnFiledReference',p.returnFiledReference||null,reference);
+    recordFieldChangeCivil(p,'stage',p.stage,'Returned to Court');
+    p.returnFiledDate=date;
+    p.returnFiledReference=reference;
+    p.stage='Returned to Court';
+    logActivity(`Recorded court return for ${p.caseNumber}: ${reference} on ${date}.`,'civil_paper',p.id);
+    persist();
+    closeModal();toast('Court return recorded.');renderBoard();
+  };
 }
 
 function openAssignServerModal(paperId){
