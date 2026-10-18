@@ -72,7 +72,16 @@ jobs:
           test "$TARGET_BRANCH" = "civil-pos-020-030-040-preflight"
           for code in pos020 pos030 pos040; do test -s "artifacts/official-pos/${code}.pdf"; done
           mkdir -p lambdas/api/templates/civil
-          cp artifacts/official-pos/*.pdf lambdas/api/templates/civil/
+          python -m pip install --quiet --disable-pip-version-check PyMuPDF==1.26.7
+          python - <<'PY'
+          import fitz
+          for code in ("pos020","pos030","pos040"):
+              source="artifacts/official-pos/"+code+".pdf"
+              target="lambdas/api/templates/civil/"+code+".pdf"
+              pdf=fitz.open(source)
+              pdf.save(target,garbage=4,deflate=True,encryption=fitz.PDF_ENCRYPT_NONE)
+              pdf.close()
+          PY
           git fetch origin "$TARGET_BRANCH"
           git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
           git add lambdas/api/templates/civil/pos020.pdf lambdas/api/templates/civil/pos030.pdf lambdas/api/templates/civil/pos040.pdf
