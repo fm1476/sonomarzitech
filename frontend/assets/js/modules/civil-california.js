@@ -398,6 +398,13 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-pos-preflight p{margin:8px 0 0;font-size:12px;line-height:1.6}
 .ca-classic .ca-pos-missing{color:var(--gold,#e6ad50)!important}
 .ca-classic .ca-pos-ready{color:var(--green,#26b485)!important}
+.ca-classic .ca-proof-progress{padding:15px 17px;margin:12px 0 19px;border:1px solid var(--ca-border);border-radius:13px;background:var(--ca-surface)}
+.ca-classic .ca-proof-progress>div{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ca-classic .ca-proof-progress strong{font-size:13px}
+.ca-classic .ca-proof-progress span{font-size:11px;font-weight:750;border-radius:999px;padding:5px 10px}
+.ca-classic .ca-proof-ready{color:#21bf88;background:rgba(33,191,136,.13)}
+.ca-classic .ca-proof-needed{color:#ebad55;background:rgba(235,173,85,.13)}
+.ca-classic .ca-proof-progress p{font-size:12px;line-height:1.6;color:var(--text-dim);margin:9px 0 0}
 .ca-classic .ca-signed-upload{margin-top:16px;min-height:43px}
 .ca-classic .ca-pos-catalog{margin:24px 0 20px;border-top:1px solid var(--ca-border);padding-top:20px}
 .ca-classic .ca-pos-heading,.ca-classic .ca-pos-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -1451,7 +1458,11 @@ window.CaliforniaCivil = (() => {
         );
         const documents = panel.querySelector("#ca-documents");
         const mayManage=!closed && !["Return Prepared","Reviewed","Returned to Court"].includes(r.stage) && can("civil_document_generate");
-        documents.innerHTML = '<div class="ca-doc-head"><strong>Case documents</strong><span>'+c.documents.length+' active files</span></div>' +
+        const signedProofCount=c.documents.filter(d=>["Proof of service","Court return"].includes(d.kind)).length;
+        const workingDraftCount=c.documents.filter(d=>d.kind==="Unsigned return draft").length;
+        const proofProgress='<div class="ca-proof-progress"><div><strong>Signed court proof / return</strong><span class="'+(signedProofCount?"ca-proof-ready":"ca-proof-needed")+'">'+(signedProofCount?"Attached":"Still needed")+'</span></div>'+
+          '<p>'+esc(signedProofCount?"A proof/return document is attached. An authorized reviewer must still verify its contents and signatures.":workingDraftCount?"You have an unsigned working draft. It does not count as completed proof; upload the signed, reviewed court form.":"Upload a completed, signed court proof or return before preparing the return packet.")+'</p></div>';
+        documents.innerHTML = '<div class="ca-doc-head"><strong>Case documents</strong><span>'+c.documents.length+' active files</span></div>'+proofProgress+
           (c.documents.length ? '<div class="ca-doc-grid">'+c.documents.map(d=>
             '<article class="ca-doc-item"><div><strong>'+esc(d.name)+'</strong><small>'+esc(d.kind)+'</small></div><div class="ca-doc-tools"><button type="button" class="btn btn-outline" data-doc="'+esc(d.id)+'">Open</button>'+
             (mayManage?'<button type="button" class="btn btn-outline" data-replace-doc="'+esc(d.id)+'">Replace</button><button type="button" class="btn btn-outline" data-remove-doc="'+esc(d.id)+'">Remove</button>':'')+'</div></article>'
