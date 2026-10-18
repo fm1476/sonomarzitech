@@ -5060,14 +5060,15 @@ async function createAttachmentUploadUrl(
     });
   }
 
+  const maxSizeBytes = parentCollection === 'civil.papers' ? 500 * 1024 * 1024 : 25 * 1024 * 1024;
   if (
-    !Number.isFinite(sizeBytes) ||
-    sizeBytes < 0 ||
-    sizeBytes > 25 * 1024 * 1024
+    !Number.isSafeInteger(sizeBytes) ||
+    sizeBytes <= 0 ||
+    sizeBytes > maxSizeBytes
   ) {
     return response(400, {
       success: false,
-      error: "Attachments are limited to 25 MB."
+      error: `Attachments are limited to ${maxSizeBytes / 1024 / 1024} MB for this module.`
     });
   }
 
@@ -5117,15 +5118,15 @@ async function createAttachmentUploadUrl(
         parent_id: String(parentId)
       }
     }),
-    { expiresIn: 300 }
+    { expiresIn: parentCollection === "civil.papers" ? 3600 : 300 }
   );
 
   return response(200, {
     success: true,
     key,
     upload_url: uploadUrl,
-    expires_in: 300,
-    max_size_bytes: 25 * 1024 * 1024
+    expires_in: parentCollection === "civil.papers" ? 3600 : 300,
+    max_size_bytes: maxSizeBytes
   });
 }
 
