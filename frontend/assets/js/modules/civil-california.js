@@ -497,7 +497,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
 .ca-classic .ca-shared-board-controls{margin:16px 0}.ca-classic .ca-board-mode{display:flex;justify-content:flex-end;margin:12px 0}.ca-classic .ca-view-controls[hidden]{display:none!important}.ca-classic.ca-workspace-open .ca-shared-board-controls{display:none!important}.ca-classic.ca-workspace-open .ca-board-mode{display:none!important}
-.ca-classic .civil-board{gap:13px;align-items:stretch}.ca-classic .civil-card{cursor:pointer;min-height:110px;display:block;margin-bottom:9px}.ca-classic .civil-card:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}.ca-classic .civil-card-meta{gap:6px;flex-wrap:wrap}.ca-classic .ca-service-map{border:1px solid var(--ca-border);border-radius:14px;background:var(--ca-surface);padding:16px;margin:15px 0}.ca-classic .ca-service-map-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.ca-classic .ca-service-map-head h4{margin:0}.ca-classic .ca-service-map-location{font-size:12px;color:var(--text-dim);margin:10px 0}.ca-classic .ca-service-map iframe{display:block;border:0;border-radius:10px;width:100%;height:250px}.ca-classic .ca-service-map p{font-size:11px;color:var(--text-dim);margin-bottom:0}.ca-classic .ca-safety-alert{border:1px solid var(--red,#e56770);border-radius:12px;padding:14px 16px;background:rgba(230,60,65,.09);margin-bottom:14px}.ca-classic .ca-safety-alert strong{color:var(--red,#e56770)}.ca-classic .ca-safety-alert p{font-size:12px;margin:6px 0 0}
+.ca-classic .civil-board{gap:13px;align-items:stretch}.ca-classic .civil-card{cursor:pointer;min-height:110px;display:block;margin-bottom:9px}.ca-classic .civil-card:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}.ca-classic .civil-card-meta{gap:6px;flex-wrap:wrap}.ca-classic .ca-service-map{border:1px solid var(--ca-border);border-radius:14px;background:var(--ca-surface);padding:16px;margin:15px 0}.ca-classic .ca-service-map-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.ca-classic .ca-service-map-head h4{margin:0}.ca-classic .ca-service-map-location{font-size:12px;color:var(--text-dim);margin:10px 0}.ca-classic .ca-service-map iframe{display:block;border:0;border-radius:10px;width:100%;height:250px}.ca-classic .ca-service-map p{font-size:11px;color:var(--text-dim);margin-bottom:0}.ca-classic .ca-safety-alert{border:1px solid var(--red,#e56770);border-radius:12px;padding:14px 16px;background:rgba(230,60,65,.09);margin-bottom:14px}.ca-classic .ca-safety-alert strong{color:var(--red,#e56770)}.ca-classic .ca-safety-manager{border:1px solid var(--ca-border);border-radius:14px;padding:16px;margin:14px 0}.ca-classic .ca-safety-manager-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}.ca-classic .ca-safety-manager h4{margin:0}.ca-classic .ca-safety-manager p,.ca-classic .ca-safety-manager small{font-size:12px;color:var(--text-dim)}.ca-classic .ca-safety-entry{padding:10px 0;border-top:1px solid var(--ca-border)}.ca-classic .ca-safety-entry strong{color:var(--red,#e56770)}.ca-classic .ca-safety-entry .btn{display:block;margin-top:8px}.ca-classic .ca-safety-alert p{font-size:12px;margin:6px 0 0}
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:[...new Set(rows.map(x=>x.record.paperType))],locations:[...new Set(rows.map(x=>x.record.courtOfOrigin))]})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
@@ -1116,6 +1116,31 @@ window.CaliforniaCivil = (() => {
           });
           formLibrary.append(uploadSigned);
         }
+
+        const caseFlags=(r.safetyFlags||[]);
+        const activeCaseFlags=caseFlags.filter(flag=>flag.active&&!flag.retiredAt);
+        const flagPanel=document.createElement('section');
+        flagPanel.className='ca-safety-manager';
+        flagPanel.innerHTML='<div class="ca-safety-manager-head"><h4>Officer Safety Flags</h4>'+
+          (can('civil_paper_intake')&&!['Closed','Cancelled'].includes(r.stage)?'<button type="button" class="btn btn-outline btn-sm" data-ca-add-safety>⚠ Add Safety Flag</button>':'')+
+          '</div>'+(!activeCaseFlags.length?'<p>No active case safety flags have been recorded.</p>':
+          activeCaseFlags.map(flag=>'<div class="ca-safety-entry"><strong>⚠ '+esc(flag.scope||'Case')+' safety warning</strong><p>'+esc(flag.reason||'No narrative recorded')+'</p><small>Source / verification reference: '+esc(flag.verificationReference||'Not specified')+'</small>'+
+          (can('civil_paper_intake')?'<button type="button" class="btn btn-outline btn-sm" data-ca-retire-safety="'+esc(flag.id)+'">Retire flag</button>':'')+'</div>').join(''));
+        panel.querySelector("#ca-actions")?.before(flagPanel);
+        flagPanel.querySelector('[data-ca-add-safety]')?.addEventListener('click',()=>form(
+          'Add Officer Safety Flag',
+          '<p>Record verified, actionable information. This warning is shown on the case and Service Board until formally retired.</p>'+
+          '<label class="form-row">Applies to<select name="scope"><option>Person</option><option>Address</option><option>Case</option></select></label>'+
+          '<label class="form-row">Safety concern<textarea name="reason" maxlength="1000" required></textarea></label>'+
+          '<label class="form-row">Source or verification reference<input name="verificationReference" maxlength="500" required></label>'+
+          '<label class="form-row">Action note<textarea name="note" maxlength="1000" required></textarea></label>',
+          async values=>command('add_safety_flag',Object.fromEntries(values.entries()))
+        ));
+        flagPanel.querySelectorAll('[data-ca-retire-safety]').forEach(button=>button.addEventListener('click',()=>form(
+          'Retire Officer Safety Flag',
+          '<p>Retiring a flag does not erase it from the audit trail.</p><label class="form-row">Reason for retirement<textarea name="note" maxlength="1000" required></textarea></label>',
+          async values=>command('retire_safety_flag',{flagId:button.dataset.caRetireSafety,note:String(values.get('note')||'')})
+        )));
 
         panel.querySelector("#ca-actions")?.after(formLibrary);
         formLibrary.querySelector("#ca-generate-draft")?.addEventListener("click",()=>{
