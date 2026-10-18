@@ -2,7 +2,7 @@ import {JSDOM} from './civil-support/node_modules/jsdom/lib/api.js';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const dom=new JSDOM('<main></main>',{runScripts:'outside-only'}),w=dom.window;
-for(const file of ['civil-california-view','civil-california-calendar'])w.eval(fs.readFileSync('frontend/assets/js/modules/'+file+'.js','utf8'));
+for(const file of ['civil-case-ui','civil-california-view','civil-california-calendar'])w.eval(fs.readFileSync('frontend/assets/js/modules/'+file+'.js','utf8'));
 const definitions={intake_details:['returnByDate:date','instructionsReference','issuedDate:date','writExpirationDate:date','employerName','propertyDescription','financialInstitution','hearingDate:date'],generate_return_draft:['serverName','courtStreet','smallClaimsDocument']};
 const fields=workflow=>w.CaliforniaCivilView.fieldsForAction('intake_details',{california:{workflowId:workflow}},definitions);
 assert.equal(fields('summons').includes('issuedDate:date'),false);assert.equal(fields('bank-levy').includes('financialInstitution'),true);assert.equal(fields('bank-levy').includes('employerName'),false);assert.equal(fields('earnings-withholding').includes('employerName'),true);assert.equal(fields('small-claims').includes('hearingDate:date'),true);
