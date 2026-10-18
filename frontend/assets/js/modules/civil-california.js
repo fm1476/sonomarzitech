@@ -1132,9 +1132,18 @@ window.CaliforniaCivil = (() => {
           launch.onclick=()=>{
             const missingNonUpload=intakeIssues.filter(issue=>!issue.startsWith("Upload"));
             if(r.stage==="Intake"&&intakeIssues.length&&missingNonUpload.length===0){
+              activateGroup("Documents");
               panel.querySelector("#ca-upload")?.click();
             }else{
-              panel.querySelector('[data-action="'+recommended+'"]')?.click();
+              const actionButton=panel.querySelector('[data-action="'+recommended+'"]');
+              if(actionButton){
+                const hiddenTray=actionButton.closest("#ca-more-actions");
+                if(hiddenTray?.hidden){
+                  hiddenTray.hidden=false;
+                  panel.querySelector(".ca-more-trigger")?.setAttribute("aria-expanded","true");
+                }
+                actionButton.click();
+              }
             }
           };
         }
