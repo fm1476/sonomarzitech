@@ -12,7 +12,7 @@ assert.throws(()=>applyCaliforniaCommand(base,'add_safety_flag',{...payload,veri
 assert.throws(()=>applyCaliforniaCommand(base,'add_safety_flag',{...payload,scope:'Outside agency'},ctx),/what the safety flag/);
 assert.throws(()=>applyCaliforniaCommand(base,'add_safety_flag',{...payload,reason:''},ctx),/safety concern/);
 const denied={...ctx,admin:false,personId:'different',abilities:['civil_paper_view_all']};
-assert.throws(()=>applyCaliforniaCommand(base,'add_safety_flag',payload,denied),/permission|authorized|not assigned|civil_paper_intake/i);
+assert.throws(()=>applyCaliforniaCommand(base,'add_safety_flag',payload,denied),/permitted|permission|authorized|not assigned|civil_paper_intake/i);
 const retired=applyCaliforniaCommand(flagged,'retire_safety_flag',{flagId:'flag1',note:'Demo warning resolved'},{...ctx,eventId:'flag2'});
 assert.equal(retired.safetyFlags[0].active,false);
 assert.equal(retired.safetyFlags[0].retirementReason,'Demo warning resolved');
