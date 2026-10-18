@@ -22,6 +22,20 @@ for(let i=1;i<orderedNodes.length;i++)assert.ok(Boolean(orderedNodes[i-1].compar
 assert.equal(workspace.lastElementChild?.classList.contains('civil-shared-address-panel'),true,'Service address/map must be the final record section');
 assert.equal(workspace.querySelectorAll('#ca-actions').length,1,'Workflow actions must remain mounted exactly once');
 assert.equal(workspace.querySelectorAll('.ca-progress').length,1,'Progress tracker must appear exactly once');
+await click('[data-section="Service"]');
+assert.equal(root.querySelectorAll('.ca-section-overlay').length,1,'Service tab must open a large section dialog');
+assert.equal(root.querySelector('.ca-section-dialog').getAttribute('aria-modal'),'true');
+assert.match(root.querySelector('#ca-section-title').textContent,/Service/);
+assert.ok(root.querySelector('.ca-section-content details'),'Existing live service details must be inside dialog');
+assert.equal(root.querySelectorAll('#ca-actions').length,1,'Do not duplicate case actions');
+await click('.ca-section-close');
+assert.equal(root.querySelector('.ca-section-overlay'),null,'Close should return to underlying case');
+assert.equal(root.querySelector('[data-section="Overview"]').getAttribute('aria-pressed'),'true');
+await click('[data-section="Documents"]');
+assert.ok(root.querySelector('.ca-section-content #ca-documents'),'Documents must be inside the section dialog');
+await click('.ca-section-dismiss');
+assert.equal(root.querySelectorAll('#ca-documents').length,1,'Documents must be restored without duplication');
+
 assert.equal(record.stage,'Intake');assert.equal(w.CaliforniaCivil.hasOpenWork(),true,'Open case must block background replacement');assert.ok(root.querySelector('.ca-intake-checklist'),'Intake must show a compact actionable checklist');assert.ok(root.querySelector('.ca-intake-more summary'),'Remaining intake issues must be accessible through an expandable disclosure');assert.equal(root.querySelector('.ca-intake-more').open,false,'Long intake checklists should start compact');
 await click('[data-action="intake_details"]');fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court packet',formReviewReference:'Reviewed',reviewedForms:'SER-001',note:'Fictional'});await save();assert.equal(version,2);
 await click('[data-action="approve_intake"]');fill({note:'Approve'});await save();assert.match(root.querySelector('#ca-form [role=alert]').textContent,/court packet/);assert.equal(version,2);
