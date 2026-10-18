@@ -398,6 +398,10 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-pos-preflight p{margin:8px 0 0;font-size:12px;line-height:1.6}
 .ca-classic .ca-pos-missing{color:var(--gold,#e6ad50)!important}
 .ca-classic .ca-pos-ready{color:var(--green,#26b485)!important}
+.ca-classic .ca-intake-more{margin:10px 0 0}
+.ca-classic .ca-intake-more summary{cursor:pointer;display:inline-flex;align-items:center;min-height:36px;color:var(--blue,#438be9);font-size:12px;font-weight:700}
+.ca-classic .ca-intake-more summary:focus-visible{outline:2px solid var(--ca-accent);outline-offset:3px}
+.ca-classic .ca-intake-more .ca-intake-checklist{margin:8px 0 0}
 .ca-classic .ca-proof-progress{padding:15px 17px;margin:12px 0 19px;border:1px solid var(--ca-border);border-radius:13px;background:var(--ca-surface)}
 .ca-classic .ca-proof-progress>div{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ca-classic .ca-proof-progress strong{font-size:13px}
@@ -1161,8 +1165,23 @@ window.CaliforniaCivil = (() => {
           if(intakeIssues.length){
             const list=document.createElement("ul");
             list.className="ca-intake-checklist";
-            intakeIssues.forEach(issue=>{const li=document.createElement("li");li.textContent=issue;list.append(li);});
+            intakeIssues.slice(0,3).forEach(issue=>{
+              const li=document.createElement("li");li.textContent=issue;list.append(li);
+            });
             nextPanel.querySelector(".panel-body")?.append(list);
+            if(intakeIssues.length>3){
+              const remaining=document.createElement("details");
+              remaining.className="ca-intake-more";
+              const toggle=document.createElement("summary");
+              toggle.textContent="Show "+(intakeIssues.length-3)+" more intake requirements";
+              const extra=document.createElement("ul");
+              extra.className="ca-intake-checklist";
+              intakeIssues.slice(3).forEach(issue=>{
+                const li=document.createElement("li");li.textContent=issue;extra.append(li);
+              });
+              remaining.append(toggle,extra);
+              nextPanel.querySelector(".panel-body")?.append(remaining);
+            }
           }
         }
         if(nextPanel && recommended && actions.includes(recommended)){
