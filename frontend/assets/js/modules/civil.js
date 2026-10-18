@@ -1037,13 +1037,23 @@ function renderPaperDetailTabContent(p){
     document.querySelectorAll('[data-open-sibling]').forEach(btn=>btn.addEventListener('click', ()=>openPaperDetail(btn.dataset.openSibling)));
 
   } else if(PAPER_DETAIL_TAB==='attempts'){
-    const rows = p.attempts.slice().reverse().map(a=>`
-      <tr><td>${a.date} ${a.time}</td><td>${escapeHtml(personName(a.deputyId))}</td>
-      <td><span class="badge ${a.result==='Served'?'badge-available':'badge-missing'}">${escapeHtml(a.result)}</span></td>
-      <td style="font-size:12.5px;">${escapeHtml(a.notes||'')}${a.mileage?`<div style="color:var(--text-dim);">${a.mileage} mi</div>`:''}${a.gps?`<div style="color:var(--text-dim);"><a href="https://www.google.com/maps?q=${a.gps.lat},${a.gps.lng}" target="_blank" rel="noopener">${a.gps.lat.toFixed(5)}, ${a.gps.lng.toFixed(5)}</a></div>`:''}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No service attempts logged yet.</td></tr>`;
+    const attempts=(p.attempts||[]).slice().reverse();
     body.innerHTML = `
-      ${canLog ? `<button class="btn btn-sm btn-primary" style="margin-bottom:14px;" id="btnLogAttempt">${ICONS.plus} Log Attempt</button>` : ''}
-      <table><thead><tr><th>Date / Time</th><th>Deputy</th><th>Result</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
+      <style>
+      #modalBox.civil-case-workspace .civil-attempt-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+      #modalBox.civil-case-workspace .civil-attempt-head h3{margin:0;font-size:18px}
+      #modalBox.civil-case-workspace .civil-attempt-head p{color:var(--text-dim);font-size:12px;margin:5px 0 0}
+      #modalBox.civil-case-workspace .civil-attempt-list{display:grid;gap:11px}
+      #modalBox.civil-case-workspace .civil-attempt-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:12px;padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
+      #modalBox.civil-case-workspace .civil-attempt-card[data-result="Served"]{border-left-color:var(--green)}
+      #modalBox.civil-case-workspace .civil-attempt-date{font-weight:700;font-size:14px}
+      #modalBox.civil-case-workspace .civil-attempt-meta{font-size:12px;color:var(--text-dim);margin-top:4px}
+      #modalBox.civil-case-workspace .civil-attempt-notes{font-size:13px;margin:12px 0 0;overflow-wrap:anywhere}
+      #modalBox.civil-case-workspace .civil-attempt-empty{padding:38px 22px;text-align:center;border:1px dashed var(--border);border-radius:15px;color:var(--text-dim)}
+      @media(max-width:620px){#modalBox.civil-case-workspace .civil-attempt-card{grid-template-columns:1fr}}
+      </style>
+      <div class="civil-attempt-head"><div><h3>Service attempts</h3><p>${attempts.length} recorded attempt${attempts.length===1?'':'s'} · most recent first</p></div>${canLog ? `<button class="btn btn-primary" id="btnLogAttempt">${ICONS.plus} Log attempt</button>` : ''}</div>
+      ${attempts.length?'<div class="civil-attempt-list">'+attempts.map(a=>`<article class="civil-attempt-card" data-result="${escapeHtml(a.result)}"><div><div class="civil-attempt-date">${escapeHtml(a.date)} · ${escapeHtml(a.time||'')}</div><div class="civil-attempt-meta">${escapeHtml(personName(a.deputyId))}${a.mileage?' · '+escapeHtml(String(a.mileage))+' miles':''}</div>${a.notes?`<p class="civil-attempt-notes">${escapeHtml(a.notes)}</p>`:''}${a.gps?`<p class="civil-attempt-meta"><a href="https://www.google.com/maps?q=${encodeURIComponent(a.gps.lat+','+a.gps.lng)}" target="_blank" rel="noopener">View recorded location ↗</a></p>`:''}</div><span class="badge ${a.result==='Served'?'badge-available':'badge-missing'}">${escapeHtml(a.result)}</span></article>`).join('')+'</div>':'<div class="civil-attempt-empty">No service attempts yet. Record the first attempt when service work begins.</div>'}
     `;
     const logBtn = document.getElementById('btnLogAttempt');
     if(logBtn) logBtn.addEventListener('click', ()=>openLogAttemptModal(p.id));
