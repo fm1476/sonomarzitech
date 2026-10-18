@@ -1001,17 +1001,18 @@ function renderPaperDetailTabContent(p){
         </div>
       ` : ''}
       ${canManageSafety ? `<button class="btn btn-sm btn-outline" style="margin-bottom:14px;" id="btnAddSafetyFlag"><span style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;">${ICONS.alert||'+'}</span> ${activeFlags.length?'Add Another Safety Flag':'Add Safety Flag'}</button>` : ''}
-      <div class="detail-grid" style="margin-bottom:14px;">
-        <div><div class="k">Plaintiff / Petitioner</div><div class="v">${escapeHtml(p.plaintiff)}${(p.additionalPlaintiffs||[]).length?` <span class="badge badge-role">+${p.additionalPlaintiffs.length} more</span>`:''}</div></div>
-        <div><div class="k">Defendant / Respondent</div><div class="v">${escapeHtml(p.defendant)}${(p.additionalDefendants||[]).length?` <span class="badge badge-role">+${p.additionalDefendants.length} more</span>`:''}</div></div>
-        <div><div class="k">Attorney of Record</div><div class="v">${(p.attorneyOfRecord ? escapeHtml(p.attorneyOfRecord) : '—')}</div></div>
-        <div><div class="k">Stage</div><div class="v"><span class="badge" style="background:${stageColor(p.stage)}22;color:${stageColor(p.stage)};">${p.stage}</span></div></div>
-        <div><div class="k">Assigned Server</div><div class="v">${p.assignedServerId ? escapeHtml(personName(p.assignedServerId)) : 'Unassigned'}</div></div>
-        <div><div class="k">Received</div><div class="v">${p.receivedDate}</div></div>
-        <div><div class="k">Return By</div><div class="v">${p.returnByDate}</div></div>
-        <div><div class="k">Service Method</div><div class="v">${escapeHtml(p.serviceMethod||'Not yet determined')}</div></div>
-        ${p.servedDate ? `<div><div class="k">Served</div><div class="v">${p.servedDate} ${p.servedTime||''}${p.servedOnName?' on '+escapeHtml(p.servedOnName):''}</div></div>` : ''}
-      </div>
+      ${SonoMarziCivilCaseUI.style}
+      ${SonoMarziCivilCaseUI.facts([
+        {label:'Plaintiff / Petitioner',value:p.plaintiff},
+        {label:'Defendant / Respondent',value:p.defendant},
+        {label:'Attorney of Record',value:p.attorneyOfRecord||'Not provided'},
+        {label:'Stage',value:p.stage},
+        {label:'Assigned server',value:p.assignedServerId?personName(p.assignedServerId):'Unassigned'},
+        {label:'Received',value:p.receivedDate},
+        {label:'Return by',value:p.returnByDate||'Not recorded'},
+        {label:'Service method',value:p.serviceMethod||'Not yet determined'},
+        ...(p.servedDate?[{label:'Served',value:p.servedDate+' '+(p.servedTime||'')+(p.servedOnName?' on '+p.servedOnName:'')}]:[])
+      ])}
       ${(()=>{
         const siblings = STATE.civil.papers.filter(x=>x.id!==p.id && x.caseNumber.trim().toLowerCase()===p.caseNumber.trim().toLowerCase());
         if(!siblings.length) return '';
