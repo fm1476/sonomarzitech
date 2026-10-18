@@ -343,6 +343,23 @@ window.CaliforniaCivil = (() => {
 .ca-classic #ca-actions{max-width:100%;overflow:visible}
 .ca-classic #ca-actions .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0}
 .ca-classic #ca-detail .ca-case-content{display:block}
+.ca-classic #ca-form:empty{display:none}
+.ca-classic #ca-form .ca-form-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(3,9,20,.78);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(5px)}
+.ca-classic #ca-form .ca-form-backdrop>form{width:min(720px,100%);max-height:min(90dvh,900px);display:flex;flex-direction:column;padding:0;margin:0;overflow:hidden;background:var(--ca-surface,#172335);border:1px solid var(--ca-border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.4)}
+.ca-classic .ca-form-heading,.ca-classic .ca-form-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px;flex-shrink:0}
+.ca-classic .ca-form-heading{border-bottom:1px solid var(--ca-border)}.ca-classic .ca-form-heading h3{margin:0}
+.ca-classic .ca-form-fields{overflow:auto;padding:20px 22px;min-height:0;flex:1}
+.ca-classic .ca-form-fields .form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
+.ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
+@media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-doc-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;color:var(--text-dim);font-size:13px}
+.ca-classic .ca-doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:10px;margin:12px 0}
+.ca-classic .ca-doc-item{border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface);padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-width:0}
+.ca-classic .ca-doc-item strong{display:block;overflow-wrap:anywhere}
+.ca-classic .ca-doc-item small{display:block;color:var(--text-dim);margin-top:4px}
+.ca-classic .ca-doc-tools{display:flex;gap:8px;flex-wrap:wrap}
+.ca-classic .ca-doc-empty{color:var(--text-dim)}
 .ca-classic .ca-upload-drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:26px 18px;border:2px dashed var(--ca-border);border-radius:14px;background:rgba(54,122,215,.055);text-align:center;cursor:pointer;min-height:146px;overflow:hidden}
 .ca-classic .ca-upload-drop:hover,.ca-classic .ca-upload-drop:focus-within{border-color:var(--ca-accent);background:rgba(54,122,215,.10)}
 .ca-classic .ca-upload-drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
@@ -483,7 +500,7 @@ window.CaliforniaCivil = (() => {
           );
           return;
         }
-        target.innerHTML = `<form><h3>${esc(title)}</h3>${html}<p role="alert"></p><button class="btn btn-primary" type="submit">Save</button> <button class="btn btn-outline" type="button" id="ca-cancel-form">Cancel</button></form>`;
+        target.innerHTML = `<div class="ca-form-backdrop"><form role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="ca-form-heading"><h3>${esc(title)}</h3><button type="button" class="btn btn-outline" id="ca-cancel-form" aria-label="Close action">✕</button></div><div class="ca-form-fields">${html}</div><p role="alert"></p><div class="ca-form-footer"><button class="btn btn-outline" type="button" data-dismiss-form>Cancel</button><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>`;
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
           fileInput.addEventListener("change",()=>{
@@ -494,9 +511,7 @@ window.CaliforniaCivil = (() => {
         window.CaliforniaCivilView.bindServiceFields(
           target.querySelector("form"),
         );
-        target.querySelector("#ca-cancel-form").onclick = () => {
-          target.innerHTML = "";
-        };
+        target.querySelectorAll("#ca-cancel-form,[data-dismiss-form]").forEach(b=>b.onclick=()=>{target.innerHTML="";});
         target.querySelector("form").onsubmit = async (e) => {
           e.preventDefault();
           const button = e.submitter;
@@ -512,7 +527,7 @@ window.CaliforniaCivil = (() => {
             button.disabled = false;
           }
         };
-        target.scrollIntoView({ block: "nearest" });
+        target.querySelector("form")?.querySelector("input:not([type=file]),select,textarea,button")?.focus();
       }
       root.querySelector("#ca-new")?.addEventListener("click", () =>
         form(
@@ -1092,23 +1107,34 @@ window.CaliforniaCivil = (() => {
             }),
         );
         const documents = panel.querySelector("#ca-documents");
-        documents.innerHTML =
-          c.documents
-            .map(
-              (d) =>
-                `<button class="btn btn-outline" data-doc="${esc(d.id)}">${esc(d.kind)}: ${esc(d.name)}</button>`,
-            )
-            .join(" ") +
-          (!closed && !["Return Prepared", "Reviewed", "Returned to Court"].includes(r.stage) && can("civil_document_generate")
-            ? '<button class="btn btn-primary" id="ca-upload">Upload document</button>'
-            : "");
-        documents.querySelectorAll("[data-doc]").forEach(
-          (b) =>
-            (b.onclick = () =>
-              AWS_ATTACHMENTS.download({
-                storageKey: c.documents.find((d) => d.id === b.dataset.doc).key,
-              }).catch((e) => status(e.message))),
-        );
+        const mayManage=!closed && !["Return Prepared","Reviewed","Returned to Court"].includes(r.stage) && can("civil_document_generate");
+        documents.innerHTML = '<div class="ca-doc-head"><strong>Case documents</strong><span>'+c.documents.length+' active files</span></div>' +
+          (c.documents.length ? '<div class="ca-doc-grid">'+c.documents.map(d=>
+            '<article class="ca-doc-item"><div><strong>'+esc(d.name)+'</strong><small>'+esc(d.kind)+'</small></div><div class="ca-doc-tools"><button type="button" class="btn btn-outline" data-doc="'+esc(d.id)+'">Open</button>'+
+            (mayManage?'<button type="button" class="btn btn-outline" data-replace-doc="'+esc(d.id)+'">Replace</button><button type="button" class="btn btn-outline" data-remove-doc="'+esc(d.id)+'">Remove</button>':'')+'</div></article>'
+          ).join('')+'</div>' : '<p class="ca-doc-empty">No documents attached to this case yet.</p>') +
+          (mayManage?'<button class="btn btn-primary" id="ca-upload" type="button">+ Add document</button>':'');
+        documents.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>{
+          const doc=c.documents.find(d=>d.id===b.dataset.doc);
+          if(doc)AWS_ATTACHMENTS.download({storageKey:doc.key}).catch(e=>status(e.message));
+        });
+        documents.querySelectorAll("[data-replace-doc]").forEach(b=>b.onclick=()=>{
+          const doc=c.documents.find(d=>d.id===b.dataset.replaceDoc);
+          if(!doc)return;
+          form("Replace case document",'<p>Upload a replacement for <strong>'+esc(doc.name)+'</strong>. The earlier version stays in the audit record. Replacing an intake document may require renewed approval.</p><label class="form-row ca-upload-field">Replacement file<span class="ca-upload-drop"><span class="ca-upload-icon" aria-hidden="true">↑</span><strong>Choose replacement</strong><span class="ca-upload-hint">Maximum 500 MB</span><span class="ca-upload-filename" aria-live="polite">No file selected</span><input name="file" type="file" required aria-label="Choose replacement document"></span></label><label class="form-row">Reason for replacement<input name="note" required placeholder="Why is this document being replaced?"></label>',async data=>{
+            const file=data.get("file");
+            if(!file?.size)throw Error("Choose a replacement file.");
+            const meta=await AWS_ATTACHMENTS.upload(file,{collection:"civil.papers",itemId:caseId});
+            await command("replace_document",{documentId:doc.id,name:file.name,key:meta.storageKey,note:String(data.get("note")||"").trim()});
+          });
+        });
+        documents.querySelectorAll("[data-remove-doc]").forEach(b=>b.onclick=()=>{
+          const doc=c.documents.find(d=>d.id===b.dataset.removeDoc);
+          if(!doc)return;
+          form("Remove case document",'<p>Remove <strong>'+esc(doc.name)+'</strong> from the active case? The action will be recorded in history.</p><label class="form-row">Reason for removal<input name="note" required maxlength="3000" placeholder="Explain why this document is being removed"></label>',async data=>{
+            await command("remove_document",{documentId:doc.id,note:String(data.get("note")||"").trim()});
+          });
+        });
         documents.querySelector("#ca-upload")?.addEventListener("click", () =>
           form(
             "Upload case document",
