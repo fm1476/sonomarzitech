@@ -261,6 +261,7 @@ window.CaliforniaCivil = (() => {
       if (report && !can("civil_reports_view"))
         throw Error("Civil reporting permission is required.");
       root.innerHTML = `
+${SonoMarziCivilRecordUI.styles}
 <style id="ca-classic-theme">
 .ca-classic{--ca-accent:var(--primary,#3478db);--ca-surface:var(--surface,var(--card-bg,var(--bg-card,#172335)));--ca-border:var(--border,rgba(110,146,182,.3));}
 .ca-classic.panel{border:0;background:transparent;box-shadow:none}
@@ -1039,6 +1040,22 @@ window.CaliforniaCivil = (() => {
           current,
           labels,
         );
+        panel.querySelectorAll('[data-ca-address-idx]').forEach(button=>button.addEventListener('click',()=>{
+          const i=Number(button.dataset.caAddressIdx);
+          const addresses=(r.serviceAddresses||[]).length?r.serviceAddresses:(c.service?.address?[{address:c.service.address}]:[]);
+          const selected=addresses[i];
+          if(!selected?.address)return;
+          panel.querySelectorAll('[data-ca-address-idx]').forEach(item=>{
+            const active=Number(item.dataset.caAddressIdx)===i;
+            item.classList.toggle('active',active);
+            item.setAttribute('aria-pressed',String(active));
+          });
+          const frame=panel.querySelector('#caServiceAddressMap');
+          if(frame)frame.src=SonoMarziCivilRecordUI.mapUrl(selected.address);
+          const mapsLink=panel.querySelector('[data-civil-map-link]');
+          if(mapsLink)mapsLink.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(selected.address);
+        }));
+
         const shell=root.querySelector(".ca-classic");
         shell?.classList.add("ca-workspace-open");
         const bar=document.createElement("div");
