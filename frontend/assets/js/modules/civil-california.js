@@ -1868,7 +1868,7 @@ window.CaliforniaCivil = (() => {
   }
   const hasOpenWork = () =>
     !!document.querySelector(
-      ".view.active #ca-form form, .view.active #ca-detail .ca-workspace-heading, .view.active #ca-readiness form",
+      ".view.active #ca-form form, .view.active #ca-detail .civil-shared-case-head, .view.active #ca-detail .ca-workspace-heading, .view.active #ca-readiness form",
     );
   return { route, hasOpenWork, mountReadiness, context: () => api("context") };
 })();
