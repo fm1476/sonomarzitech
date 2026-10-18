@@ -398,6 +398,7 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-pos-preflight p{margin:8px 0 0;font-size:12px;line-height:1.6}
 .ca-classic .ca-pos-missing{color:var(--gold,#e6ad50)!important}
 .ca-classic .ca-pos-ready{color:var(--green,#26b485)!important}
+.ca-classic .ca-signed-upload{margin-top:16px;min-height:43px}
 .ca-classic .ca-pos-catalog{margin:24px 0 20px;border-top:1px solid var(--ca-border);padding-top:20px}
 .ca-classic .ca-pos-heading,.ca-classic .ca-pos-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .ca-classic .ca-pos-heading h4{font-size:15px;margin:0}
@@ -960,6 +961,22 @@ window.CaliforniaCivil = (() => {
               (found?'<a class="btn btn-outline" href="'+found[1]+'" target="_blank" rel="noopener noreferrer">View official form ↗</a>':'<span class="ca-form-notice">Confirm the approved form or local return template for this process.</span>')+'</article>';
           }).join('')+'</div><p class="ca-form-disclaimer">Form links open California Courts resources. Unsigned prefill is available for qualifying personally served summons and small-claims cases only. All generated drafts require review and signature before filing.</p>';
         formLibrary.hidden=true;
+        // Court forms are a working area, not a dead-end: provide an explicit
+        // route to attach the reviewed and signed proof before return preparation.
+        if(can("civil_document_generate")&&!["Closed","Cancelled","Return Prepared","Reviewed","Returned to Court"].includes(r.stage)){
+          const uploadSigned=document.createElement("button");
+          uploadSigned.type="button";
+          uploadSigned.className="btn btn-outline ca-signed-upload";
+          uploadSigned.textContent="Attach completed, signed proof →";
+          uploadSigned.addEventListener("click",()=>{
+            activateGroup("Documents");
+            const add=panel.querySelector("#ca-upload");
+            if(add)add.click();
+            else status("Document changes are not available for this case stage.");
+          });
+          formLibrary.append(uploadSigned);
+        }
+
         panel.querySelector("#ca-actions")?.after(formLibrary);
         formLibrary.querySelector("#ca-generate-draft")?.addEventListener("click",()=>{
           const actionButton=panel.querySelector('[data-action="generate_return_draft"]');
