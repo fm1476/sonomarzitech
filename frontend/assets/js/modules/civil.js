@@ -888,7 +888,7 @@ async function openPaperDetail(id){
 }
 // No API key required -- Google Maps' plain query-string embed geocodes a full address string
 // server-side and requires no setup, unlike the JS Maps API or the "official" Embed API.
-function mapEmbedSrc(address){ return `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`; }
+function mapEmbedSrc(address){ return SonoMarziCivilRecordUI.mapUrl(address); }
 
 function renderPaperDetailModal(){
   const p = paperFor(PAPER_DETAIL_ID);
@@ -901,6 +901,7 @@ function renderPaperDetailModal(){
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-xl civil-case-workspace';
   box.innerHTML = `
+    ${SonoMarziCivilRecordUI.styles}
     <style id="civil-workspace-style">\n      #modalBox.civil-case-workspace{width:min(1500px,calc(100vw - 48px));max-width:1500px;max-height:calc(100vh - 38px);height:calc(100vh - 38px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:var(--panel-bg,var(--bg-card,#111d2f))}\n      #modalBox.civil-case-workspace .modal-head{background:linear-gradient(115deg,rgba(48,116,210,.16),rgba(21,165,147,.08));padding:20px 26px;flex-shrink:0}\n      #modalBox.civil-case-workspace .modal-body{flex:1;min-height:0;overflow-y:auto;padding:24px}\n      #modalBox.civil-case-workspace .modal-foot{flex-shrink:0;padding:13px 24px}\n      #modalBox.civil-case-workspace [data-pd-tab]{border-radius:10px!important;border:1px solid var(--border)!important;min-height:42px;padding:0 16px;font-size:13px;font-weight:650;white-space:nowrap;flex:none}
       #modalBox.civil-case-workspace .civil-workspace-tabs{display:flex;gap:8px;padding:14px 24px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:thin}
       #modalBox.civil-case-workspace .civil-workspace-subtitle{color:var(--text-dim);font-size:13px;margin-top:6px}
@@ -1001,17 +1002,17 @@ function renderPaperDetailTabContent(p){
         </div>
       ` : ''}
       ${canManageSafety ? `<button class="btn btn-sm btn-outline" style="margin-bottom:14px;" id="btnAddSafetyFlag"><span style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;">${ICONS.alert||'+'}</span> ${activeFlags.length?'Add Another Safety Flag':'Add Safety Flag'}</button>` : ''}
-      <div class="detail-grid" style="margin-bottom:14px;">
-        <div><div class="k">Plaintiff / Petitioner</div><div class="v">${escapeHtml(p.plaintiff)}${(p.additionalPlaintiffs||[]).length?` <span class="badge badge-role">+${p.additionalPlaintiffs.length} more</span>`:''}</div></div>
-        <div><div class="k">Defendant / Respondent</div><div class="v">${escapeHtml(p.defendant)}${(p.additionalDefendants||[]).length?` <span class="badge badge-role">+${p.additionalDefendants.length} more</span>`:''}</div></div>
-        <div><div class="k">Attorney of Record</div><div class="v">${(p.attorneyOfRecord ? escapeHtml(p.attorneyOfRecord) : '—')}</div></div>
-        <div><div class="k">Stage</div><div class="v"><span class="badge" style="background:${stageColor(p.stage)}22;color:${stageColor(p.stage)};">${p.stage}</span></div></div>
-        <div><div class="k">Assigned Server</div><div class="v">${p.assignedServerId ? escapeHtml(personName(p.assignedServerId)) : 'Unassigned'}</div></div>
-        <div><div class="k">Received</div><div class="v">${p.receivedDate}</div></div>
-        <div><div class="k">Return By</div><div class="v">${p.returnByDate}</div></div>
-        <div><div class="k">Service Method</div><div class="v">${escapeHtml(p.serviceMethod||'Not yet determined')}</div></div>
-        ${p.servedDate ? `<div><div class="k">Served</div><div class="v">${p.servedDate} ${p.servedTime||''}${p.servedOnName?' on '+escapeHtml(p.servedOnName):''}</div></div>` : ''}
-      </div>
+      ${SonoMarziCivilRecordUI.facts([
+        {label:'Plaintiff / Petitioner',value:p.plaintiff+((p.additionalPlaintiffs||[]).length?' (+'+p.additionalPlaintiffs.length+' more)':'')},
+        {label:'Defendant / Respondent',value:p.defendant+((p.additionalDefendants||[]).length?' (+'+p.additionalDefendants.length+' more)':'')},
+        {label:'Attorney of Record',value:p.attorneyOfRecord||'Not recorded'},
+        {label:'Stage',value:p.stage},
+        {label:'Assigned Server',value:p.assignedServerId?personName(p.assignedServerId):'Unassigned'},
+        {label:'Received',value:p.receivedDate},
+        {label:'Return By',value:p.returnByDate},
+        {label:'Service Method',value:p.serviceMethod||'Not yet determined'},
+        ...(p.servedDate?[{label:'Served',value:p.servedDate+' '+(p.servedTime||'')+(p.servedOnName?' on '+p.servedOnName:'')}]:[])
+      ])}
       ${(()=>{
         const siblings = STATE.civil.papers.filter(x=>x.id!==p.id && x.caseNumber.trim().toLowerCase()===p.caseNumber.trim().toLowerCase());
         if(!siblings.length) return '';
@@ -1047,28 +1048,22 @@ function renderPaperDetailTabContent(p){
           </div>
         </div>
       </div>` : ''}
-      <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Service Address(es)</h2>${canIntake ? `<button class="btn btn-sm btn-outline" id="btnAddAddress">${ICONS.plus} Add Address</button>` : ''}</div>
-        <div class="panel-body">
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px;">
-              ${(p.serviceAddresses||[]).map((a,ai)=>`
-                <button class="civil-address-chip ${ai===PAPER_ADDRESS_SELECTED?'active':''}" data-address-idx="${ai}">
-                  ${ICONS.mappin}<span>${escapeHtml(a.address)}</span>${a.isPrimary?'<span class="badge badge-role" style="margin-left:auto;">Primary</span>':''}
-                </button>
-              `).join('') || `<div style="font-size:12.5px;color:var(--text-dim);">No service address on file.</div>`}
-            </div>
-            <div style="flex:2;min-width:280px;">
-              ${(p.serviceAddresses||[]).length ? `<iframe id="paperAddressMap" src="${mapEmbedSrc((p.serviceAddresses[PAPER_ADDRESS_SELECTED] || p.serviceAddresses[0]).address)}" style="width:100%;height:260px;border:0;border-radius:8px;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>
+      ${SonoMarziCivilRecordUI.addresses(p.serviceAddresses||[],{
+        selected:PAPER_ADDRESS_SELECTED,
+        addButtonHTML:canIntake?'<button class="btn btn-sm btn-outline" id="btnAddAddress">'+ICONS.plus+' Add Address</button>':''
+      })}
     `;
     document.querySelectorAll('[data-address-idx]').forEach(btn=>btn.addEventListener('click', ()=>{
       PAPER_ADDRESS_SELECTED = Number(btn.dataset.addressIdx);
-      document.querySelectorAll('[data-address-idx]').forEach(b=>b.classList.toggle('active', Number(b.dataset.addressIdx)===PAPER_ADDRESS_SELECTED));
+      document.querySelectorAll('[data-address-idx]').forEach(b=>{
+        const active=Number(b.dataset.addressIdx)===PAPER_ADDRESS_SELECTED;
+        b.classList.toggle('active',active);
+        b.setAttribute('aria-pressed',String(active));
+      });
       const frame = document.getElementById('paperAddressMap');
       if(frame && p.serviceAddresses[PAPER_ADDRESS_SELECTED]) frame.src = mapEmbedSrc(p.serviceAddresses[PAPER_ADDRESS_SELECTED].address);
+      const mapLink=document.querySelector('#paperDetailBody [data-civil-map-link]');
+      if(mapLink && p.serviceAddresses[PAPER_ADDRESS_SELECTED]) mapLink.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(p.serviceAddresses[PAPER_ADDRESS_SELECTED].address);
     }));
     const addAddrBtn = document.getElementById('btnAddAddress');
     if(addAddrBtn) addAddrBtn.addEventListener('click', ()=>openAddAddressModal(p));

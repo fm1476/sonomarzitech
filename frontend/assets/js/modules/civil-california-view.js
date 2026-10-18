@@ -162,10 +162,8 @@ window.CaliforniaCivilView = (() => {
           ["Court receipt", c.returnPacket.receiptReference],
         ])
       : "<p>No court return prepared.</p>";
-    const serviceAddress=(r.serviceAddresses||[]).find(a=>a.address)?.address||c.service?.address||'';
-    const serviceMap=serviceAddress
-      ? '<section class="ca-service-map"><div class="ca-service-map-head"><h4>Service Address</h4><a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(serviceAddress)+'" target="_blank" rel="noopener noreferrer">Open in Maps ↗</a></div><div class="ca-service-map-location">'+esc(serviceAddress)+'</div><iframe title="Map of service address" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q='+encodeURIComponent(serviceAddress)+'&output=embed"></iframe><p>Map locations are approximate until the service address is verified. Do not rely solely on the map for service.</p></section>'
-      : '<section class="ca-service-map"><h4>Service Address</h4><p>No service address recorded.</p></section>';
+    const serviceAddresses=(r.serviceAddresses||[]).length?r.serviceAddresses:(c.service?.address?[{address:c.service.address,isPrimary:true}]:[]);
+    const serviceMap=SonoMarziCivilRecordUI.addresses(serviceAddresses,{idPrefix:'ca',selected:0});
     const activeFlags=(r.safetyFlags||[]).filter(f=>f.active&&!f.retiredAt);
     const safetyNote=activeFlags.length?'<div class="ca-safety-alert" role="note"><strong>⚠ Safety flag on file</strong><p>Review verified officer-safety information before contact. '+activeFlags.length+' active flag(s) associated with this case.</p></div>':'';
     const stages=["Intake","Ready","Assigned","Attempting","Served","Return Prepared","Reviewed","Returned to Court","Closed"];
@@ -173,14 +171,19 @@ window.CaliforniaCivilView = (() => {
     const progress=stages.map((step,i)=>'<div class="ca-progress-step" data-complete="'+(at>=i&&at>=0)+'" data-current="'+(r.stage===step)+'"><span class="ca-progress-dot"></span><small>'+esc(step)+'</small></div>').join("");
     return `<header class="ca-workspace-heading"><div><div class="ca-workspace-kicker">Civil case workspace</div><h2>${esc(r.caseNumber)}</h2><p>${esc(workflow.label)} · ${esc(r.courtOfOrigin)}</p></div><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></header>
       ${safetyNote}
-      <div class="ca-case-summary">
-        <div><small>Parties</small><strong>${esc(r.plaintiff)} / ${esc(r.defendant)}</strong></div>
-        <div><small>Assigned server</small><strong>${esc(person(r.assignedServerId))}</strong></div>
-        <div><small>Return due</small><strong>${esc(r.returnByDate ? date(r.returnByDate) : "Pending review")}</strong></div>
-        <div><small>Case balance</small><strong>${money(balance)}</strong></div>
-        <div><small>Released funds</small><strong>${money(current.availableCents ?? balance)}</strong></div>
-        <div><small>Open claims / stays</small><strong>${c.holds.filter(h=>!h.resolvedAt).length}</strong></div>
-      </div>
+      ${SonoMarziCivilRecordUI.facts([
+        {label:'Plaintiff / Petitioner',value:r.plaintiff},
+        {label:'Defendant / Respondent',value:r.defendant},
+        {label:'Court of Origin',value:r.courtOfOrigin},
+        {label:'Stage',value:r.stage},
+        {label:'Assigned Server',value:person(r.assignedServerId)},
+        {label:'Received',value:date(r.receivedDate)},
+        {label:'Return By',value:r.returnByDate?date(r.returnByDate):'Pending review'},
+        {label:'Service Method',value:c.service?.method||'Not yet determined'},
+        {label:'Case Balance',value:money(balance)},
+        {label:'Available Funds',value:money(current.availableCents??balance)},
+        {label:'Open Claims / Stays',value:c.holds.filter(h=>!h.resolvedAt).length}
+      ])}
       ${serviceMap}
       <section class="ca-progress"><div class="ca-progress-title"><h4>Case progress</h4><span>${esc(r.stage)}</span></div><div class="ca-progress-track">${progress}</div></section>
       <div class="panel ca-next-step"><div class="panel-body"><div class="ca-next-heading"><h4>Recommended next step</h4><span>Guided workflow</span></div><p>${esc(nextSteps[r.stage] || "Review the case record.")}</p></div></div>

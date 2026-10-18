@@ -21,7 +21,7 @@ const data=b.operation==='context'?{profile:{profileId:'US-CA',status:'test',cou
 if(!data)throw Error('Unexpected operation: '+b.operation);return {success:true,data};
 }};
 },{record,workflows:CA_WORKFLOWS});
-for(const name of ['civil-board-ui','civil-california-view','civil-california-calendar','civil-california'])await page.addScriptTag({content:fs.readFileSync('frontend/assets/js/modules/'+name+'.js','utf8')});
+for(const name of ['civil-board-ui','civil-record-ui','civil-california-view','civil-california-calendar','civil-california'])await page.addScriptTag({content:fs.readFileSync('frontend/assets/js/modules/'+name+'.js','utf8')});
 await page.evaluate(()=>window.CaliforniaCivil.route(document.querySelector('#view-civil-board'),'civil-board'));
 await page.locator('[data-case]').first().click();
 await page.locator('[data-section="Forms"]').click();
