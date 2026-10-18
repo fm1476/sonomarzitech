@@ -618,12 +618,12 @@ window.CaliforniaCivil = (() => {
         }, 200);
       };
       if(id==="civil-board"){
-        let filterEpoch=0;
         for(const [selector,setter] of [['#ca-type-filter',value=>boardPaperType=value],['#ca-location-filter',value=>boardLocation=value]]){
           const element=root.querySelector(selector);
           if(element)element.onchange=async()=>{
             setter(element.value);
-            const epoch=++filterEpoch;
+            clearTimeout(searchTimer);
+            const epoch=++searchEpoch;
             status('Loading matching cases...');
             try{
               const page=await api('list',{
@@ -631,9 +631,9 @@ window.CaliforniaCivil = (() => {
                 paperType:boardPaperType==='All'?'':boardPaperType,
                 courtOfOrigin:boardLocation==='All'?'':boardLocation
               },scope);
-              if(token!==generation||epoch!==filterEpoch)return;
+              if(token!==generation||epoch!==searchEpoch)return;
               rows=page.cases;nextCursor=page.nextCursor;draw();status('');
-            }catch(error){if(epoch===filterEpoch)status('Unable to filter cases: '+error.message);}
+            }catch(error){if(epoch===searchEpoch)status('Unable to filter cases: '+error.message);}
           };
         }
       }
