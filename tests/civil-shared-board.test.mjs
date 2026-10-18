@@ -27,4 +27,6 @@ assert.doesNotMatch(california,/data-stage-dropzone.*addEventListener/);
 assert.match(ui.styles,/civil-shared-filters input\[type="search"\]/,'Shared dark search input must receive explicit styling');
 assert.match(ui.styles,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/,'Laptop grid must wrap status columns');
 assert.match(ui.styles,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,'Compact grid must wrap status columns');
+assert.match(ui.styles,/civil-shared-filters label\\{font-size:14px/,'Shared board labels must be legible');
+assert.match(ui.styles,/civil-shared-table\\{font-size:15px/,'Shared table should use readable type');
 console.log('Shared Civil presentation, Kanban/Table modes, case grouping and escaped search filters passed.');
