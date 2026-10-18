@@ -39,6 +39,15 @@ r=step(r,'enforcement_event',{id:'spoofed',kind:'Levy',date:'2026-10-17',descrip
 r=step(r,'request_disbursement',{amountCents:10000,payee:'Demo',authority:'Order',reference:'D1'});const disbursementId=r.california.disbursements[0].id;fails(r,'approve_disbursement',{disbursementId});r=step(r,'approve_disbursement',{disbursementId},{...ctx,userId:'finance-reviewer'});r=step(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});assert.equal(ledgerBalance(r),0);fails(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});fails(r,'cancel');r=step(r,'reconcile',{verifiedBalanceCents:0,reference:'Bank reconciliation'});r=step(r,'cancel');assert.equal(r.stage,'Cancelled');
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});unserved=step(unserved,'unserved');assert.equal(unserved.stage,'Unable to Serve');
+// An unsigned generated working copy must never count as a signed proof of service.
+let unsignedOnly=step(ready("summons"),"assign",{personId:ctx.personId});
+unsignedOnly=step(unsignedOnly,"serve",{date:"2026-10-17",time:"10:00",recipient:"Demo Defendant",address:"123 Fictional Lane",method:"Personal service"});
+unsignedOnly=step(unsignedOnly,"attach_document",{name:"POS-010-unsigned.pdf",key:"test/unsigned-draft",kind:"Unsigned return draft"});
+assert.equal(unsignedOnly.california.documents[unsignedOnly.california.documents.length-1].kind,"Unsigned return draft");
+fails(unsignedOnly,"prepare_return",{formName:"POS-010",reference:"Unsigned draft"},ctx,/completed proof\/return/);
+unsignedOnly=step(unsignedOnly,"attach_document",{name:"Signed-POS-010.pdf",key:"test/signed-proof",kind:"Proof of service"});
+unsignedOnly=step(unsignedOnly,"prepare_return",{formName:"POS-010",reference:"Reviewed signed proof"});
+assert.equal(unsignedOnly.stage,"Return Prepared");
 let removeCase=ready('summons');
 const oldFile=removeCase.california.documents.find(d=>d.kind==='Court packet');
 fails(removeCase,'remove_document',{documentId:oldFile.id,note:''},ctx,/action note/);
