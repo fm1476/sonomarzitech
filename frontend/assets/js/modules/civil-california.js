@@ -531,6 +531,19 @@ ${SonoMarziCivilRecordUI.styles}
 .ca-classic .ca-form-resource{min-width:0}
 @media(max-width:680px){.ca-classic .ca-section-dialog-body h3{font-size:19px}.ca-classic .ca-form-resource-grid{grid-template-columns:minmax(0,1fr)}}
 
+
+/* Intake form review is a required, workflow-scoped multi-select, not free text. */
+.ca-classic .ca-reviewed-forms{border:1px solid var(--ca-border);border-radius:13px;padding:15px 18px;margin:12px 0;min-width:0}
+.ca-classic .ca-reviewed-forms legend{font-weight:750;font-size:17px;padding:0 7px}
+.ca-classic .ca-reviewed-help{font-size:14px;line-height:1.55;color:var(--text-dim);margin:5px 0 15px}
+.ca-classic .ca-reviewed-option{display:flex;align-items:center;gap:13px;padding:14px 12px;border:1px solid var(--ca-border);border-radius:10px;margin:8px 0;background:var(--ca-surface);cursor:pointer;flex-wrap:wrap}
+.ca-classic .ca-reviewed-option input[type="checkbox"]{width:20px;height:20px;flex:0 0 20px;accent-color:var(--ca-accent);cursor:pointer}
+.ca-classic .ca-reviewed-option>span{flex:1 1 150px;display:flex;flex-direction:column;gap:3px;min-width:0;font-size:15px}
+.ca-classic .ca-reviewed-option>span strong{font-size:16px}
+.ca-classic .ca-reviewed-link{font-size:14px;font-weight:700;white-space:nowrap;color:var(--ca-accent)}
+.ca-classic .ca-reviewed-option:focus-within{outline:2px solid var(--ca-accent);outline-offset:2px}
+@media(max-width:550px){.ca-classic .ca-reviewed-forms{padding:12px}.ca-classic .ca-reviewed-option{align-items:flex-start}.ca-classic .ca-reviewed-link{margin-left:32px}}
+
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
@@ -1699,8 +1712,20 @@ ${SonoMarziCivilRecordUI.styles}
                         : key === "returnByDate"
                           ? r.returnByDate
                           : c.intakeDetails[key] || "";
-                      if (key === "reviewedForms")
-                        value = (value || []).join(", ");
+                      if (key === "reviewedForms") {
+                        const required=context.workflows[c.workflowId]?.forms||[];
+                        const checked=new Set(Array.isArray(value)?value:[]);
+                        return '<fieldset class="ca-reviewed-forms"><legend>Reviewed Forms</legend>'+
+                          '<p class="ca-reviewed-help">Select each required document after you have reviewed it against the court packet. Selecting a form records your review, not its legal approval.</p>'+
+                          (required.length?required.map(code=>{
+                            const details=formSources[code]||[code,null];
+                            return '<label class="ca-reviewed-option"><input type="checkbox" name="reviewedForms" value="'+esc(code)+'" '+(checked.has(code)?'checked':'')+'>'+
+                              '<span><strong>'+esc(code)+'</strong><span>'+esc(details[0])+'</span></span>'+
+                              (details[1]?'<a href="'+esc(details[1])+'" target="_blank" rel="noopener noreferrer" class="ca-reviewed-link" aria-label="View official '+esc(code)+' form">View official form ↗</a>':'')+
+                              '</label>';
+                          }).join(''):'<p>No required forms are configured for this workflow.</p>')+
+                          '</fieldset>';
+                      }
                       return input(
                         spec,
                         value,
@@ -1726,11 +1751,11 @@ ${SonoMarziCivilRecordUI.styles}
                       const [key, type] = spec.split(":");
                       if (type === "money") payload[key] = cents(payload[key]);
                     }
-                    if (action === "intake_details")
-                      payload.reviewedForms = payload.reviewedForms
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean);
+                    if (action === "intake_details") {
+                      const required=context.workflows[c.workflowId]?.forms||[];
+                      const selected=data.getAll("reviewedForms").map(value=>String(value));
+                      payload.reviewedForms=[...new Set(selected.filter(code=>required.includes(code)))];
+                    }
                     const result = await command(action, payload);
                     if (result.draft) {
                       const bytes = Uint8Array.from(
