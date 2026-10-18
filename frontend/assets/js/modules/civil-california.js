@@ -1326,8 +1326,10 @@ window.CaliforniaCivil = (() => {
                       :c.service?.method==="First-class mail"?[["POS-030","POS-030 · First-Class Mail—Civil"]]
                       :[["POS-020","POS-020 · Personal Service—Civil"],["POS-040","POS-040 · Proof of Service—Civil"]]
                   :key === "mailingMethod" ? ["USPS deposit","Business collection"]
-                  :key === "method" && action === "serve" && !["summons", "small-claims"].includes(c.workflowId)
-                    ? options.method.filter(method => !["Substituted service","First-class mail"].includes(method))
+                  :key === "method" && action === "serve"
+                    ? options.method.filter(method=>["summons","small-claims"].includes(c.workflowId)
+                      ? method!=="First-class mail"
+                      : method!=="Substituted service")
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "deadlineId"
