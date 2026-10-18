@@ -31,3 +31,22 @@ jobs:
           node tests/civil-california-view.test.mjs
           node tests/civil-california-presentation.test.mjs
           node tests/civil-california-returns.test.mjs
+
+      - name: Install Chromium UI smoke test tools
+        run: |
+          npm install --prefix tests/civil-support --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tests/civil-support/node_modules/.bin/playwright install chromium
+
+      - name: Verify Civil case workspace in a real browser
+        run: |
+          mkdir -p artifacts
+          node tests/civil-california-browser.test.mjs
+
+      - name: Preserve Civil desktop and mobile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: civil-ui-browser-screenshots
+          path: artifacts/civil-*.png
+          if-no-files-found: ignore
+          retention-days: 7
