@@ -353,6 +353,12 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
 .ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
 @media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-kind-picker{position:relative;min-width:0}
+.ca-classic .ca-kind-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;min-height:44px;text-align:left}
+.ca-classic .ca-kind-options{position:relative;z-index:4;margin-top:6px;border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface);padding:5px;max-height:235px;overflow-y:auto;box-shadow:0 10px 22px rgba(0,0,0,.16)}
+.ca-classic .ca-kind-options[hidden]{display:none}
+.ca-classic .ca-kind-option{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:10px 12px;border-radius:8px;cursor:pointer;font:inherit}
+.ca-classic .ca-kind-option:hover,.ca-classic .ca-kind-option:focus-visible{background:rgba(55,128,225,.18);outline:1px solid var(--ca-accent)}
 .ca-classic .ca-doc-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;color:var(--text-dim);font-size:13px}
 .ca-classic .ca-doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:10px;margin:12px 0}
 .ca-classic .ca-doc-item{border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface);padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-width:0}
@@ -501,6 +507,27 @@ window.CaliforniaCivil = (() => {
           return;
         }
         target.innerHTML = `<div class="ca-form-backdrop"><form role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="ca-form-heading"><h3>${esc(title)}</h3><button type="button" class="btn btn-outline" id="ca-cancel-form" aria-label="Close action">✕</button></div><div class="ca-form-fields">${html}</div><p role="alert"></p><div class="ca-form-footer"><button class="btn btn-outline" type="button" data-dismiss-form>Cancel</button><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>`;
+        // Native select popups can be clipped by scrollable modal bodies.
+        // Use a keyboard-accessible, in-dialog option list for document kinds.
+        const kindSelect=target.querySelector('select[name="kind"]');
+        if(kindSelect){
+          const host=document.createElement("div");
+          host.className="ca-kind-picker";
+          const options=[...kindSelect.options].filter(o=>o.value);
+          host.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-expanded="false" aria-haspopup="listbox">Select document kind <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" hidden></div>';
+          const trigger=host.querySelector(".ca-kind-trigger");
+          const list=host.querySelector(".ca-kind-options");
+          options.forEach(o=>{
+            const item=document.createElement("button");
+            item.type="button";item.className="ca-kind-option";item.setAttribute("role","option");item.dataset.value=o.value;item.textContent=o.textContent;
+            item.onclick=()=>{kindSelect.value=o.value;trigger.firstChild.textContent=o.textContent+" ";trigger.setAttribute("aria-expanded","false");list.hidden=true;};
+            list.append(item);
+          });
+          trigger.onclick=()=>{const open=trigger.getAttribute("aria-expanded")==="true";trigger.setAttribute("aria-expanded",String(!open));list.hidden=open;if(!open)list.querySelector("button")?.focus();};
+          list.onkeydown=e=>{if(e.key==="Escape"){list.hidden=true;trigger.setAttribute("aria-expanded","false");trigger.focus();}if(["ArrowDown","ArrowUp"].includes(e.key)){e.preventDefault();const all=[...list.querySelectorAll("button")];const n=all.indexOf(document.activeElement);all[(n+(e.key==="ArrowDown"?1:all.length-1))%all.length]?.focus();}};
+          kindSelect.hidden=true;
+          kindSelect.after(host);
+        }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
           fileInput.addEventListener("change",()=>{
