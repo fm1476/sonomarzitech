@@ -16,4 +16,10 @@ for(const workflowId of ['summons','small-claims']){
  await assert.rejects(()=>generateCaliforniaReturnDraft(record,{...input,serverName:'X'.repeat(250)}),/too long/);
  if(process.env.CIVIL_PDF_QA_DIR)await writeFile(process.env.CIVIL_PDF_QA_DIR+'/'+workflowId+'-unsigned.pdf',bytes);
 }
+// The added POS catalog is currently reference-only. Never return a different form's
+// populated PDF for a workflow without a separately approved mapping and template.
+for(const unsupported of ['other-civil','pos-020','pos-030','pos-040']){
+ const record={id:'test',stage:'Served',defendant:'Demo Defendant',california:{workflowId:unsupported,service:{method:'Personal service',recipient:'Demo Defendant'}}};
+ await assert.rejects(()=>generateCaliforniaReturnDraft(record,input),/currently supports/);
+}
 console.log('California return drafts: official editable POS-010/SC-104 fields, XFA removal, blank signatures/certifications and overflow rejection passed.');
