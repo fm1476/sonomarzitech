@@ -25,6 +25,11 @@ for(const tab of caseTabs){
 assert.ok([...sectionCounts.values()].every(count=>count===1),'Each case section must appear in precisely one workspace tab');
 await click('[data-section="Forms"]');
 assert.equal(root.querySelector('[data-section="Forms"]').getAttribute('aria-pressed'),'true');
+const supplemental=root.querySelector('.ca-pos-supplementals');
+assert.ok(supplemental,'California Forms must describe official POS continuation attachments');
+for(const code of ['POS-020(D)','POS-020(P)','POS-030(D)','POS-030(P)','POS-040(D)','POS-040(P)'])
+ assert.ok(supplemental.textContent.includes(code),'Missing continuation form '+code);
+assert.equal(supplemental.open,false,'Supplemental forms should remain collapsed by default');
 await click('.ca-signed-upload');
 assert.equal(root.querySelector('[data-section="Documents"]').getAttribute('aria-pressed'),'true','Proof upload shortcut should open Documents');
 assert.ok(root.querySelector('#ca-form form'),'Proof upload shortcut should open the attachment dialog');
