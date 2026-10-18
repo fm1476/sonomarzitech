@@ -378,6 +378,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-draft-feature-copy p{margin:5px 0 0;color:var(--text-dim);font-size:12px;line-height:1.5}
 .ca-classic .ca-draft-feature>.btn{flex-shrink:0;min-height:43px;border-radius:10px}
 @media(max-width:600px){.ca-classic .ca-draft-feature>.btn{width:100%}}
+.ca-classic .ca-pos-preflight{background:var(--ca-surface);border:1px solid var(--ca-border);border-radius:12px;padding:14px 16px;margin:14px 0 20px}
+.ca-classic .ca-pos-preflight strong{font-size:13px}
+.ca-classic .ca-pos-preflight p{margin:8px 0 0;font-size:12px;line-height:1.6}
+.ca-classic .ca-pos-missing{color:var(--gold,#e6ad50)!important}
+.ca-classic .ca-pos-ready{color:var(--green,#26b485)!important}
 .ca-classic .ca-pos-catalog{margin:24px 0 20px;border-top:1px solid var(--ca-border);padding-top:20px}
 .ca-classic .ca-pos-heading,.ca-classic .ca-pos-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .ca-classic .ca-pos-heading h4{font-size:15px;margin:0}
@@ -880,9 +885,23 @@ window.CaliforniaCivil = (() => {
           ["POS-040","Other civil papers: select the applicable permitted service method"]
         ];
         const serviceMethod=c.service?.method||c.nonService?.method||"";
-        const suggestedPos=c.workflowId==="summons"?"POS-010"
+        // Proof of service selection is advisory, never a filing determination.
+        // Small claims normally uses SC-104, not the general POS series.
+        const serviceRecorded=Boolean(c.service?.date&&c.service?.recipient&&c.service?.address);
+        const isSmallClaims=c.workflowId==="small-claims";
+        const suggestedPos=isSmallClaims?null:c.workflowId==="summons"?"POS-010"
           :serviceMethod==="Personal service"?"POS-020"
-          :/mail/i.test(serviceMethod)?"POS-030":"POS-040";
+          :/first.class mail/i.test(serviceMethod)?"POS-030":null;
+        const missingProofFacts=[
+          !serviceRecorded?"Completed service date, recipient and address":null,
+          !serviceMethod?"Recorded service method":null,
+          !(r.caseNumber&&r.courtOfOrigin)?"Court and case number":null,
+          !(r.plaintiff&&r.defendant)?"Case parties":null
+        ].filter(Boolean);
+        const selectionGuidance=isSmallClaims
+          ?"Small claims generally uses SC-104. Check the order and papers served before selecting a general civil proof form."
+          :suggestedPos?"Review "+suggestedPos+" as a possible form based on the recorded service. Confirm the form's instructions and applicable court rules."
+          :"No reliable POS-series recommendation can be made from the recorded service method. Review the official instructions or agency-approved return.";
         const formLibrary=document.createElement("section");
         formLibrary.className="ca-forms-library";
         const draftSupported=["summons","small-claims"].includes(c.workflowId);
@@ -894,7 +913,9 @@ window.CaliforniaCivil = (() => {
         formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Choose the appropriate form, review recorded facts and complete the required signatures before submitting to court.</p></div></div>'+
           '<div class="ca-draft-feature"><div class="ca-draft-feature-icon">▤</div><div class="ca-draft-feature-copy"><strong>Generate court return draft</strong><p>'+esc(canDraft?"Prefill an unsigned official PDF from the case record. Review all fields, certify, sign and upload the completed document.":draftHint)+'</p></div>'+
           (canDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">Generate unsigned draft →</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
-          '<div class="ca-pos-catalog"><div class="ca-pos-heading"><h4>California proof-of-service forms</h4><span>Four common Judicial Council forms</span></div><p>Choose based on the papers and the actual method of service. A recommendation is not a legal determination. For small claims and specialized orders, use their process-specific forms when required.</p><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div></div>'+
+          '<div class="ca-pos-catalog"><div class="ca-pos-heading"><h4>California proof-of-service forms</h4><span>Four common Judicial Council forms</span></div><p>Choose based on the papers and the actual method of service. A recommendation is not a legal determination.</p>'+
+          '<div class="ca-pos-preflight"><strong>Form selection review</strong><p>'+esc(selectionGuidance)+'</p>'+
+          (missingProofFacts.length?'<p class="ca-pos-missing">Before preparing a return, verify: '+missingProofFacts.map(esc).join('; ')+'</p>':'<p class="ca-pos-ready">Core case and service facts are recorded. Confirm server qualifications, documents served, declarations and signature before filing.</p>')+'</div><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div></div>'+
           '<div class="ca-forms-head"><h4>Forms listed for this workflow</h4></div><div class="ca-form-resource-grid">'+applicable.map(code=>{
             const found=formSources[code];
             return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
