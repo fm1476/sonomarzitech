@@ -3502,6 +3502,12 @@ function renderAdminTabBody(){
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImport') renderBulkImportTab(body, 'civil');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
+  if(civilAdminConfigMode==='california' && (ADMIN_TAB==='feeSchedule'||ADMIN_TAB==='paperTypes'||ADMIN_TAB==='serviceMethods')){
+    const note=document.createElement('div');
+    note.className='locked-note';
+    note.textContent='California statutory fees, permitted service methods, and court workflow rules remain controlled by the approved California jurisdiction profile. These agency reference settings do not override the California legal workflow engine.';
+    body.prepend(note);
+  }
 }
 
 function renderCivilJurisdictionTab(body){
