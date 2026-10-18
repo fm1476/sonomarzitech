@@ -1005,6 +1005,7 @@ window.CaliforniaCivil = (() => {
             const active=button.dataset.section===label;
             button.setAttribute("aria-current",active?"page":"false");
             button.setAttribute("aria-pressed",String(active));
+            button.tabIndex=active?0:-1;
           });
         };
         groups.forEach(group=>{
@@ -1012,7 +1013,19 @@ window.CaliforniaCivil = (() => {
           button.className="btn btn-outline";button.dataset.section=group.label;
           button.textContent=group.label;
           button.setAttribute("aria-pressed","false");
+          button.tabIndex=group.label==="Overview"?0:-1;
           button.onclick=()=>activateGroup(group.label);
+          button.addEventListener("keydown",event=>{
+            const all=[...tabs.querySelectorAll("button[data-section]")];
+            const index=all.indexOf(button);
+            const next=event.key==="ArrowRight"?(index+1)%all.length
+              :event.key==="ArrowLeft"?(index-1+all.length)%all.length
+              :event.key==="Home"?0:event.key==="End"?all.length-1:-1;
+            if(next<0)return;
+            event.preventDefault();
+            activateGroup(all[next].dataset.section);
+            all[next].focus();
+          });
           tabs.append(button);
         });
         panel.querySelector("#ca-actions")?.after(tabs);
