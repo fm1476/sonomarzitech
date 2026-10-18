@@ -368,7 +368,10 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-doc-empty{color:var(--text-dim)}
 .ca-classic .ca-upload-drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:26px 18px;border:2px dashed var(--ca-border);border-radius:14px;background:rgba(54,122,215,.055);text-align:center;cursor:pointer;min-height:146px;overflow:hidden}
 .ca-classic .ca-upload-drop:hover,.ca-classic .ca-upload-drop:focus-within{border-color:var(--ca-accent);background:rgba(54,122,215,.10)}
-.ca-classic .ca-upload-drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.ca-classic .ca-upload-drop input[type=file].ca-file-input{position:absolute;width:1px;height:1px;left:0;bottom:0;opacity:0;pointer-events:none;overflow:hidden}
+.ca-classic .ca-upload-drop .ca-file-choose{position:relative;z-index:1;min-height:42px;min-width:144px}
+.ca-classic .ca-upload-drop[data-selected="true"]{border-color:#25ba8b;background:rgba(37,186,139,.08)}
+.ca-classic .ca-upload-drop:focus-within{outline:2px solid var(--ca-accent);outline-offset:2px}
 .ca-classic .ca-upload-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:rgba(58,128,224,.2);color:var(--ca-accent);font-size:23px;font-weight:700}
 .ca-classic .ca-upload-hint,.ca-classic .ca-upload-filename{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere}
 .ca-classic .ca-upload-filename{color:var(--heading,var(--text));font-weight:600}
@@ -530,9 +533,19 @@ window.CaliforniaCivil = (() => {
         }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
+          const field=fileInput.closest(".ca-upload-drop");
+          const trigger=document.createElement("button");
+          trigger.type="button";
+          trigger.className="btn btn-primary ca-file-choose";
+          trigger.textContent="Browse files";
+          trigger.onclick=()=>fileInput.click();
+          fileInput.classList.add("ca-file-input");
+          field?.querySelector(".ca-upload-icon")?.after(trigger);
           fileInput.addEventListener("change",()=>{
-            const label=target.querySelector(".ca-upload-filename");
-            if(label)label.textContent=fileInput.files?.[0]?.name || "No file selected";
+            const label=field?.querySelector(".ca-upload-filename");
+            const chosen=fileInput.files?.[0];
+            if(label)label.textContent=chosen ? chosen.name : "No file selected";
+            if(field)field.dataset.selected=chosen?"true":"false";
           });
         }
         window.CaliforniaCivilView.bindServiceFields(
