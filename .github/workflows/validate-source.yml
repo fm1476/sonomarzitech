@@ -25,32 +25,6 @@ jobs:
       - name: Install API dependencies for official return template checks
         run: npm ci --prefix lambdas/api --ignore-scripts --no-audit --no-fund
 
-      - name: Verify California PostgreSQL and staff forms
-        run: |
-          node tests/civil-california-postgres.test.mjs
-          node tests/civil-california-view.test.mjs
-          node tests/civil-california-presentation.test.mjs
-          node tests/civil-california-returns.test.mjs
-
-      - name: Install Chromium UI smoke test tools
-        run: |
-          npm install --prefix tests/civil-support --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.55.0
-          tests/civil-support/node_modules/.bin/playwright install chromium
-
-      - name: Verify Civil case workspace in a real browser
-        run: |
-          mkdir -p artifacts
-          node tests/civil-california-browser.test.mjs
-
-      - name: Preserve Civil desktop and mobile screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: civil-ui-browser-screenshots
-          path: artifacts/civil-*.png
-          if-no-files-found: ignore
-          retention-days: 7
-
       - name: Retrieve official POS PDFs for controlled form mapping
         continue-on-error: true
         run: |
@@ -89,6 +63,32 @@ jobs:
             git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Import official California POS-020/030/040 PDF templates"
             git push origin "HEAD:refs/heads/$TARGET_BRANCH"
           fi
+      - name: Verify California PostgreSQL and staff forms
+        run: |
+          node tests/civil-california-postgres.test.mjs
+          node tests/civil-california-view.test.mjs
+          node tests/civil-california-presentation.test.mjs
+          node tests/civil-california-returns.test.mjs
+
+      - name: Install Chromium UI smoke test tools
+        run: |
+          npm install --prefix tests/civil-support --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tests/civil-support/node_modules/.bin/playwright install chromium
+
+      - name: Verify Civil case workspace in a real browser
+        run: |
+          mkdir -p artifacts
+          node tests/civil-california-browser.test.mjs
+
+      - name: Preserve Civil desktop and mobile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: civil-ui-browser-screenshots
+          path: artifacts/civil-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload official POS PDFs for field inspection
         if: always()
         uses: actions/upload-artifact@v4
