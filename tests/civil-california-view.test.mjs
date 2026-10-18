@@ -9,6 +9,20 @@ assert.equal(await w.CaliforniaCivil.route(root,'civil-board'),true);assert.matc
 await click('[data-action="intake_details"]');fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court packet',formReviewReference:'Reviewed',reviewedForms:'SER-001',note:'Fictional'});await save();assert.equal(version,2);
 await click('[data-action="approve_intake"]');fill({note:'Approve'});await save();assert.match(root.querySelector('#ca-form [role=alert]').textContent,/court packet/);assert.equal(version,2);
 await click('#ca-cancel-form');record=domain.applyCaliforniaCommand(record,'attach_document',{note:'Test',name:'Packet',key:'packet',kind:'Court packet'},ctx);record=domain.applyCaliforniaCommand(record,'attach_document',{note:'Test',name:'Instructions',key:'instructions',kind:'Signed instructions'},ctx);version+=2;await w.CaliforniaCivil.route(root,'civil-board');await click('[data-case]');await click('[data-action="approve_intake"]');fill({note:'Approved'});await save();assert.equal(record.stage,'Ready');await click('[data-action="assign"]');fill({personId:'person-a',note:'Assign'});await save();assert.equal(record.stage,'Assigned');
+// Each detail section must be reachable in exactly one workspace tab.
+const caseTabs=[...root.querySelectorAll('[data-section]')];
+const detailSections=[...root.querySelectorAll('#ca-detail details')];
+const sectionCounts=new Map(detailSections.map(el=>[el.querySelector('summary')?.textContent.trim(),0]));
+for(const tab of caseTabs){
+  await click('[data-section="'+tab.dataset.section+'"]');
+  root.querySelectorAll('#ca-detail details').forEach(section=>{
+    if(!section.hidden){
+      const label=section.querySelector('summary')?.textContent.trim();
+      sectionCounts.set(label,(sectionCounts.get(label)||0)+1);
+    }
+  });
+}
+assert.ok([...sectionCounts.values()].every(count=>count===1),'Each case section must appear in precisely one workspace tab');
 await click('[data-section="Forms"]');
 assert.equal(root.querySelector('[data-section="Forms"]').getAttribute('aria-pressed'),'true');
 await click('.ca-signed-upload');
