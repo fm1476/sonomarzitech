@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {validateCivilAdminSetting as validate} from '../lambdas/api/civil-admin-settings.mjs';
+import {validateCivilAdminSetting as validate} from '../lambdas/api/lib/civil-admin-validation.mjs';
 assert.deepEqual(validate('notifySettings',{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'role_admin'}),{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'role_admin'});
 assert.throws(()=>validate('notifySettings',{returnDueRoleId:'role_admin',priorityUnassignedRoleId:'<script>'}),/Invalid/);
 assert.throws(()=>validate('notifySettings',{returnDueRoleId:'role_admin'}),/Invalid/);
