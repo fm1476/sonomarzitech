@@ -204,7 +204,7 @@ window.CaliforniaCivil = (() => {
   function input(spec, value = "", choices) {
     const [key, type = "text"] = spec.split(":");
     const list = choices || options[key];
-    return `<label class="form-row">${esc(name(key))}${
+    return `<label class="form-row">${esc(key === "workflowId" ? "Workflow Type" : name(key))}${
       list
         ? `<select name="${key}"><option value="">Select...</option>${list
             .map((o) => {
@@ -612,6 +612,48 @@ window.CaliforniaCivil = (() => {
           kindSelect.setAttribute("aria-hidden","true");
           kindSelect.tabIndex=-1;
           kindSelect.after(host);
+        }
+        // Workflow selection must not depend on the operating system's
+        // native select overlay, which can be clipped by the modal scroller.
+        const workflowSelect=target.querySelector('select[name="workflowId"]');
+        if(workflowSelect){
+          const container=document.createElement("div");
+          container.className="ca-kind-picker ca-workflow-picker";
+          container.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-label="Choose workflow type" aria-haspopup="listbox" aria-expanded="false">Select workflow type <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" aria-label="Workflow types" hidden></div>';
+          const trigger=container.querySelector(".ca-kind-trigger");
+          const options=container.querySelector(".ca-kind-options");
+          [...workflowSelect.options].filter(option=>option.value).forEach(option=>{
+            const item=document.createElement("button");
+            item.type="button";item.className="ca-kind-option";item.setAttribute("role","option");
+            item.dataset.value=option.value;item.textContent=option.textContent;
+            item.onclick=()=>{
+              workflowSelect.value=option.value;
+              workflowSelect.dispatchEvent(new Event("change",{bubbles:true}));
+              trigger.firstChild.textContent=option.textContent+" ";
+              trigger.setAttribute("aria-expanded","false");options.hidden=true;trigger.focus();
+            };
+            options.append(item);
+          });
+          trigger.onclick=()=>{
+            const expanded=trigger.getAttribute("aria-expanded")==="true";
+            trigger.setAttribute("aria-expanded",String(!expanded));options.hidden=expanded;
+            if(!expanded)options.querySelector(".ca-kind-option")?.focus();
+          };
+          options.onkeydown=event=>{
+            if(event.key==="Escape"){
+              event.preventDefault();options.hidden=true;
+              trigger.setAttribute("aria-expanded","false");trigger.focus();
+            }
+            if(["ArrowDown","ArrowUp"].includes(event.key)){
+              event.preventDefault();
+              const items=[...options.querySelectorAll("button")];
+              const current=items.indexOf(document.activeElement);
+              items[(current+(event.key==="ArrowDown"?1:items.length-1)+items.length)%items.length]?.focus();
+            }
+          };
+          workflowSelect.style.setProperty("display","none","important");
+          workflowSelect.setAttribute("aria-hidden","true");workflowSelect.tabIndex=-1;
+          workflowSelect.after(container);
         }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
