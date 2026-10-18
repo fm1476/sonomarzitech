@@ -467,21 +467,41 @@ function renderUnifiedCivilDashboard(){
   const metrics=[['Active Cases',active.length,'var(--blue)'],['Overdue',overdue.length,'var(--red)'],['Due in 7 Days',soon.length,'var(--gold)'],['Completed',closed.length,'var(--green)']];
   const showLocalCounts=SuiteStore.mode()!=='shared';
   root.innerHTML=`<style>
-    .civil-home{padding:22px 10px;max-width:1480px;margin:auto}
-    .civil-home-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px}
-    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:12px;padding:17px;background:var(--panel-bg,var(--bg-card,#172335))}
-    .civil-home-metric strong{display:block;font-size:26px;color:var(--metric-color);margin:7px 0}
+    .civil-home{padding:24px 12px 36px;max-width:1460px;margin:auto}
+    .civil-home-hero{border:1px solid var(--border);background:linear-gradient(115deg,rgba(45,113,215,.17),rgba(18,154,137,.08)),var(--panel-bg,var(--bg-card,#172335));border-radius:20px;padding:28px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+    .civil-home-kicker{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--blue);margin:0 0 10px}
+    .civil-home h2{margin:0 0 8px;color:var(--heading);font-size:clamp(23px,2.5vw,34px);letter-spacing:-.035em}
+    .civil-home-sub{margin:0;color:var(--text-dim);max-width:620px;line-height:1.6;font-size:14px}
+    .civil-home-quick{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .civil-home-quick .btn{border-radius:10px;min-height:43px;display:inline-flex;align-items:center;gap:8px;padding:0 17px}
+    .civil-home-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:13px;margin-bottom:24px}
+    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:13px;padding:15px 17px;background:var(--panel-bg,var(--bg-card,#172335))}
+    .civil-home-metric strong{display:block;font-size:28px;color:var(--metric-color);margin:6px 0;line-height:1.2}
     .civil-home-metric span{font-size:12px;color:var(--text-dim)}
-    .civil-home h2{margin:0 0 7px;color:var(--heading)}
-    .civil-home-sub{margin:0 0 26px;color:var(--text-dim)}
-    .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:16px}
-    .civil-home-tile{background:var(--panel-bg,var(--bg-card,#172335));border:1px solid var(--border);border-radius:15px;padding:23px;text-align:left;color:var(--text);cursor:pointer;min-height:170px;display:flex;flex-direction:column;align-items:flex-start;gap:13px;transition:transform .15s,border-color .15s}
-    .civil-home-tile:hover{border-color:var(--blue);transform:translateY(-2px)}
+    .civil-home-section-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px}
+    .civil-home-section-heading h3{margin:0;font-size:17px;color:var(--heading)}
+    .civil-home-section-heading span{font-size:12px;color:var(--text-dim)}
+    .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,295px),1fr));gap:14px}
+    .civil-home-tile{background:var(--panel-bg,var(--bg-card,#172335));border:1px solid var(--border);border-radius:15px;padding:21px;text-align:left;color:var(--text);cursor:pointer;min-height:153px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;transition:transform .16s,border-color .16s,box-shadow .16s}
+    .civil-home-tile:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 12px 24px rgba(0,0,0,.1)}
     .civil-home-tile:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
     .civil-home-icon{width:43px;height:43px;border-radius:12px;background:color-mix(in srgb,var(--tile-color) 17%,transparent);color:var(--tile-color);display:grid;place-items:center}
-    .civil-home-tile strong{font-size:17px}
+    .civil-home-tile strong{font-size:16px}
     .civil-home-tile small{font-size:13px;color:var(--text-dim);line-height:1.5}
-  </style><section class="civil-home"><h2>Civil Process</h2><p class="civil-home-sub">One workspace for case management, service, court returns and oversight. Jurisdiction-specific requirements apply automatically.</p>${showLocalCounts?'<div class="civil-home-metrics">'+metrics.map(([label,count,color])=>'<div class="civil-home-metric" style="--metric-color:'+color+'"><span>'+label+'</span><strong>'+count+'</strong></div>').join('')+'</div>':''}<div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small></button>`).join('')}</div></section>`;
+    .civil-home-tile .civil-home-arrow{margin-top:auto;color:var(--blue);font-size:12px;font-weight:700}
+    .civil-home-note{font-size:12px;line-height:1.5;color:var(--text-dim);margin:15px 0 0}
+    @media(max-width:700px){.civil-home{padding:14px 8px 28px}.civil-home-hero{padding:20px}.civil-home-quick{width:100%}.civil-home-quick .btn{flex:1;justify-content:center}}
+  </style><section class="civil-home">
+    <div class="civil-home-hero"><div><p class="civil-home-kicker">Operations workspace</p><h2>Civil Process</h2><p class="civil-home-sub">Cases, assignments, court returns and records, all in one place. Your agency's jurisdiction rules continue to govern every action.</p></div>
+    <div class="civil-home-quick">
+      ${items.some(item=>item.id==='civil-board')?'<button type="button" class="btn btn-primary" data-civil-go="civil-board">Open case board →</button>':''}
+      ${items.some(item=>item.id==='civil-mine')?'<button type="button" class="btn btn-outline" data-civil-go="civil-mine">My assignments</button>':''}
+    </div></div>
+    ${showLocalCounts?'<div class="civil-home-metrics">'+metrics.map(([label,count,color])=>'<div class="civil-home-metric" style="--metric-color:'+color+'"><span>'+label+'</span><strong>'+count+'</strong></div>').join('')+'</div>':''}
+    <div class="civil-home-section-heading"><h3>Workspaces</h3><span>Choose where to work</span></div>
+    <div class="civil-home-grid">${cards.map(([id,title,desc,icon,color])=>`<button type="button" class="civil-home-tile" data-civil-go="${id}" style="--tile-color:${color}"><span class="civil-home-icon">${ICONS[icon]||ICONS.scale}</span><strong>${escDash(title)}</strong><small>${escDash(desc)}</small><span class="civil-home-arrow" aria-hidden="true">Open workspace →</span></button>`).join('')}</div>
+    ${!showLocalCounts?'<p class="civil-home-note">Agency case totals are displayed in the case board so they reflect authorized live tenant records.</p>':''}
+  </section>`;
   root.querySelectorAll('[data-civil-go]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.civilGo)));
 }
 
