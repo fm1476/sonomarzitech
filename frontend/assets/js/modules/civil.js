@@ -1055,9 +1055,15 @@ function renderPaperDetailTabContent(p){
     `;
     document.querySelectorAll('[data-address-idx]').forEach(btn=>btn.addEventListener('click', ()=>{
       PAPER_ADDRESS_SELECTED = Number(btn.dataset.addressIdx);
-      document.querySelectorAll('[data-address-idx]').forEach(b=>b.classList.toggle('active', Number(b.dataset.addressIdx)===PAPER_ADDRESS_SELECTED));
+      document.querySelectorAll('[data-address-idx]').forEach(b=>{
+        const active=Number(b.dataset.addressIdx)===PAPER_ADDRESS_SELECTED;
+        b.classList.toggle('active',active);
+        b.setAttribute('aria-pressed',String(active));
+      });
       const frame = document.getElementById('paperAddressMap');
       if(frame && p.serviceAddresses[PAPER_ADDRESS_SELECTED]) frame.src = mapEmbedSrc(p.serviceAddresses[PAPER_ADDRESS_SELECTED].address);
+      const mapLink=document.querySelector('#paperDetailBody [data-civil-map-link]');
+      if(mapLink && p.serviceAddresses[PAPER_ADDRESS_SELECTED]) mapLink.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(p.serviceAddresses[PAPER_ADDRESS_SELECTED].address);
     }));
     const addAddrBtn = document.getElementById('btnAddAddress');
     if(addAddrBtn) addAddrBtn.addEventListener('click', ()=>openAddAddressModal(p));
