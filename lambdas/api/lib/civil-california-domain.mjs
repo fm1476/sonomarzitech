@@ -383,6 +383,24 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     };
     c.documents.push(d);
     r.attachedDocuments.push(d);
+  } else if (command === "remove_document") {
+    permission(ctx, "civil_document_generate");
+    note();
+    requireValue(!["Return Prepared","Reviewed","Returned to Court"].includes(r.stage),
+      "Reopen the court return review before modifying supporting documents.",409);
+    const index=c.documents.findIndex(d=>d.id===payload.documentId);
+    requireValue(index>=0,"Document not found.",404);
+    const previous=c.documents[index];
+    requireValue(!c.returnPacket?.documentId || c.returnPacket.documentId!==previous.id,
+      "This document is linked to the court return and cannot be removed.",409);
+    c.documents.splice(index,1);
+    r.attachedDocuments=(r.attachedDocuments||[]).filter(d=>d.id!==previous.id);
+    c.removedDocuments??=[];
+    c.removedDocuments.push({...previous,removedAt:ctx.at,removedBy:ctx.userId,reason:payload.note});
+    if(r.stage==="Ready" && ["Court packet","Signed instructions","Writ"].includes(previous.kind)){
+      r.stage="Intake";
+      delete c.intakeApproval;
+    }
   } else if (command === "approve_intake") {
     permission(ctx, "civil_paper_intake");
     requireValue(
