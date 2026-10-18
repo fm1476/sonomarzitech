@@ -3,10 +3,14 @@ import {appendAuditEvent} from './audit.mjs';
 
 const uuid = value => typeof value==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const LIST_KEYS = new Set(['paperTypes','courtsOfOrigin','serviceMethods','attemptResults','propertyTypes','propertyDisposalMethods','propertyStorageLocations','propertySeizureStatuses','realPropertyTypes','realPropertyLevyStatuses']);
-const SETTINGS_KEYS = new Set(['notifySettings','feeSchedule','feeCategoryGLCodes','paymentMethodGLCodes',...LIST_KEYS]);
+const SETTINGS_KEYS = new Set(['notifySettings','feeSchedule','feeCategoryGLCodes','paymentMethodGLCodes','financialSettings',...LIST_KEYS]);
 const plain = v => v!==null && typeof v==='object' && !Array.isArray(v) && Object.getPrototypeOf(v)===Object.prototype;
 function validate(section,value){
   if(!SETTINGS_KEYS.has(section))throw Error('Unsupported Civil administration setting.');
+  if(section==='financialSettings'){
+    if(!plain(value)||Object.keys(value).sort().join(',')!=='feeCategoryGLCodes,feeSchedule,paymentMethodGLCodes')throw Error('Invalid financial settings.');
+    return {feeSchedule:validate('feeSchedule',value.feeSchedule),feeCategoryGLCodes:validate('feeCategoryGLCodes',value.feeCategoryGLCodes),paymentMethodGLCodes:validate('paymentMethodGLCodes',value.paymentMethodGLCodes)};
+  }
   if(LIST_KEYS.has(section)){
     if(!Array.isArray(value)||value.length>150||value.some(v=>typeof v!=='string'||!v.trim()||v.length>160))throw Error('Invalid Civil reference list.');
     if(new Set(value.map(v=>v.trim().toLowerCase())).size!==value.length)throw Error('Duplicate Civil reference values.');
