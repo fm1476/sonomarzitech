@@ -258,6 +258,11 @@ window.CaliforniaCivil = (() => {
 .ca-classic>.panel-head{border:0;background:linear-gradient(110deg,rgba(38,109,215,.19),rgba(16,167,153,.10));padding:22px 24px;border-radius:16px 16px 0 0;border-bottom:1px solid var(--ca-border)}
 .ca-classic>.panel-head h3{font-size:23px;letter-spacing:-.4px;margin:0;color:var(--heading,var(--text))}
 .ca-classic>.panel-body{padding:22px 24px;border:1px solid var(--ca-border);border-top:0;border-radius:0 0 16px 16px}
+.ca-classic .ca-action-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:15px 0}
+.ca-classic .ca-action-row .btn{min-height:42px}
+.ca-classic .ca-secondary-actions{display:flex;flex-wrap:wrap;gap:9px;padding:13px;margin:5px 0 16px;border:1px solid var(--ca-border);border-radius:12px;background:var(--ca-surface)}
+.ca-classic .ca-secondary-actions[hidden]{display:none!important}
+@media(max-width:640px){.ca-classic .ca-action-row .btn{flex:1 1 160px}.ca-classic .ca-secondary-actions .btn{flex:1 1 145px}}
 .ca-classic .ca-subtitle{font-size:13px;color:var(--text-dim);margin:0 0 16px}
 .ca-classic .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:12px 0 18px}
 .ca-classic .btn{border-radius:10px;min-height:37px;padding:8px 14px;font-weight:600;transition:filter .16s,transform .16s,background .16s;box-shadow:none}
@@ -1123,21 +1128,32 @@ window.CaliforniaCivil = (() => {
             }
           };
         }
-        const primaryAction = recommended && actions.includes(recommended) ? recommended : null;
-        panel.querySelector("#ca-actions").innerHTML =
-          '<div class="ca-action-row">' +
-          (primaryAction ? '<button type="button" class="btn btn-primary" data-action="'+primaryAction+'">'+esc(labels[primaryAction])+'</button>' : '') +
-          '<button type="button" class="btn btn-outline ca-more-trigger" aria-expanded="false" aria-controls="ca-more-actions">More actions ('+(actions.length-(primaryAction?1:0))+')</button><div id="ca-more-actions" class="ca-secondary-actions" hidden>' +
-          actions.filter(a=>a!==primaryAction).map(a=>'<button type="button" class="btn btn-outline" data-action="'+a+'">'+esc(labels[a])+'</button>').join('') +
-          '</div></div>';
+        const primaryAction=recommended&&actions.includes(recommended)?recommended:null;
+        const shortcutCandidates=["attempt","serve","unserved","prepare_return","review_return","record_return","generate_return_draft"];
+        const shortcuts=shortcutCandidates.filter(action=>action!==primaryAction&&actions.includes(action)).slice(0,2);
+        const visibleActions=new Set([primaryAction,...shortcuts].filter(Boolean));
+        const secondary=actions.filter(action=>!visibleActions.has(action));
+        panel.querySelector("#ca-actions").innerHTML=
+          '<div class="ca-action-row" role="group" aria-label="Case actions">'+
+          (primaryAction?'<button type="button" class="btn btn-primary" data-action="'+primaryAction+'">'+esc(labels[primaryAction])+'</button>':'')+
+          shortcuts.map(action=>'<button type="button" class="btn btn-outline ca-action-shortcut" data-action="'+action+'">'+esc(labels[action])+'</button>').join("")+
+          (secondary.length?'<button type="button" class="btn btn-outline ca-more-trigger" aria-expanded="false" aria-controls="ca-more-actions">More actions ('+secondary.length+') ▾</button>':'')+
+          '</div>'+
+          (secondary.length?'<div id="ca-more-actions" class="ca-secondary-actions" hidden role="group" aria-label="Additional case actions">'+
+          secondary.map(action=>'<button type="button" class="btn btn-outline" data-action="'+action+'">'+esc(labels[action])+'</button>').join("")+'</div>':'');
         const moreTrigger=panel.querySelector(".ca-more-trigger");
         const morePanel=panel.querySelector("#ca-more-actions");
         if(moreTrigger&&morePanel){
           moreTrigger.onclick=()=>{
-            const expanded=moreTrigger.getAttribute("aria-expanded")==="true";
-            moreTrigger.setAttribute("aria-expanded",String(!expanded));
-            morePanel.hidden=expanded;
+            const open=moreTrigger.getAttribute("aria-expanded")==="true";
+            moreTrigger.setAttribute("aria-expanded",String(!open));
+            morePanel.hidden=open;
           };
+          morePanel.addEventListener("keydown",event=>{
+            if(event.key==="Escape"){
+              event.preventDefault();morePanel.hidden=true;moreTrigger.setAttribute("aria-expanded","false");moreTrigger.focus();
+            }
+          });
         }
         async function command(action, payload) {
           try {
