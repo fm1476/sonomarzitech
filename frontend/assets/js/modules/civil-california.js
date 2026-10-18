@@ -1111,12 +1111,22 @@ window.CaliforniaCivil = (() => {
         documents.innerHTML = '<div class="ca-doc-head"><strong>Case documents</strong><span>'+c.documents.length+' active files</span></div>' +
           (c.documents.length ? '<div class="ca-doc-grid">'+c.documents.map(d=>
             '<article class="ca-doc-item"><div><strong>'+esc(d.name)+'</strong><small>'+esc(d.kind)+'</small></div><div class="ca-doc-tools"><button type="button" class="btn btn-outline" data-doc="'+esc(d.id)+'">Open</button>'+
-            (mayManage?'<button type="button" class="btn btn-outline" data-remove-doc="'+esc(d.id)+'">Remove</button>':'')+'</div></article>'
+            (mayManage?'<button type="button" class="btn btn-outline" data-replace-doc="'+esc(d.id)+'">Replace</button><button type="button" class="btn btn-outline" data-remove-doc="'+esc(d.id)+'">Remove</button>':'')+'</div></article>'
           ).join('')+'</div>' : '<p class="ca-doc-empty">No documents attached to this case yet.</p>') +
           (mayManage?'<button class="btn btn-primary" id="ca-upload" type="button">+ Add document</button>':'');
         documents.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>{
           const doc=c.documents.find(d=>d.id===b.dataset.doc);
           if(doc)AWS_ATTACHMENTS.download({storageKey:doc.key}).catch(e=>status(e.message));
+        });
+        documents.querySelectorAll("[data-replace-doc]").forEach(b=>b.onclick=()=>{
+          const doc=c.documents.find(d=>d.id===b.dataset.replaceDoc);
+          if(!doc)return;
+          form("Replace case document",'<p>Upload a replacement for <strong>'+esc(doc.name)+'</strong>. The earlier version stays in the audit record. Replacing an intake document may require renewed approval.</p><label class="form-row ca-upload-field">Replacement file<span class="ca-upload-drop"><span class="ca-upload-icon" aria-hidden="true">↑</span><strong>Choose replacement</strong><span class="ca-upload-hint">Maximum 500 MB</span><span class="ca-upload-filename" aria-live="polite">No file selected</span><input name="file" type="file" required aria-label="Choose replacement document"></span></label><label class="form-row">Reason for replacement<input name="note" required placeholder="Why is this document being replaced?"></label>',async data=>{
+            const file=data.get("file");
+            if(!file?.size)throw Error("Choose a replacement file.");
+            const meta=await AWS_ATTACHMENTS.upload(file,{collection:"civil.papers",itemId:caseId});
+            await command("replace_document",{documentId:doc.id,name:file.name,key:meta.storageKey,note:String(data.get("note")||"").trim()});
+          });
         });
         documents.querySelectorAll("[data-remove-doc]").forEach(b=>b.onclick=()=>{
           const doc=c.documents.find(d=>d.id===b.dataset.removeDoc);
