@@ -938,6 +938,14 @@ window.CaliforniaCivil = (() => {
           ["POS-030","Other civil papers served by first-class mail"],
           ["POS-040","Other civil papers: select the applicable permitted service method"]
         ];
+        const posSupplemental=[
+          ["POS-020(D)","Additional documents served"],
+          ["POS-020(P)","Additional persons served"],
+          ["POS-030(D)","Additional documents mailed"],
+          ["POS-030(P)","Additional mail recipients"],
+          ["POS-040(D)","Additional documents served"],
+          ["POS-040(P)","Additional persons served"]
+        ];
         const serviceMethod=c.service?.method||c.nonService?.method||"";
         // Proof of service selection is advisory, never a filing determination.
         // Small claims normally uses SC-104, not the general POS series.
