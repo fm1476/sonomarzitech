@@ -371,6 +371,13 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-return-good{color:var(--green,#29b87e);background:rgba(35,166,115,.1)}
 .ca-classic .ca-return-warn{color:var(--gold,#eba94c);background:rgba(214,151,38,.1)}
 @media(max-width:520px){.ca-classic .ca-return-facts{grid-template-columns:1fr}}
+.ca-classic .ca-draft-feature{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:15px 0 22px;padding:18px;border:1px solid var(--ca-border);border-radius:15px;background:linear-gradient(105deg,rgba(42,115,215,.15),rgba(35,145,139,.055)),var(--ca-surface)}
+.ca-classic .ca-draft-feature-icon{height:44px;width:44px;flex-shrink:0;border-radius:12px;display:grid;place-items:center;font-size:24px;color:var(--ca-accent);background:rgba(53,122,216,.14)}
+.ca-classic .ca-draft-feature-copy{flex:1;min-width:190px}
+.ca-classic .ca-draft-feature-copy strong{font-size:15px}
+.ca-classic .ca-draft-feature-copy p{margin:5px 0 0;color:var(--text-dim);font-size:12px;line-height:1.5}
+.ca-classic .ca-draft-feature>.btn{flex-shrink:0;min-height:43px;border-radius:10px}
+@media(max-width:600px){.ca-classic .ca-draft-feature>.btn{width:100%}}
 .ca-classic .ca-forms-library{margin:16px 0 20px}
 .ca-classic .ca-forms-library[hidden]{display:none!important}
 .ca-classic .ca-forms-head h3{font-size:17px;margin:0 0 5px}
@@ -862,14 +869,27 @@ window.CaliforniaCivil = (() => {
         const applicable=[...new Set([...(context.workflows[c.workflowId]?.forms||[]),...(context.workflows[c.workflowId]?.returns||[])])];
         const formLibrary=document.createElement("section");
         formLibrary.className="ca-forms-library";
-        formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Reference forms for this workflow. Confirm the current form and applicable requirements before filing.</p></div></div>'+
+        const draftSupported=["summons","small-claims"].includes(c.workflowId);
+        const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served"&&c.service?.method==="Personal service";
+        const draftHint=!draftSupported?"An approved agency return or process-specific form is required for this workflow."
+          :r.stage!=="Served"?"Record completed personal service before generating a draft."
+          :c.service?.method!=="Personal service"?"Automatic drafts currently support personal service only. Use the official form for this service method."
+          :!can("civil_document_generate")?"Your role does not allow court-form generation.":"";
+        formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Choose the appropriate form, review recorded facts and complete the required signatures before submitting to court.</p></div></div>'+
+          '<div class="ca-draft-feature"><div class="ca-draft-feature-icon">▤</div><div class="ca-draft-feature-copy"><strong>Generate court return draft</strong><p>'+esc(canDraft?"Prefill an unsigned official PDF from the case record. Review all fields, certify, sign and upload the completed document.":draftHint)+'</p></div>'+
+          (canDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">Generate unsigned draft →</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
           '<div class="ca-form-resource-grid">'+applicable.map(code=>{
             const found=formSources[code];
             return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
               (found?'<a class="btn btn-outline" href="'+found[1]+'" target="_blank" rel="noopener noreferrer">View official form ↗</a>':'<span class="ca-form-notice">Confirm the approved form or local return template for this process.</span>')+'</article>';
-          }).join('')+'</div><p class="ca-form-disclaimer">Form links open California Courts resources. Automated prefill, legal review, and signature handling are not yet enabled.</p>';
+          }).join('')+'</div><p class="ca-form-disclaimer">Form links open California Courts resources. Unsigned prefill is available for qualifying personally served summons and small-claims cases only. All generated drafts require review and signature before filing.</p>';
         formLibrary.hidden=true;
         panel.querySelector("#ca-actions")?.after(formLibrary);
+        formLibrary.querySelector("#ca-generate-draft")?.addEventListener("click",()=>{
+          const actionButton=panel.querySelector('[data-action="generate_return_draft"]');
+          if(actionButton)actionButton.click();
+          else status("Draft generation is not available for the current case state or your role.");
+        });
         const sections=[...panel.querySelectorAll("details")];
         const titles=sections.map(section=>section.querySelector("summary")?.textContent?.trim()||"Case record");
         const documentSection=panel.querySelector("#ca-documents");
