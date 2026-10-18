@@ -99,6 +99,10 @@ window.CaliforniaCivil = (() => {
       "courtCityZip",
       "courtBranch",
       "smallClaimsDocument",
+      "formCode",
+      "documentsServed",
+      "mailingCityState",
+      "mailingMethod",
     ],
     reopen_return: [],
     deadline: ["title", "kind", "dueDate:date", "authorityReference"],
@@ -182,6 +186,7 @@ window.CaliforniaCivil = (() => {
     ],
     method: [
       "Personal service",
+      "First-class mail",
       "Substituted service",
       "Court-authorized alternative",
     ],
@@ -966,9 +971,11 @@ window.CaliforniaCivil = (() => {
           :"No reliable POS-series recommendation can be made from the recorded service method. Review the official instructions or agency-approved return.";
         const formLibrary=document.createElement("section");
         formLibrary.className="ca-forms-library";
-        const draftSupported=["summons","small-claims"].includes(c.workflowId);
-        const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served"&&c.service?.method==="Personal service";
-        const draftHint=!draftSupported?"An approved agency return or process-specific form is required for this workflow."
+        const standardDraft=["summons","small-claims"].includes(c.workflowId);
+        const draftSupported=standardDraft?c.service?.method==="Personal service":
+          ["Personal service","First-class mail"].includes(c.service?.method);
+        const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served";
+        const draftHint=!draftSupported?"This recorded service method requires a manually completed or agency-approved court return."
           :r.stage!=="Served"?"Record completed personal service before generating a draft."
           :c.service?.method!=="Personal service"?"Automatic drafts currently support personal service only. Use the official form for this service method."
           :!can("civil_document_generate")?"Your role does not allow court-form generation.":"";
@@ -1284,8 +1291,14 @@ window.CaliforniaCivil = (() => {
                   roster = people.map((p) => [p.person_id, p.name || p.email]);
                 }
                 const choice = (key) =>
-                  key === "method" && action === "serve" && !["summons", "small-claims"].includes(c.workflowId)
-                    ? options.method.filter(method => method !== 'Substituted service')
+                  key === "formCode"
+                    ? c.workflowId==="summons"?[["POS-010","POS-010 · Proof of Service of Summons"]]
+                      :c.workflowId==="small-claims"?[["SC-104","SC-104 · Proof of Service—Small Claims"]]
+                      :c.service?.method==="First-class mail"?[["POS-030","POS-030 · First-Class Mail—Civil"]]
+                      :[["POS-020","POS-020 · Personal Service—Civil"],["POS-040","POS-040 · Proof of Service—Civil"]]
+                  :key === "mailingMethod" ? ["USPS deposit","Business collection"]
+                  :key === "method" && action === "serve" && !["summons", "small-claims"].includes(c.workflowId)
+                    ? options.method.filter(method => !["Substituted service","First-class mail"].includes(method))
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "deadlineId"
@@ -1360,7 +1373,7 @@ window.CaliforniaCivil = (() => {
                 const draftContext=action==="generate_return_draft" ? (()=>{
                   const service=c.service||{};
                   const facts=[
-                    ["Official form",c.workflowId==="summons"?"POS-010":"SC-104"],
+                    ["Official form",c.workflowId==="summons"?"POS-010":c.workflowId==="small-claims"?"SC-104":c.service?.method==="First-class mail"?"POS-030":"POS-020 / POS-040"],
                     ["Case number",r.caseNumber],["Court",r.courtOfOrigin],
                     ["Plaintiff",r.plaintiff],["Defendant",r.defendant],
                     ["Recipient",service.recipient],["Date served",service.date],
