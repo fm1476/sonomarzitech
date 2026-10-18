@@ -903,7 +903,23 @@ function renderPaperDetailModal(){
   openModal();
   document.getElementById('mClose').onclick = ()=>{ closeModal(); if(ACTIVE_VIEW==='civil-board') renderBoard(); else if(ACTIVE_VIEW==='civil-mine') renderMyAssignments(); };
   document.getElementById('mCancel').onclick = document.getElementById('mClose').onclick;
-  document.querySelectorAll('[data-pd-tab]').forEach(b=>b.addEventListener('click', ()=>{ PAPER_DETAIL_TAB=b.dataset.pdTab; renderPaperDetailModal(); }));
+  const caseTabs=[...document.querySelectorAll('#modalBox.civil-case-workspace [data-pd-tab]')];
+  caseTabs.forEach((b,index)=>{
+    b.tabIndex=b.dataset.pdTab===PAPER_DETAIL_TAB?0:-1;
+    b.addEventListener('click',()=>{PAPER_DETAIL_TAB=b.dataset.pdTab;renderPaperDetailModal();});
+    b.addEventListener('keydown',event=>{
+      let next=index;
+      if(event.key==='ArrowRight')next=(index+1)%caseTabs.length;
+      else if(event.key==='ArrowLeft')next=(index-1+caseTabs.length)%caseTabs.length;
+      else if(event.key==='Home')next=0;
+      else if(event.key==='End')next=caseTabs.length-1;
+      else return;
+      event.preventDefault();
+      PAPER_DETAIL_TAB=caseTabs[next].dataset.pdTab;
+      renderPaperDetailModal();
+      document.querySelector('#modalBox.civil-case-workspace [data-pd-tab="'+PAPER_DETAIL_TAB+'"]')?.focus();
+    });
+  });
   renderPaperDetailTabContent(p);
 }
 
