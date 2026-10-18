@@ -3381,6 +3381,85 @@ const SIMPLE_LIST_TABS = {
   realPropertyLevyStatuses: {label:'Real Property Levy Statuses', usageCheck:(v)=>(STATE.civil.enforcements||[]).some(e=>(e.realPropertyLevies||[]).some(rp=>rp.status===v))},
 };
 
+// California Civil administration is stored outside the legacy civil records.
+// The backend determines jurisdiction. Never trust a locally cached profile for writes.
+let civilAdminConfigContext = '';
+let civilAdminConfigMode = null;
+let civilAdminConfigRevision = 0;
+let civilAdminConfigPromise = null;
+let civilAdminConfigError = '';
+const civilAdminClone = value => JSON.parse(JSON.stringify(value));
+function civilAdminWorkspace(){
+  if(typeof SuiteStore==='undefined'||SuiteStore.mode()!=='shared')return null;
+  const scope=SuiteStore.remoteContext?.();
+  return scope?.tenantId&&scope?.agencyId?scope:null;
+}
+async function civilAdminRequest(operation,extra={},scope=civilAdminWorkspace()){
+  if(!scope)throw Error('Choose an agency before managing Civil configuration.');
+  const data=await SuiteStore.api('/tenant-admin',{method:'POST',body:JSON.stringify({
+    action:'civil_admin_settings',tenantId:scope.tenantId,agencyId:scope.agencyId,operation,...extra
+  })});
+  const current=civilAdminWorkspace();
+  if(!current||current.tenantId!==scope.tenantId||current.agencyId!==scope.agencyId)
+    throw Error('Agency changed. Reopen Civil administration.');
+  if(data?.success===false)throw Error(data.error||'Civil configuration request failed.');
+  return data.data;
+}
+function civilAdminEnsureLoaded(){
+  const scope=civilAdminWorkspace();
+  if(!scope){civilAdminConfigMode='general';civilAdminConfigContext='local';return;}
+  const key=scope.tenantId+':'+scope.agencyId;
+  if(key!==civilAdminConfigContext){
+    civilAdminConfigContext=key;
+    civilAdminConfigMode=null;
+    civilAdminConfigRevision=0;
+    civilAdminConfigPromise=null;
+    civilAdminConfigError='';
+  }
+  if(civilAdminConfigMode||civilAdminConfigPromise)return;
+  civilAdminConfigPromise=civilAdminRequest('load',{},scope).then(data=>{
+    civilAdminConfigMode=data.california?'california':'general';
+    civilAdminConfigRevision=data.revision||0;
+    if(data.california){
+      for(const [key,value] of Object.entries(data.values||{})){
+        if(key==='notifySettings')STATE.civil.notifySettings=civilAdminClone(value);
+        else if(key==='financialSettings'){
+          for(const part of ['feeSchedule','feeCategoryGLCodes','paymentMethodGLCodes'])
+            if(value[part])STATE.civil.refData[part]=civilAdminClone(value[part]);
+        }else if(key in STATE.civil.refData)STATE.civil.refData[key]=civilAdminClone(value);
+      }
+    }
+  }).catch(error=>{civilAdminConfigError=error.message;}).finally(()=>{
+    civilAdminConfigPromise=null;
+    if(document.getElementById('adminTabBodyCivil'))renderAdminTabBody();
+  });
+}
+async function civilAdminCommit(section,previous,message){
+  if(civilAdminConfigMode===null){toast('Civil configuration is still loading. Try again.',true);return false;}
+  if(civilAdminConfigMode!=='california'){
+    logActivity(message,'admin');persist();return true;
+  }
+  let value=section==='notifySettings'?STATE.civil.notifySettings:
+    section==='financialSettings'?{
+      feeSchedule:STATE.civil.refData.feeSchedule,
+      feeCategoryGLCodes:STATE.civil.refData.feeCategoryGLCodes,
+      paymentMethodGLCodes:STATE.civil.refData.paymentMethodGLCodes
+    }:STATE.civil.refData[section];
+  try{
+    const saved=await civilAdminRequest('save',{section,value,expectedRevision:civilAdminConfigRevision});
+    civilAdminConfigRevision=saved.revision;
+    return true;
+  }catch(error){
+    if(section==='notifySettings')STATE.civil.notifySettings=previous;
+    else if(section==='financialSettings'){
+      for(const part of Object.keys(previous))STATE.civil.refData[part]=previous[part];
+    }else STATE.civil.refData[section]=previous;
+    toast('Unable to save Civil configuration: '+error.message,true);
+    renderAdminTabBody();
+    return false;
+  }
+}
+
 function renderAdmin(){
   const canManage = can('civil_admin_categories');
   const canAudit = can('civil_admin_audit');
@@ -3401,11 +3480,22 @@ function renderAdmin(){
     <div id="adminTabBodyCivil"></div>
   `;
   document.querySelectorAll('[data-admin-tab-civil]').forEach(b=>b.addEventListener('click', ()=>{ ADMIN_TAB=b.dataset.adminTabCivil; renderAdmin(); }));
+  civilAdminEnsureLoaded();
   renderAdminTabBody();
 }
 
 function renderAdminTabBody(){
   const body = document.getElementById('adminTabBodyCivil');
+  if(civilAdminConfigMode===null&&civilAdminWorkspace()){
+    body.textContent=civilAdminConfigError?'Unable to load Civil settings: '+civilAdminConfigError:'Loading saved Civil administration settings...';
+    if(civilAdminConfigError){
+      const retry=document.createElement('button');
+      retry.className='btn btn-outline';retry.textContent='Retry';
+      retry.onclick=()=>{civilAdminConfigError='';civilAdminEnsureLoaded();renderAdminTabBody();};
+      body.append(retry);
+    }
+    return;
+  }
   if(ADMIN_TAB==='jurisdiction') renderCivilJurisdictionTab(body);
   else if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
   else if(ADMIN_TAB==='feeSchedule') renderFeeScheduleTab(body);
@@ -3731,7 +3821,8 @@ function renderFeeScheduleTab(body){
   `;
   document.querySelectorAll('[data-edit-methods]').forEach(btn=>btn.addEventListener('click', ()=>openServiceMethodsModal(btn.dataset.editMethods)));
   const saveBtn = document.getElementById('btnSaveFeeSchedule');
-  if(saveBtn) saveBtn.addEventListener('click', ()=>{
+  if(saveBtn) saveBtn.addEventListener('click', async()=>{
+    const previous=civilAdminClone({feeSchedule:STATE.civil.refData.feeSchedule,feeCategoryGLCodes:STATE.civil.refData.feeCategoryGLCodes,paymentMethodGLCodes:STATE.civil.refData.paymentMethodGLCodes});
     sched.mileageRatePerMile = Number(document.getElementById('fRateMileage').value) || 0;
     sched.interestRateAnnualPercent = Number(document.getElementById('fRateInterest').value) || 0;
     sched.commissionRatePercent = Number(document.getElementById('fRateCommission').value) || 0;
@@ -3756,9 +3847,7 @@ function renderFeeScheduleTab(body){
     document.querySelectorAll('[data-gl-payment-method]').forEach(input=>{
       STATE.civil.refData.paymentMethodGLCodes[input.dataset.glPaymentMethod] = input.value.trim();
     });
-    logActivity('Updated the civil process fee schedule and rates.', 'admin');
-    persist();
-    toast('Fee schedule saved.');
+    if(await civilAdminCommit('financialSettings',previous,'Updated the civil process fee schedule and rates.'))toast('Fee schedule saved.');
   });
 }
 
@@ -3781,16 +3870,17 @@ function openServiceMethodsModal(paperType){
   openModal();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
-  document.getElementById('mSave').onclick = ()=>{
+  document.getElementById('mSave').onclick = async()=>{
+    const previous=civilAdminClone(STATE.civil.refData.feeSchedule);
     const selected = [...document.querySelectorAll('[data-method]:checked')].map(c=>c.dataset.method);
     if(!selected.length){ toast("At least one service method must remain allowed.", true); return; }
     if(!sched.byType[paperType]) sched.byType[paperType] = {...feeConfigFor(paperType)};
     sched.byType[paperType].allowedServiceMethods = selected;
-    logActivity(`Updated allowed service methods for ${paperType}.`, 'admin');
-    persist();
-    toast("Service methods saved.");
-    closeModal();
-    renderAdminTabBody();
+    if(await civilAdminCommit('feeSchedule',previous,`Updated allowed service methods for ${paperType}.`)){
+      toast("Service methods saved.");
+      closeModal();
+      renderAdminTabBody();
+    }
   };
 }
 
@@ -3813,23 +3903,21 @@ function renderSimpleListTab(body, key){
       </div>
     </div>
   `;
-  document.getElementById('btnAddItemCivil').addEventListener('click', ()=>{
+  document.getElementById('btnAddItemCivil').addEventListener('click', async()=>{
+    const previous=civilAdminClone(list);
     const val = document.getElementById('newItemInputCivil').value.trim();
     if(!val){ toast("Enter a value first.", true); return; }
     if(list.includes(val)){ toast("That already exists.", true); return; }
     list.push(val);
-    logActivity(`Added "${val}" to ${cfg.label}.`, "admin");
-    persist();
-    renderAdminTabBody();
+    if(await civilAdminCommit(key,previous,`Added "${val}" to ${cfg.label}.`))renderAdminTabBody();
   });
-  document.querySelectorAll('[data-remove-item-civil]').forEach(b=>b.addEventListener('click', ()=>{
+  document.querySelectorAll('[data-remove-item-civil]').forEach(b=>b.addEventListener('click', async()=>{
     const idx = Number(b.dataset.removeItemCivil); const val = list[idx];
     if(cfg.usageCheck(val)){ toast(`Can't remove "${val}" \u2014 it's in use.`, true); return; }
     if(!confirm(`Remove "${val}"?`)) return;
+    const previous=civilAdminClone(list);
     list.splice(idx,1);
-    logActivity(`Removed "${val}" from ${cfg.label}.`, "admin");
-    persist();
-    renderAdminTabBody();
+    if(await civilAdminCommit(key,previous,`Removed "${val}" from ${cfg.label}.`))renderAdminTabBody();
   }));
 }
 
@@ -3844,13 +3932,14 @@ function renderNotificationRoutingTab(body){
       </div>
     </div>
   `;
-  document.getElementById('btnSaveRoutingCivil').addEventListener('click', ()=>{
+  document.getElementById('btnSaveRoutingCivil').addEventListener('click', async()=>{
+    const previous=civilAdminClone(STATE.civil.notifySettings);
     STATE.civil.notifySettings.returnDueRoleId = document.getElementById('fRouteCivilReturn').value;
     STATE.civil.notifySettings.priorityUnassignedRoleId = document.getElementById('fRouteCivilPriority').value;
-    logActivity("Updated Civil Process notification routing settings.", "admin");
-    persist();
-    toast("Notification routing saved.");
-    renderNotifBell();
+    if(await civilAdminCommit('notifySettings',previous,"Updated Civil Process notification routing settings.")){
+      toast("Notification routing saved.");
+      renderNotifBell();
+    }
   });
 }
 
