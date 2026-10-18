@@ -3871,12 +3871,12 @@ function openServiceMethodsModal(paperType){
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = async()=>{
-    const previous=civilAdminClone(STATE.civil.refData.feeSchedule);
+    const previous=civilAdminClone({feeSchedule:STATE.civil.refData.feeSchedule,feeCategoryGLCodes:STATE.civil.refData.feeCategoryGLCodes,paymentMethodGLCodes:STATE.civil.refData.paymentMethodGLCodes});
     const selected = [...document.querySelectorAll('[data-method]:checked')].map(c=>c.dataset.method);
     if(!selected.length){ toast("At least one service method must remain allowed.", true); return; }
     if(!sched.byType[paperType]) sched.byType[paperType] = {...feeConfigFor(paperType)};
     sched.byType[paperType].allowedServiceMethods = selected;
-    if(await civilAdminCommit('feeSchedule',previous,`Updated allowed service methods for ${paperType}.`)){
+    if(await civilAdminCommit('financialSettings',previous,`Updated allowed service methods for ${paperType}.`)){
       toast("Service methods saved.");
       closeModal();
       renderAdminTabBody();
