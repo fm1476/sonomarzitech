@@ -622,6 +622,39 @@ window.CaliforniaCivil = (() => {
           kindSelect.tabIndex=-1;
           kindSelect.after(host);
         }
+        const courtFormSelect=target.querySelector('select[name="formCode"]');
+        if(courtFormSelect){
+          const host=document.createElement("div");
+          host.className="ca-kind-picker ca-court-form-picker";
+          const value=document.createElement("input");
+          value.type="hidden";value.name="formCode";value.value=courtFormSelect.value;
+          host.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-haspopup="listbox" aria-expanded="false">Choose official court form <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" aria-label="Official court forms" hidden></div>';
+          const trigger=host.querySelector(".ca-kind-trigger"),menu=host.querySelector(".ca-kind-options");
+          [...courtFormSelect.options].filter(option=>option.value).forEach(option=>{
+            const item=document.createElement("button");
+            item.type="button";item.className="ca-kind-option";item.dataset.value=option.value;
+            item.textContent=option.textContent;item.setAttribute("role","option");
+            item.onclick=()=>{
+              value.value=option.value;trigger.firstChild.textContent=option.textContent+" ";
+              trigger.setAttribute("aria-expanded","false");menu.hidden=true;trigger.focus();
+            };
+            menu.append(item);
+          });
+          trigger.onclick=()=>{
+            const expanded=trigger.getAttribute("aria-expanded")==="true";
+            trigger.setAttribute("aria-expanded",String(!expanded));menu.hidden=expanded;
+            if(!expanded)menu.querySelector("button")?.focus();
+          };
+          menu.onkeydown=event=>{
+            if(event.key==="Escape"){event.preventDefault();menu.hidden=true;trigger.setAttribute("aria-expanded","false");trigger.focus();}
+            if(["ArrowUp","ArrowDown"].includes(event.key)){
+              event.preventDefault();const all=[...menu.querySelectorAll("button")];
+              const index=all.indexOf(document.activeElement);
+              all[(index+(event.key==="ArrowDown"?1:all.length-1)+all.length)%all.length]?.focus();
+            }
+          };
+          courtFormSelect.replaceWith(value,host);
+        }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
           const field=fileInput.closest(".ca-upload-drop");
