@@ -359,6 +359,8 @@ window.CaliforniaCivil = (() => {
 .ca-classic .ca-form-footer{justify-content:flex-end;border-top:1px solid var(--ca-border)}
 .ca-classic .ca-form-backdrop [role=alert]:not(:empty){margin:8px 22px}
 @media(max-width:650px){.ca-classic #ca-form .ca-form-backdrop{padding:0}.ca-classic #ca-form .ca-form-backdrop>form{max-height:100dvh;height:100dvh;border-radius:0}}
+.ca-classic .ca-draft-confirm{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5;font-weight:650;margin-top:14px}
+.ca-classic .ca-draft-confirm input{width:19px;height:19px;flex:0 0 19px;margin-top:1px}
 .ca-classic .ca-return-review{border:1px solid var(--ca-border);border-radius:14px;padding:16px;background:linear-gradient(125deg,rgba(50,119,215,.11),transparent);margin-bottom:18px}
 .ca-classic .ca-return-review-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .ca-classic .ca-return-review-top strong{font-size:15px}.ca-classic .ca-return-review-top span{font-size:11px;color:var(--text-dim)}
@@ -1213,6 +1215,22 @@ window.CaliforniaCivil = (() => {
                                           "Remittance",
                                         ]
                                 : undefined;
+                const draftContext=action==="generate_return_draft" ? (()=>{
+                  const service=c.service||{};
+                  const facts=[
+                    ["Official form",c.workflowId==="summons"?"POS-010":"SC-104"],
+                    ["Case number",r.caseNumber],["Court",r.courtOfOrigin],
+                    ["Plaintiff",r.plaintiff],["Defendant",r.defendant],
+                    ["Recipient",service.recipient],["Date served",service.date],
+                    ["Time served",service.time],["Location",service.address],
+                    ["Service method",service.method]
+                  ];
+                  return '<div class="ca-return-review"><div class="ca-return-review-top"><strong>Unsigned court-form draft</strong><span>Review before generating</span></div>'+
+                    '<p>SonoMarzi will populate the official court template using recorded facts. The draft is NOT signed, certified or filed. Review the finished PDF carefully and upload a properly completed signed return.</p>'+
+                    '<div class="ca-return-facts">'+facts.map(([name,value])=>'<div><small>'+esc(name)+'</small><strong>'+esc(value||"Not recorded")+'</strong></div>').join("")+'</div>'+
+                    '<div class="ca-return-check ca-return-warn">The server must verify personal knowledge, legal capacity, proof-of-service details and signature before this is used in court.</div>'+
+                    '<label class="ca-draft-confirm"><input type="checkbox" name="reviewConfirmed" value="yes" required> I understand this creates an unsigned draft that requires review and signing.</label></div>';
+                })() : "";
                 const returnActions=["prepare_return","review_return","record_return"];
                 const returnContext=returnActions.includes(action) ? (()=>{
                   const outcomes=[c.service,c.nonService].filter(Boolean);
@@ -1242,7 +1260,7 @@ window.CaliforniaCivil = (() => {
                 );
                 form(
                   labels[action],
-                  returnContext + actionFields
+                  draftContext + returnContext + actionFields
                     .map((spec) => {
                       const key = spec.split(":")[0];
                       let value =
@@ -1270,6 +1288,10 @@ window.CaliforniaCivil = (() => {
                     .join("") + input("note"),
                   async (data) => {
                     const payload = Object.fromEntries(data);
+                    if(action==="generate_return_draft"){
+                      if(payload.reviewConfirmed!=="yes")throw Error("Confirm that the generated court form will require review and signing.");
+                      delete payload.reviewConfirmed;
+                    }
                     for (const spec of fields[action]) {
                       const [key, type] = spec.split(":");
                       if (type === "money") payload[key] = cents(payload[key]);
