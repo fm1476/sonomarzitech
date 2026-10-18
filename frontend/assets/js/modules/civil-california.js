@@ -14,6 +14,7 @@ window.CaliforniaCivil = (() => {
     );
   let generation = 0;
   let preferredCaseView = "cards";
+  let preferredBoardView = "kanban";
   const deadlineStatus = (due,stage) => {
     if (['Closed','Cancelled','Returned to Court'].includes(stage)) return 'clear';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(due||''))) return 'unknown';
@@ -250,6 +251,7 @@ window.CaliforniaCivil = (() => {
       );
       let rows = firstPage.cases,
         nextCursor = firstPage.nextCursor;
+      const boardOptions=id==='civil-board'?await api('filters',{},scope):{types:[],locations:[]};
       if (token !== generation) return true;
       if (id === "civil-mine")
         rows = rows.filter(
@@ -495,11 +497,14 @@ window.CaliforniaCivil = (() => {
 .ca-classic [role="alert"]:not(:empty){color:#eb6672}
 .ca-classic [role="status"]:not(:empty){color:var(--ca-accent)}
 @media(max-width:700px){.ca-classic>.panel-body{padding:14px}.ca-classic>.panel-head{padding:18px}.ca-classic .data-table{min-width:580px}.ca-classic .toolbar .btn{flex:1 1 auto}}
-</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div><label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
+.ca-classic .ca-shared-board-controls{margin:16px 0}.ca-classic .ca-board-mode{display:flex;justify-content:flex-end;margin:12px 0}.ca-classic .ca-view-controls[hidden]{display:none!important}.ca-classic.ca-workspace-open .ca-shared-board-controls{display:none!important}.ca-classic.ca-workspace-open .ca-board-mode{display:none!important}
+.ca-classic .civil-board{gap:13px;align-items:stretch}.ca-classic .civil-card{cursor:pointer;min-height:110px;display:block;margin-bottom:9px}.ca-classic .civil-card:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}.ca-classic .civil-card-meta{gap:6px;flex-wrap:wrap}.ca-classic .ca-service-map{border:1px solid var(--ca-border);border-radius:14px;background:var(--ca-surface);padding:16px;margin:15px 0}.ca-classic .ca-service-map-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.ca-classic .ca-service-map-head h4{margin:0}.ca-classic .ca-service-map-location{font-size:12px;color:var(--text-dim);margin:10px 0}.ca-classic .ca-service-map iframe{display:block;border:0;border-radius:10px;width:100%;height:250px}.ca-classic .ca-service-map p{font-size:11px;color:var(--text-dim);margin-bottom:0}.ca-classic .ca-safety-alert{border:1px solid var(--red,#e56770);border-radius:12px;padding:14px 16px;background:rgba(230,60,65,.09);margin-bottom:14px}.ca-classic .ca-safety-alert strong{color:var(--red,#e56770)}.ca-classic .ca-safety-manager{border:1px solid var(--ca-border);border-radius:14px;padding:16px;margin:14px 0}.ca-classic .ca-safety-manager-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}.ca-classic .ca-safety-manager h4{margin:0}.ca-classic .ca-safety-manager p,.ca-classic .ca-safety-manager small{font-size:12px;color:var(--text-dim)}.ca-classic .ca-safety-entry{padding:10px 0;border-top:1px solid var(--ca-border)}.ca-classic .ca-safety-entry strong{color:var(--red,#e56770)}.ca-classic .ca-safety-entry .btn{display:block;margin-top:8px}.ca-classic .ca-safety-alert p{font-size:12px;margin:6px 0 0}
+</style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
       };
-      const draw = () => {
+      let boardPaperType='All',boardLocation='All';
+            const draw = () => {
         const selected = [...rows];
         if (id === "civil-calendar")
           selected.sort((a, b) =>
@@ -507,6 +512,22 @@ window.CaliforniaCivil = (() => {
               b.record.returnByDate || "9999",
             ),
           );
+        const boardMode=id==="civil-board";
+        const selectedForBoard=boardMode?selected.filter(({record:r})=>
+          (boardPaperType==="All"||r.paperType===boardPaperType)&&
+          (boardLocation==="All"||r.courtOfOrigin===boardLocation)):selected;
+        const generalCard=(p)=>{
+          const flag=(p.safetyFlags||[]).some(f=>f.active&&!f.retiredAt);
+          const late=deadlineStatus(p.returnByDate,p.stage)==='overdue';
+          const due=p.returnByDate||'Due date pending';
+          return '<article class="civil-card" data-case="'+esc(p.id)+'" tabindex="0" role="button" aria-label="Open case '+esc(p.caseNumber)+'">'+
+            (p.priority==='Immediate'?'<div class="civil-card-priority-tag">PRIORITY</div>':'')+
+            '<div class="civil-card-case">'+esc(p.caseNumber)+'</div><div class="civil-card-type">'+esc(p.paperType)+'</div>'+
+            (flag?'<div style="color:var(--red);font-size:11px;font-weight:800">⚠ SAFETY FLAG</div>':'')+
+            '<div class="civil-card-party"><strong>Def:</strong> '+esc(p.defendant)+'</div>'+
+            '<div class="civil-card-meta"><span>'+esc(context.people.find(person=>person.id===p.assignedServerId||person.person_id===p.assignedServerId)?.name||'Unassigned')+'</span><span style="'+(late?'color:var(--red);font-weight:700':'')+'">'+esc(due)+'</span></div>'+
+            '<div class="civil-card-fee">'+esc(p.stage)+'</div></article>';
+        };
         const cardHtml = selected.map(({record:r}) =>
           `<article class="ca-case-card" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}"><div class="ca-case-header"><h4>${esc(r.caseNumber)}</h4><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></div>
           <p class="ca-case-type">${esc(r.paperType)}</p><dl class="ca-card-details"><div><dt>Defendant</dt><dd>${esc(r.defendant || "Not provided")}</dd></div><div><dt>Return due</dt><dd>${esc(r.returnByDate || "Review pending")}</dd></div></dl><span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span>
@@ -514,7 +535,12 @@ window.CaliforniaCivil = (() => {
         ).join("");
         const tableHtml = `<div class="ca-table-wrap"><table class="data-table"><thead><tr><th>Case</th><th>Type</th><th>Defendant</th><th>Status</th><th>Return due</th></tr></thead><tbody>${selected.map(({record:r}) => `<tr><td><button class="btn btn-outline" data-case="${esc(r.id)}">${esc(r.caseNumber)}</button></td><td>${esc(r.paperType)}</td><td>${esc(r.defendant)}</td><td><span class="ca-status-pill" data-stage="${esc(r.stage)}">${esc(r.stage)}</span></td><td>${esc(r.returnByDate || "Review pending")} <span class="ca-deadline" data-deadline="${deadlineStatus(r.returnByDate,r.stage)}">${deadlineLabel(deadlineStatus(r.returnByDate,r.stage))}</span></td></tr>`).join("")}</tbody></table></div>`;
         root.querySelector("#ca-list").innerHTML =
-          (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>') +
+          (boardMode
+            ? '<div class="ca-board-mode">'+SonoMarziCivilBoardUI.switcher(preferredBoardView)+'</div>'+
+              (preferredBoardView==='kanban'
+                ? SonoMarziCivilBoardUI.columns({items:selectedForBoard.map(x=>x.record),renderCard:generalCard,group:p=>SonoMarziCivilBoardUI.groupStage(p.stage),stageNames:SonoMarziCivilBoardUI.stages})
+                : SonoMarziCivilBoardUI.table({items:selectedForBoard.map(x=>x.record),assigned:p=>context.people.find(person=>person.id===p.assignedServerId||person.person_id===p.assignedServerId)?.name||'Unassigned',group:p=>p.stage}))
+            : (selected.length ? preferredCaseView === "cards" ? `<div class="ca-case-grid">${cardHtml}</div>` : tableHtml : '<div class="ca-empty-state"><strong>No cases to display</strong><p>Create a new case or adjust your search to see results here.</p></div>')) +
           `<div class="ca-list-footer"><span>${rows.length} accessible cases loaded.${nextCursor ? " More cases are available." : ""}</span>${nextCursor ? '<button class="btn btn-outline" id="ca-more">Load more cases</button>' : ""}</div>`;
         if(id !== "civil-calendar")root.querySelector("#ca-view-cards").setAttribute("aria-pressed", String(preferredCaseView === "cards"));
         if(id !== "civil-calendar")root.querySelector("#ca-view-table").setAttribute("aria-pressed", String(preferredCaseView === "table"));
@@ -528,6 +554,8 @@ window.CaliforniaCivil = (() => {
                 afterKey: nextCursor,
                 query: root.querySelector("#ca-search").value,
                 assignedOnly: id === "civil-mine",
+                ...(id==="civil-board"?{paperType:boardPaperType==="All"?"":boardPaperType,courtOfOrigin:boardLocation==="All"?"":boardLocation}:{}),
+                ...(id==="civil-board"?{paperType:boardPaperType==="All"?"":boardPaperType,courtOfOrigin:boardLocation==="All"?"":boardLocation}:{}),
               },
               scope,
             );
@@ -538,6 +566,12 @@ window.CaliforniaCivil = (() => {
             status(error.message);
             e.target.disabled = false;
           }
+        });
+        root.querySelectorAll('[data-civil-mode]').forEach(button=>button.onclick=()=>{
+          preferredBoardView=button.dataset.civilMode;draw();
+        });
+        root.querySelectorAll('.civil-card[data-case]').forEach(card=>{
+          card.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();card.click();}};
         });
         root.querySelectorAll("[data-case]").forEach(
           (b) =>
@@ -556,6 +590,7 @@ window.CaliforniaCivil = (() => {
         root.querySelector("#ca-view-cards").setAttribute("aria-pressed",String(mode === "cards"));
         root.querySelector("#ca-view-table").setAttribute("aria-pressed",String(mode === "table"));
       };
+      if(id==="civil-board")root.querySelector(".ca-view-controls").hidden=true;
       root.querySelector("#ca-view-cards").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("calendar"); } else { preferredCaseView = "cards"; draw(); } updateViewButtons("cards"); };
       root.querySelector("#ca-view-table").onclick = () => { if(id === "civil-calendar"){ calendarController?.setView("table"); } else { preferredCaseView = "table"; draw(); } updateViewButtons("table"); };
       let searchTimer,
@@ -582,7 +617,27 @@ window.CaliforniaCivil = (() => {
           }
         }, 200);
       };
-      root.querySelector("#ca-refresh").onclick = () => {
+      if(id==="civil-board"){
+        for(const [selector,setter] of [['#ca-type-filter',value=>boardPaperType=value],['#ca-location-filter',value=>boardLocation=value]]){
+          const element=root.querySelector(selector);
+          if(element)element.onchange=async()=>{
+            setter(element.value);
+            clearTimeout(searchTimer);
+            const epoch=++searchEpoch;
+            status('Loading matching cases...');
+            try{
+              const page=await api('list',{
+                query:root.querySelector('#ca-search').value,
+                paperType:boardPaperType==='All'?'':boardPaperType,
+                courtOfOrigin:boardLocation==='All'?'':boardLocation
+              },scope);
+              if(token!==generation||epoch!==searchEpoch)return;
+              rows=page.cases;nextCursor=page.nextCursor;draw();status('');
+            }catch(error){if(epoch===searchEpoch)status('Unable to filter cases: '+error.message);}
+          };
+        }
+      }
+            root.querySelector("#ca-refresh").onclick = () => {
         if (root.querySelector("#ca-form form")) {
           status("Save or cancel the open form before refreshing.");
           return;
@@ -1078,6 +1133,31 @@ window.CaliforniaCivil = (() => {
           });
           formLibrary.append(uploadSigned);
         }
+
+        const caseFlags=(r.safetyFlags||[]);
+        const activeCaseFlags=caseFlags.filter(flag=>flag.active&&!flag.retiredAt);
+        const flagPanel=document.createElement('section');
+        flagPanel.className='ca-safety-manager';
+        flagPanel.innerHTML='<div class="ca-safety-manager-head"><h4>Officer Safety Flags</h4>'+
+          (can('civil_paper_intake')&&!['Closed','Cancelled'].includes(r.stage)?'<button type="button" class="btn btn-outline btn-sm" data-ca-add-safety>⚠ Add Safety Flag</button>':'')+
+          '</div>'+(!activeCaseFlags.length?'<p>No active case safety flags have been recorded.</p>':
+          activeCaseFlags.map(flag=>'<div class="ca-safety-entry"><strong>⚠ '+esc(flag.scope||'Case')+' safety warning</strong><p>'+esc(flag.reason||'No narrative recorded')+'</p><small>Source / verification reference: '+esc(flag.verificationReference||'Not specified')+'</small>'+
+          (can('civil_paper_intake')?'<button type="button" class="btn btn-outline btn-sm" data-ca-retire-safety="'+esc(flag.id)+'">Retire flag</button>':'')+'</div>').join(''));
+        panel.querySelector("#ca-actions")?.before(flagPanel);
+        flagPanel.querySelector('[data-ca-add-safety]')?.addEventListener('click',()=>form(
+          'Add Officer Safety Flag',
+          '<p>Record verified, actionable information. This warning is shown on the case and Service Board until formally retired.</p>'+
+          '<label class="form-row">Applies to<select name="scope"><option>Person</option><option>Address</option><option>Case</option></select></label>'+
+          '<label class="form-row">Safety concern<textarea name="reason" maxlength="1000" required></textarea></label>'+
+          '<label class="form-row">Source or verification reference<input name="verificationReference" maxlength="500" required></label>'+
+          '<label class="form-row">Action note<textarea name="note" maxlength="1000" required></textarea></label>',
+          async values=>command('add_safety_flag',Object.fromEntries(values.entries()))
+        ));
+        flagPanel.querySelectorAll('[data-ca-retire-safety]').forEach(button=>button.addEventListener('click',()=>form(
+          'Retire Officer Safety Flag',
+          '<p>Retiring a flag does not erase it from the audit trail.</p><label class="form-row">Reason for retirement<textarea name="note" maxlength="1000" required></textarea></label>',
+          async values=>command('retire_safety_flag',{flagId:button.dataset.caRetireSafety,note:String(values.get('note')||'')})
+        )));
 
         panel.querySelector("#ca-actions")?.after(formLibrary);
         formLibrary.querySelector("#ca-generate-draft")?.addEventListener("click",()=>{

@@ -14,6 +14,18 @@ fail=true;await assert.rejects(()=>call({operation:'command',id,expectedVersion:
 const seeded=structuredClone(created.body.data.record);seeded.california.ledger=[{id:'fixture-entry',direction:'in',amountCents:100,kind:'Creditor deposit',reference:'FIXTURE',accountingDate:'2026-10-17',at:'2026-10-17T12:00:00Z'}];
 await db.query(`INSERT INTO suite_records SELECT $1::uuid,$2::uuid,replace(jsonb_build_array(jsonb_build_array('civil','papers'),md5(i::text)::uuid::text)::text,' ',''),jsonb_set($3::jsonb,'{id}',to_jsonb(md5(i::text)::uuid::text)),1,false,now(),$4::uuid FROM generate_series(1,1105) i`,[tenant,agency,JSON.stringify(seeded),actor]);
 let cursor=null,ids=[];do{const page=await call({operation:'list',afterKey:cursor});assert.equal(page.status,200);assert.ok(page.body.data.cases.length<=200);ids.push(...page.body.data.cases.map(x=>x.record.id));cursor=page.body.data.nextCursor;}while(cursor);assert.equal(ids.length,1106);assert.equal(new Set(ids).size,1106,'Pagination must not repeat or omit cases');
+const secondPageKey=JSON.stringify([['civil','papers'],ids[600]]);
+await db.query(`UPDATE suite_records SET value=jsonb_set(jsonb_set(value,'{courtOfOrigin}',to_jsonb('Other Fictional Court'::text)),'{paperType}',to_jsonb('Fictional Special Paper'::text)) WHERE tenant_id=$1 AND agency_id=$2 AND key=$3`,[tenant,agency,secondPageKey]);
+const filterOptions=await call({operation:'filters'});
+assert.equal(filterOptions.status,200);
+assert.ok(filterOptions.body.data.types.includes('Fictional Special Paper'));
+assert.ok(filterOptions.body.data.locations.includes('Other Fictional Court'));
+const filtered=await call({operation:'list',paperType:'Fictional Special Paper',courtOfOrigin:'Other Fictional Court'});
+assert.equal(filtered.status,200);
+assert.equal(filtered.body.data.cases.length,1,'California filters must reach beyond the first 200 cases');
+assert.equal(filtered.body.data.cases[0].record.id,ids[600]);
+assert.equal((await call({operation:'list',paperType:'Fictional Special Paper',courtOfOrigin:'No Such Court'})).body.data.cases.length,0);
+assert.equal((await call({operation:'list',paperType:{bad:true}})).status,400);
 const financial=await call({operation:'report',fromDate:'2026-10-17',toDate:'2026-10-17'});assert.equal(financial.status,200);assert.equal(financial.body.data.summary.caseCount,1106);assert.equal(financial.body.data.summary.receiptsCents,110500);assert.equal(financial.body.data.summary.closingBalanceCents,110500);assert.match(financial.body.data.revision,/^[a-f0-9]{64}$/);assert.equal((await call({operation:'report',fromDate:'2026-02-30'})).status,400);
 const platform=extra=>ctx.api(db,{userId:actor,platformAdmin:true},{tenantId:tenant,agencyId:agency,...extra});
 assert.equal((await call({operation:'readiness',expectedRevision:0,evidence:{check:'forms',status:'passed',reference:'Fictional fixture',acceptedWorkflows:[]}})).status,403);

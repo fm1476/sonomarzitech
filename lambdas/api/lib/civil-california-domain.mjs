@@ -153,6 +153,7 @@ export function createCaliforniaCase(input, ctx) {
     assignedServerId: null,
     stage: "Intake",
     attempts: [],
+    safetyFlags: [],
     attachedDocuments: [],
     generatedDocuments: [],
     feePayments: [],
@@ -298,7 +299,29 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         409,
       );
   };
-  if (command === "intake_details") {
+  if (command === "add_safety_flag") {
+    permission(ctx, "civil_paper_intake");
+    note();
+    requireValue(text(payload.reason, 1000), "Describe the officer-safety concern.");
+    requireValue(["Person","Address","Case"].includes(payload.scope), "Select what the safety flag applies to.");
+    requireValue(text(payload.verificationReference, 500), "Record the source or verification reference.");
+    r.safetyFlags ??= [];
+    requireValue(r.safetyFlags.length < 100, "This case has too many safety flag entries.", 409);
+    r.safetyFlags.push({
+      id: ctx.eventId, scope: payload.scope, reason: payload.reason,
+      verificationReference: payload.verificationReference,
+      active: true, createdBy: ctx.userId, createdAt: ctx.at,
+    });
+  } else if (command === "retire_safety_flag") {
+    permission(ctx, "civil_paper_intake");
+    note();
+    const item=(r.safetyFlags||[]).find(flag=>flag.id===payload.flagId);
+    requireValue(item && item.active && !item.retiredAt, "Active safety flag not found.", 404);
+    item.active=false;
+    item.retiredBy=ctx.userId;
+    item.retiredAt=ctx.at;
+    item.retirementReason=payload.note;
+  } else   if (command === "intake_details") {
     permission(ctx, "civil_paper_intake");
     requireValue(
       ["Intake", "Ready"].includes(r.stage),

@@ -1,0 +1,23 @@
+/* State-neutral Civil presentation helpers. The jurisdiction adapter owns every record action. */
+window.SonoMarziCivilBoardUI = (() => {
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const stages=['Unassigned','Assigned','Attempting','Served','Unable to Serve','Return Processing','Returned to Court','Closed'];
+  const stageColor=stage=>({'Unassigned':'#94a3b8','Assigned':'#3478dc','Attempting':'#efb13d','Served':'#27b77d','Unable to Serve':'#ec6971','Return Processing':'#8b6fe0','Returned to Court':'#9b59e6','Closed':'#64748b'})[stage]||'#64748b';
+  const groupStage=stage=>({'Intake':'Unassigned','Ready':'Unassigned','Return Prepared':'Return Processing','Reviewed':'Return Processing'})[stage]||stage;
+  function filters({ids,types=[],locations=[],query='',type='All',location='All',locationLabel='Location'}){
+    const options=(list,selected)=>['All',...new Set(list.filter(Boolean))].map(v=>'<option value="'+escape(v)+'"'+(v===selected?' selected':'')+'>'+escape(v)+'</option>').join('');
+    return '<div class="civil-shared-filters" role="search"><label>Search board<input id="'+escape(ids.search)+'" type="search" value="'+escape(query)+'" placeholder="Search case #, plaintiff, or defendant..." autocomplete="off"></label><label>Type<select id="'+escape(ids.type)+'">'+options(types,type)+'</select></label><label>'+escape(locationLabel)+'<select id="'+escape(ids.location)+'">'+options(locations,location)+'</select></label></div>';
+  }
+  function columns({items,stageNames=stages,renderCard,group=p=>p.stage}){
+    return '<div class="civil-board-scroll"><div class="civil-board">'+stageNames.map(stage=>{
+      const records=items.filter(item=>group(item)===stage);
+      return '<div class="civil-column" data-stage-col="'+escape(stage)+'"><div class="civil-column-head" style="border-top-color:'+stageColor(stage)+'"><span>'+escape(stage)+'</span><span class="civil-column-count">'+records.length+'</span></div><div class="civil-column-body" data-stage-dropzone="'+escape(stage)+'">'+(records.map(renderCard).join('')||'<div class="civil-column-empty">No papers</div>')+'</div></div>';
+    }).join('')+'</div></div>';
+  }
+  function table({items,openAttribute='data-case',assigned=()=>'',due=p=>p.returnByDate||'',group=p=>p.stage}){
+    return '<div class="civil-shared-table-wrap"><table class="data-table civil-shared-table"><thead><tr><th>Case #</th><th>Paper Type</th><th>Defendant / Respondent</th><th>Stage</th><th>Assigned To</th><th>Return By</th></tr></thead><tbody>'+items.map(p=>'<tr><td><button type="button" class="btn btn-outline btn-sm" '+openAttribute+'="'+escape(p.id)+'">'+escape(p.caseNumber)+'</button></td><td>'+escape(p.paperType)+'</td><td>'+escape(p.defendant)+'</td><td>'+escape(group(p))+'</td><td>'+escape(assigned(p))+'</td><td>'+escape(due(p))+'</td></tr>').join('')+'</tbody></table>'+(items.length?'':'<p class="civil-column-empty">No matching cases.</p>')+'</div>';
+  }
+  const styles='<style id="civil-shared-board-style">.civil-shared-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;flex:1}.civil-shared-filters label{display:flex;flex-direction:column;gap:7px;font-weight:700;font-size:12px;min-width:175px;flex:0 1 235px}.civil-shared-filters input,.civil-shared-filters select{width:100%;box-sizing:border-box;min-height:44px;border-radius:9px}.civil-shared-table-wrap{overflow-x:auto;margin-top:16px}.civil-shared-table{width:100%;min-width:730px}.civil-shared-table th,.civil-shared-table td{text-align:left;padding:12px;border-bottom:1px solid var(--border)}.civil-shared-mode{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.civil-shared-mode .btn[aria-pressed="true"]{background:var(--blue);color:white}@media(max-width:650px){.civil-shared-filters label{flex:1 1 100%}}</style>';
+  const switcher=(mode,enabled=['kanban','table'])=>'<div class="civil-shared-mode" role="group" aria-label="Civil board display"><span class="muted">View:</span>'+enabled.map(value=>'<button type="button" class="btn btn-sm btn-outline" data-civil-mode="'+value+'" aria-pressed="'+(mode===value)+'">'+(value==='kanban'?'▥ Kanban':'☷ Table')+'</button>').join('')+'</div>';
+  return Object.freeze({escape,stages,groupStage,filters,columns,table,styles,switcher});
+})();

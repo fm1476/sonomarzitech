@@ -52,6 +52,18 @@ export async function californiaCivilApi(client,auth,body){
     const roster=await client.query(`SELECT DISTINCT m.person_id,u.display_name AS name,u.email FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.status='active' AND u.status='active' AND m.person_id IS NOT NULL ORDER BY u.display_name,u.email`,[tenantId,agencyId]);
     return response(200,{success:true,data:{people:roster.rows}});
   }
+  if(operation==='filters'){
+    const all=access.admin||granted.includes('civil_paper_view_all');
+    const options=await client.query(`SELECT DISTINCT value->>'paperType' AS paper_type, value->>'courtOfOrigin' AS court
+      FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+      AND key::jsonb->0='["civil","papers"]'::jsonb AND value->'california'->>'ruleVersion'=$3
+      AND ($4::boolean OR value->>'assignedServerId'=$5)`,
+      [tenantId,agencyId,CA_RULE_VERSION,all,access.personId]);
+    return response(200,{success:true,data:{
+      types:[...new Set(options.rows.map(row=>row.paper_type).filter(Boolean))].sort(),
+      locations:[...new Set(options.rows.map(row=>row.court).filter(Boolean))].sort()
+    }});
+  }
   if(operation==='calendar'){
     try{validateCalendarRange(body.fromDate,body.toDate);}catch(error){return response(error.statusCode,{success:false,error:error.message});}
     const q=await client.query(`SELECT value->>'id' AS id,value->>'caseNumber' AS case_number,value->>'stage' AS stage,value->>'returnByDate' AS return_by,value->'california'->'deadlines' AS deadlines FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false AND key::jsonb->0='["civil","papers"]'::jsonb AND value->'california'->>'ruleVersion'=$3 AND ($4::boolean OR value->>'assignedServerId'=$5) AND ((value->>'returnByDate' BETWEEN $6 AND $7) OR EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(value->'california'->'deadlines','[]'::jsonb)) AS d WHERE d->>'dueDate' BETWEEN $6 AND $7 AND d->>'completedAt' IS NULL))`,[tenantId,agencyId,CA_RULE_VERSION,access.admin||granted.includes('civil_paper_view_all'),access.personId,body.fromDate,body.toDate]);
@@ -77,7 +89,8 @@ export async function californiaCivilApi(client,auth,body){
       }catch(error){if(error instanceof CivilError)return response(error.statusCode,{success:false,error:error.message});throw error;}
     }
     if(body.query!==undefined&&(typeof body.query!=='string'||body.query.length>250))return response(400,{success:false,error:'Search must contain at most 250 characters.'});
-    const q=await client.query(`SELECT key,value,version,updated_at ${base} AND ($6::text IS NULL OR key>$6) AND ($7::text IS NULL OR strpos(lower(value::text),lower($7::text))>0) AND ($8::boolean=false OR value->>'assignedServerId'=$5) ORDER BY key LIMIT 201`,[...params,body.afterKey||null,body.query?.trim()||null,body.assignedOnly===true]);
+    if(['paperType','courtOfOrigin'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>250)))return response(400,{success:false,error:'Invalid Civil board filter.'});
+    const q=await client.query(`SELECT key,value,version,updated_at ${base} AND ($6::text IS NULL OR key>$6) AND ($7::text IS NULL OR strpos(lower(value::text),lower($7::text))>0) AND ($8::boolean=false OR value->>'assignedServerId'=$5) AND ($9::text IS NULL OR value->>'paperType'=$9) AND ($10::text IS NULL OR value->>'courtOfOrigin'=$10) ORDER BY key LIMIT 201`,[...params,body.afterKey||null,body.query?.trim()||null,body.assignedOnly===true,body.paperType||null,body.courtOfOrigin||null]);
     const page=q.rows.slice(0,200),cases=page.filter(row=>canView(row.value)).map(row=>({record:row.value,version:Number(row.version),updatedAt:row.updated_at}));
     return response(200,{success:true,data:{cases,nextCursor:q.rows.length>200?page[page.length-1].key:null,pageSize:200}});
   }
