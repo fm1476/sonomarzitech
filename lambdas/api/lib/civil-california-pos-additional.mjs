@@ -122,7 +122,7 @@ export async function generateAdditionalCaliforniaPosDraft(record,input){
     tick('Page1[0].CheckBox6[0]');
     put('P2Header_gp[0].CaseNumber_ft[0]',record.caseNumber);
     put('P2Header_gp[0].Party_ft[0]',record.plaintiff+' v. '+record.defendant);
-    put('FillText31[0]',serverName);
+    put('Page2[0].FillText34[0]',serverName);
     // Item 6(a) service method is selected. Do not check the
     // under-penalty-of-perjury statements or fill signing dates.
   }
