@@ -204,7 +204,7 @@ window.CaliforniaCivil = (() => {
   function input(spec, value = "", choices) {
     const [key, type = "text"] = spec.split(":");
     const list = choices || options[key];
-    return `<label class="form-row">${esc(name(key))}${
+    return `<label class="form-row">${esc(key === "workflowId" ? "Workflow Type" : name(key))}${
       list
         ? `<select name="${key}"><option value="">Select...</option>${list
             .map((o) => {
@@ -597,21 +597,60 @@ window.CaliforniaCivil = (() => {
           const host=document.createElement("div");
           host.className="ca-kind-picker";
           const options=[...kindSelect.options].filter(o=>o.value);
+          const kindValue=document.createElement("input");kindValue.type="hidden";kindValue.name="kind";kindValue.value=kindSelect.value;
           host.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-expanded="false" aria-haspopup="listbox">Select document kind <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" hidden></div>';
           const trigger=host.querySelector(".ca-kind-trigger");
           const list=host.querySelector(".ca-kind-options");
           options.forEach(o=>{
             const item=document.createElement("button");
             item.type="button";item.className="ca-kind-option";item.setAttribute("role","option");item.dataset.value=o.value;item.textContent=o.textContent;
-            item.onclick=()=>{kindSelect.value=o.value;trigger.firstChild.textContent=o.textContent+" ";trigger.setAttribute("aria-expanded","false");list.hidden=true;};
+            item.onclick=()=>{kindValue.value=o.value;trigger.firstChild.textContent=o.textContent+" ";trigger.setAttribute("aria-expanded","false");list.hidden=true;};
             list.append(item);
           });
           trigger.onclick=()=>{const open=trigger.getAttribute("aria-expanded")==="true";trigger.setAttribute("aria-expanded",String(!open));list.hidden=open;if(!open)list.querySelector("button")?.focus();};
           list.onkeydown=e=>{if(e.key==="Escape"){list.hidden=true;trigger.setAttribute("aria-expanded","false");trigger.focus();}if(["ArrowDown","ArrowUp"].includes(e.key)){e.preventDefault();const all=[...list.querySelectorAll("button")];const n=all.indexOf(document.activeElement);all[(n+(e.key==="ArrowDown"?1:all.length-1))%all.length]?.focus();}};
-          kindSelect.style.setProperty("display","none","important");
-          kindSelect.setAttribute("aria-hidden","true");
-          kindSelect.tabIndex=-1;
-          kindSelect.after(host);
+          kindSelect.replaceWith(kindValue,host);
+        }
+        // Workflow selection must not depend on the operating system's
+        // native select overlay, which can be clipped by the modal scroller.
+        const workflowSelect=target.querySelector('select[name="workflowId"]');
+        if(workflowSelect){
+          const container=document.createElement("div");
+          const workflowValue=document.createElement("input");workflowValue.type="hidden";workflowValue.name="workflowId";workflowValue.value=workflowSelect.value;
+          container.className="ca-kind-picker ca-workflow-picker";
+          container.innerHTML='<button type="button" class="btn btn-outline ca-kind-trigger" aria-label="Choose workflow type" aria-haspopup="listbox" aria-expanded="false">Select workflow type <span aria-hidden="true">⌄</span></button><div class="ca-kind-options" role="listbox" aria-label="Workflow types" hidden></div>';
+          const trigger=container.querySelector(".ca-kind-trigger");
+          const options=container.querySelector(".ca-kind-options");
+          [...workflowSelect.options].filter(option=>option.value).forEach(option=>{
+            const item=document.createElement("button");
+            item.type="button";item.className="ca-kind-option";item.setAttribute("role","option");
+            item.dataset.value=option.value;item.textContent=option.textContent;
+            item.onclick=()=>{
+              workflowValue.value=option.value;
+              workflowValue.dispatchEvent(new Event("change",{bubbles:true}));
+              trigger.firstChild.textContent=option.textContent+" ";
+              trigger.setAttribute("aria-expanded","false");options.hidden=true;trigger.focus();
+            };
+            options.append(item);
+          });
+          trigger.onclick=()=>{
+            const expanded=trigger.getAttribute("aria-expanded")==="true";
+            trigger.setAttribute("aria-expanded",String(!expanded));options.hidden=expanded;
+            if(!expanded)options.querySelector(".ca-kind-option")?.focus();
+          };
+          options.onkeydown=event=>{
+            if(event.key==="Escape"){
+              event.preventDefault();options.hidden=true;
+              trigger.setAttribute("aria-expanded","false");trigger.focus();
+            }
+            if(["ArrowDown","ArrowUp"].includes(event.key)){
+              event.preventDefault();
+              const items=[...options.querySelectorAll("button")];
+              const current=items.indexOf(document.activeElement);
+              items[(current+(event.key==="ArrowDown"?1:items.length-1)+items.length)%items.length]?.focus();
+            }
+          };
+          workflowSelect.replaceWith(workflowValue,container);
         }
         const fileInput=target.querySelector('input[type="file"]');
         if(fileInput){
