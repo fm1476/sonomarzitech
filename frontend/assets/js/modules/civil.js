@@ -537,6 +537,7 @@ function permissionBlockedView(msg){
    ========================================================================= */
 const BOARD_STAGES = ["Unassigned","Assigned","Attempting","Served","Unable to Serve","Returned to Court"];
 let BOARD_FILTER = {q:"", paperType:"All", court:"All"};
+let BOARD_MODE = "kanban";
 
 function renderBoard(){
   if(!can('civil_paper_view_all')){
@@ -565,38 +566,24 @@ function renderBoard(){
       <div class="stat-card"><div class="label">Served This Week</div><div class="value">${servedThisWeek}</div></div>
       <div class="stat-card"><div class="label">Total Active Papers</div><div class="value">${STATE.civil.papers.filter(p=>!['Returned to Court','Closed','Cancelled'].includes(p.stage)).length}</div></div>
     </div>
+    ${SonoMarziCivilBoardUI.styles}
     <div class="toolbar">
-      <div class="filters">
-        <input type="text" id="boardSearch" title="Filters the board below as you type, matching case number, plaintiff, or defendant" placeholder="Search case #, plaintiff, or defendant..." style="width:260px;" value="${escapeHtml(f.q)}">
-        <select id="boardTypeFilter" title="Filter to a single paper type"><option>All</option>${STATE.civil.refData.paperTypes.map(t=>`<option ${f.paperType===t?'selected':''}>${t}</option>`).join('')}</select>
-        <select id="boardCourtFilter" title="Filter to a single court of origin"><option>All</option>${STATE.civil.refData.courtsOfOrigin.map(t=>`<option ${f.court===t?'selected':''}>${t}</option>`).join('')}</select>
-      </div>
+      ${SonoMarziCivilBoardUI.filters({ids:{search:'boardSearch',type:'boardTypeFilter',location:'boardCourtFilter'},types:STATE.civil.refData.paperTypes,locations:STATE.civil.refData.courtsOfOrigin,query:f.q,type:f.paperType,location:f.court})}
+      ${SonoMarziCivilBoardUI.switcher(BOARD_MODE)}
       ${canIntake ? `<button class="btn btn-primary" id="btnIntakePaper">${ICONS.plus} Intake New Paper</button>` : ''}
     </div>
-    <div class="civil-board-scroll">
-      <div class="civil-board">
-        ${BOARD_STAGES.map(stage=>{
-          const stagePapers = papers.filter(p=>p.stage===stage);
-          return `
-          <div class="civil-column" data-stage-col="${stage}">
-            <div class="civil-column-head" style="border-top-color:${stageColor(stage)};">
-              <span>${stage}</span><span class="civil-column-count">${stagePapers.length}</span>
-            </div>
-            <div class="civil-column-body" data-stage-dropzone="${stage}">
-              ${stagePapers.map(p=>renderPaperCard(p)).join('') || `<div class="civil-column-empty">No papers</div>`}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
+    ${BOARD_MODE==='kanban'?
+      SonoMarziCivilBoardUI.columns({items:papers,stageNames:BOARD_STAGES,renderCard:renderPaperCard}):
+      SonoMarziCivilBoardUI.table({items:papers,openAttribute:'data-paper-table',assigned:p=>p.assignedServerId?personName(p.assignedServerId):'Unassigned'})}
   `;
   document.getElementById('boardSearch').addEventListener('input', e=>{ BOARD_FILTER.q=e.target.value; renderBoard(); refocusFilterInput('boardSearch'); });
   document.getElementById('boardTypeFilter').addEventListener('change', e=>{ BOARD_FILTER.paperType=e.target.value; renderBoard(); });
   document.getElementById('boardCourtFilter').addEventListener('change', e=>{ BOARD_FILTER.court=e.target.value; renderBoard(); });
   const intakeBtn = document.getElementById('btnIntakePaper');
   if(intakeBtn) intakeBtn.addEventListener('click', ()=>openIntakeModal());
-  wireBoardCards();
-  wireBoardDragDrop();
+  document.querySelectorAll('[data-civil-mode]').forEach(button=>button.addEventListener('click',()=>{BOARD_MODE=button.dataset.civilMode;renderBoard();}));
+  if(BOARD_MODE==='kanban'){wireBoardCards();wireBoardDragDrop();}
+  else document.querySelectorAll('[data-paper-table]').forEach(button=>button.addEventListener('click',()=>openPaperDetail(button.dataset.paperTable)));
 }
 
 function renderPaperCard(p){
