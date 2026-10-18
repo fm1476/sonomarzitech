@@ -604,6 +604,7 @@ window.CaliforniaCivil = (() => {
               .map((s) => s === "courtOfOrigin"
                 ? '<label class="form-row">Court of Origin <input name="courtOfOrigin" list="ca-courts-origin" placeholder="Start typing a California county or enter another court" autocomplete="off"><datalist id="ca-courts-origin">' + ["Alameda","Alpine","Amador","Butte","Calaveras","Colusa","Contra Costa","Del Norte","El Dorado","Fresno","Glenn","Humboldt","Imperial","Inyo","Kern","Kings","Lake","Lassen","Los Angeles","Madera","Marin","Mariposa","Mendocino","Merced","Modoc","Mono","Monterey","Napa","Nevada","Orange","Placer","Plumas","Riverside","Sacramento","San Benito","San Bernardino","San Diego","San Francisco","San Joaquin","San Luis Obispo","San Mateo","Santa Barbara","Santa Clara","Santa Cruz","Shasta","Sierra","Siskiyou","Solano","Sonoma","Stanislaus","Sutter","Tehama","Trinity","Tulare","Tuolumne","Ventura","Yolo","Yuba"].map(c=>'<option value="'+esc(c)+' County Superior Court"></option>').join('') + '</datalist><small style="color:var(--text-dim)">California courts are suggested. Courts from other jurisdictions may be entered manually.</small></label>'
                 : input(s))
+              .map((html,i) => (i===2 ? '<div class="ca-intake-section">Parties & service location</div>' : "") + html)
               .join("") + "</div>",
           async (data) => {
             const record = Object.fromEntries(data);
