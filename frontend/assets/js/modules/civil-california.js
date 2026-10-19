@@ -1552,6 +1552,19 @@ ${SonoMarziCivilRecordUI.styles}
           if(!present(details.deadlineAuthority))intakeIssues.push("Record the deadline authority");
           if(!present(details.formReviewReference))intakeIssues.push("Record the form review reference");
           if((workflow.forms||[]).some(form=>!(details.reviewedForms||[]).includes(form)))intakeIssues.push("Review required forms: "+(workflow.forms||[]).join(", "));
+          if((workflow.forms||[]).includes('SER-001')){
+            const ser=details.ser001||{};
+            const required=['requesterName','requesterMailingAddress','serviceTargetType','serviceTargetName','serviceAddressType','documentsDescription','hearingStatus','safetyAccessibilityStatus'];
+            if(required.some(key=>!present(ser[key])))intakeIssues.push('Complete SER-001 requester, recipient and service instructions');
+            if(ser.safetyAccessibilityStatus==='Issues reported'&&!present(ser.safetyAccessibilityDetails))intakeIssues.push('Record reported SER-001 safety/accessibility information');
+            if(ser.hearingStatus==='Yes'&&!present(details.hearingDate))intakeIssues.push('Record the SER-001 hearing date');
+          }
+          if((workflow.forms||[]).includes('SER-001A')){
+            const ser=details.ser001a||{};
+            const required=['requesterRole','targetRelationship','writType','writCopyStatus','propertyAndLocation','dwellingStatus','personalDebtStatus'];
+            if(required.some(key=>!present(ser[key])))intakeIssues.push('Complete SER-001A writ, debtor and property instructions');
+            if(ser.personalDebtStatus==='Yes'&&!present(ser.addressVerificationReference))intakeIssues.push('Record address-verification declaration reference');
+          }
           if(!kinds.has("Court packet"))intakeIssues.push("Upload the court packet");
           if(!kinds.has("Signed instructions"))intakeIssues.push("Upload signed instructions");
           if(workflow.writ){
@@ -1867,8 +1880,8 @@ ${SonoMarziCivilRecordUI.styles}
                               '<input type="text" name="'+section+'__'+key+'" maxlength="2000" value="'+esc(c.intakeDetails?.[section]?.[key]||'')+'">')+
                             '</label>').join('')+'</fieldset>'
                         ).join('') : '')+
-                    '<div class="ca-action-note">'+input("note")+
-                      (!narrativeNoteActions.has(action)?'<p>Optional comments. The action, staff member, timestamp and case status are recorded automatically.</p>':'<p>Required: explain the decision or exception.</p>')+'</div>',
+                    '<div class="ca-action-note">'+input("note").replace('>Note<',narrativeNoteActions.has(action)?'>Reason (required)<':'>Optional Comments<')+
+                      (!narrativeNoteActions.has(action)?'<p>Optional. The action, staff member, timestamp and case status are recorded automatically.</p>':'<p>Required: explain the decision or exception.</p>')+'</div>',
                   async (data) => {
                     const payload = Object.fromEntries(data);
                     if(action==="generate_return_draft"){
