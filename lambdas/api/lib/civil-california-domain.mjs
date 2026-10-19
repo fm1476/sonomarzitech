@@ -674,6 +674,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     requireValue(!(c.propertyItems||[]).some(item=>item.documentId===previous.id||
       item.custodyEvents.some(e=>e.documentId===previous.id)),
       "This document supports the property register or custody history and cannot be replaced.",409);
+    requireValue(!c.ledger.some(e=>e.releaseAuthorityDocumentId===previous.id),
+      "Document supports an approved financial release and cannot be replaced.",409);
     requireValue(text(payload.name,255)&&text(payload.key,1500),"Replacement filename and uploaded object key are required.");
     requireValue(!c.documents.some(d=>d.key===payload.key),"Document is already attached.",409);
     const next={id:ctx.eventId,name:payload.name,key:payload.key,kind:previous.kind,uploadedBy:ctx.userId,at:ctx.at,replacesDocumentId:previous.id};
@@ -701,6 +703,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     requireValue(!(c.propertyItems||[]).some(item=>item.documentId===previous.id||
       item.custodyEvents.some(e=>e.documentId===previous.id)),
       "This document supports the property register or custody history and cannot be removed.",409);
+    requireValue(!c.ledger.some(e=>e.releaseAuthorityDocumentId===previous.id),
+      "Document supports an approved financial release and cannot be removed.",409);
     c.documents.splice(index,1);
     r.attachedDocuments=(r.attachedDocuments||[]).filter(d=>d.id!==previous.id);
     c.removedDocuments??=[];
@@ -1423,10 +1427,18 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     requireValue(text(payload.county,150) &&
       payload.county.toLowerCase()===String(entry.receiptCounty).toLowerCase(),
       "Holding policy must match the agency county.");
+    const releaseEvidence=c.documents.find(d=>d.id===payload.authorityDocumentId&&
+      ["Court order","Other","Writ"].includes(d.kind));
+    requireValue(releaseEvidence,
+      "Select a protected, attached court order or county policy document supporting release.",409);
+    requireValue(!releaseEvidence.deactivatedAt,
+      "The supporting release authority document must be active.",409);
     entry.availableOn=payload.earliestReleaseDate;
     entry.releaseReviewedAt=ctx.at;
     entry.releaseReviewedBy=ctx.userId;
     entry.releaseAuthority=payload.authorityReference;
+    entry.releaseAuthorityDocumentId=releaseEvidence.id;
+    entry.releaseAuthorityDocumentName=releaseEvidence.name;
     entry.releasePolicyVersion=payload.policyVersion;
     entry.releaseReviewNote=payload.reviewNote;
   } else if (command === "expense") {
