@@ -40,6 +40,11 @@ jobs:
           node tests/civil-california-presentation.test.mjs
           mkdir -p artifacts/civil-pdf
           CIVIL_PDF_QA_DIR=artifacts/civil-pdf node tests/civil-california-returns.test.mjs
+          node tests/civil-california-pdf-intake.test.mjs
+          node tests/civil-california-mapped-pdf.test.mjs
+          node tests/civil-california-uploaded-forms.test.mjs
+          node tests/civil-california-form-preparation.test.mjs
+          node tests/civil-california-enforcement-forms.test.mjs
 
       - name: Preserve example unsigned Judicial Council form drafts
         if: always()
