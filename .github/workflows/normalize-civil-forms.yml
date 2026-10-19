@@ -1,0 +1,38 @@
+name: Normalize official Civil PDF templates
+on:
+  push:
+    branches: [civil-official-forms-expansion-20261018]
+    paths:
+      - 'scripts/normalize-ca-court-templates.py'
+      - 'lambdas/api/templates/civil/ej130.pdf'
+      - 'lambdas/api/templates/civil/ej150.pdf'
+      - 'lambdas/api/templates/civil/wg002.pdf'
+      - 'lambdas/api/templates/civil/wg005.pdf'
+      - 'lambdas/api/templates/civil/wg006.pdf'
+      - '.github/workflows/normalize-civil-forms.yml'
+permissions:
+  contents: write
+jobs:
+  normalize:
+    if: github.repository == 'fm1476/sonomarzitech' && github.ref == 'refs/heads/civil-official-forms-expansion-20261018'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deterministic PDF normalizer
+        run: python -m pip install --disable-pip-version-check pymupdf==1.26.7
+      - name: Normalize verified originals and preserve AcroForm fields
+        run: python scripts/normalize-ca-court-templates.py
+      - name: Commit normalized working templates to the PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lambdas/api/templates/civil/*-normalized.pdf lambdas/api/templates/civil/enforcement-uploaded-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Normalize official Civil PDFs while retaining original evidence files"
+            git push origin HEAD:civil-official-forms-expansion-20261018
+          fi
