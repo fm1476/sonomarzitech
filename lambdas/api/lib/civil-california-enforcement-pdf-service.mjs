@@ -43,7 +43,11 @@ export async function generateCaliforniaEnforcementUnsignedDraft(record,formCode
   fields.sheriffDisbursementFee=money(n.sheriffDisbursementFeeCents,'Sheriff disbursement fee');
   fields.recoverableCosts=money(n.recoverableCostsCents,'Recoverable costs');
   fields.dailyInterest=money(n.dailyInterestCents,'Daily interest from issued writ');
-  fields.totalWithFees=money(n.totalDueCents+n.levyFeeCents+n.sheriffDisbursementFeeCents+n.recoverableCostsCents,'Total with fees');
+  const add=[n.totalDueCents,n.levyFeeCents,n.sheriffDisbursementFeeCents,n.recoverableCostsCents];
+  if(!add.every(Number.isSafeInteger)||add.some(v=>v<0))throw Error('Levy amount components must be nonnegative integer cents.');
+  const sum=add.reduce((a,b)=>a+b,0);
+  if(!Number.isSafeInteger(sum))throw Error('Levy amount total exceeds supported range.');
+  fields.totalWithFees=money(sum,'Total with fees');
   if(!prepared.fields.issuedWritReference)throw Error('A court-issued writ reference is required.');
  } else if(formCode==='WG-002'){
   const d=params.order||{};
