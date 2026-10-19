@@ -707,6 +707,7 @@ ${SonoMarziCivilRecordUI.styles}
       root.addEventListener("input",event=>{
         if(!event.target.matches(".ca-assignee-query"))return;
         const box=event.target.closest(".ca-assignee-picker");
+        box.querySelector('input[name="personId"]').value="";
         const query=event.target.value.trim().toLocaleLowerCase();
         let count=0;
         box.querySelectorAll("[data-assignee-id]").forEach(item=>{
