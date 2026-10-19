@@ -110,19 +110,20 @@ fails(possession,'enforcement_event',{authorizationId,kind:'Possession',date:'20
 // Employer's WG-005 response is a signed/evidenced record, not an unverified
 // generic enforcement note; 15-day period is advisory and late returns persist.
 let wg=ready('earnings-withholding');
+const employerReviewDay={...ctx,today:'2026-11-15',at:'2026-11-15T12:00:00Z'};
 fails(wg,'enforcement_event',{kind:'Employer response',date:'2026-10-17',description:'Received return',authorityReference:'WG-005'},ctx,/dedicated Employer Return/);
-fails(wg,'record_employer_return',{employerName:'Demo Employer',employerReference:'EMP-1',orderServedDate:'2026-10-01',
-  returnReceivedDate:'2026-10-17',employmentStatus:'Employed',documentId:'not-a-document'},ctx,/WG-005 return/);
+fails(wg,'record_employer_return',{employerName:'Demo Employer',employerReference:'EMP-1',orderServedDate:'2026-10-17',
+  returnReceivedDate:'2026-11-10',employmentStatus:'Employed',documentId:'not-a-document'},employerReviewDay,/WG-005 return/);
 wg=step(wg,'attach_document',{kind:'Other',name:'WG-005-SIGNED.pdf',key:'test/wg005'});
 const wgDoc=wg.california.documents.at(-1).id;
 wg=step(wg,'record_employer_return',{employerName:'Demo Employer',employerReference:'EMP-1',
-  orderServedDate:'2026-10-01',returnReceivedDate:'2026-10-17',employmentStatus:'Employed',
-  documentId:wgDoc});
-assert.equal(wg.california.employerReturns[0].dueDate,'2026-10-16');
+  orderServedDate:'2026-10-17',returnReceivedDate:'2026-11-10',employmentStatus:'Employed',
+  documentId:wgDoc},employerReviewDay);
+assert.equal(wg.california.employerReturns[0].dueDate,'2026-11-01');
 assert.equal(wg.california.employerReturns[0].receivedAfterGuidanceDate,true);
 fails(wg,'record_employer_return',{employerName:'Demo Employer',employerReference:'EMP-1',
-  orderServedDate:'2026-10-01',returnReceivedDate:'2026-10-17',employmentStatus:'Employed',
-  documentId:wgDoc},ctx,/already been recorded/);
+  orderServedDate:'2026-10-17',returnReceivedDate:'2026-11-10',employmentStatus:'Employed',
+  documentId:wgDoc},employerReviewDay,/already been recorded/);
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
 // An unsigned generated working copy must never count as a signed proof of service.
