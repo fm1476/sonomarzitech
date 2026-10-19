@@ -44,9 +44,14 @@ assert.equal(root.querySelectorAll('input[name="reviewedForms"]').length,1,'Only
 assert.equal(reviewCheckbox.checked,false,'New intake should not be pre-marked reviewed');
 assert.ok(root.querySelector('a.ca-reviewed-link[href*="SER-001"]'),'Official SER-001 link must be available');
 reviewCheckbox.checked=true;
-fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court packet',formReviewReference:'Reviewed',note:'Fictional'});
+fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court packet',formReviewReference:'Reviewed',note:'',
+  ser001__requesterName:'Demo Requester',ser001__requesterMailingAddress:'PO Box 100 Sonoma CA',ser001__serviceTargetType:'Person',
+  ser001__serviceTargetName:'Demo Defendant',ser001__serviceAddressType:'Home',
+  ser001__documentsDescription:'Summons and Complaint',ser001__hearingStatus:'No',ser001__safetyAccessibilityStatus:'No issues reported'});
 await save();assert.equal(version,2);
 assert.deepEqual(record.california.intakeDetails.reviewedForms,['SER-001'],'Form review selection must persist');
+assert.equal(record.california.intakeDetails.ser001.serviceTargetName,'Demo Defendant','SER-001 field review must persist');
+assert.equal(record.california.intakeDetails.ser001ReviewedBy,ctx.userId,'SER-001 review must capture reviewer identity');
 await click('[data-action="intake_details"]');
 assert.equal(root.querySelector('input[name="reviewedForms"][value="SER-001"]').checked,true,'Existing review selections must load checked');
 await click('#ca-cancel-form');
