@@ -57,10 +57,10 @@ wageMissing=step(wageMissing,'intake_details',{
   personalDebtStatus:'Yes',addressVerificationReference:'WG-015 test reference'
 });
 wageMissing=doc(doc(doc(wageMissing,'Court packet'),'Signed instructions'),'Writ');
-fails(wageMissing,'approve_intake',{},ctx,/WG-015 or EJ-135/);
-wageMissing=step(wageMissing,'attach_document',{name:'WG-015-SIGNED.pdf',key:'test/WG015',kind:'Other'});
 fails(wageMissing,'approve_intake',{},ctx,/Review all required/);
 wageMissing=step(wageMissing,'intake_details',{returnByDate:'2026-11-15',reviewedForms:['WG-001','WG-002','WG-005','WG-015/EJ-135']});
+fails(wageMissing,'approve_intake',{},ctx,/WG-015 or EJ-135/);
+wageMissing=step(wageMissing,'attach_document',{name:'WG-015-SIGNED.pdf',key:'test/WG015',kind:'Other'});
 wageMissing=step(wageMissing,'approve_intake');assert.equal(wageMissing.stage,'Ready');
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
