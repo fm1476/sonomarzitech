@@ -4,9 +4,14 @@ import pdfLib from '../lambdas/api/node_modules/pdf-lib/cjs/index.js';
 const {PDFDocument,PDFName}=pdfLib;
 const manifest=JSON.parse(await readFile(new URL('../lambdas/api/templates/civil/manifest.json',import.meta.url),'utf8'));
 import {generateCaliforniaReturnDraft} from '../lambdas/api/lib/civil-california-returns.mjs';
+import {CivilError} from '../lambdas/api/lib/civil-california-domain.mjs';
 const input={serverName:'Demo Officer',serverAddress:'123 Training Lane',serverPhone:'555-0100',smallClaimsDocument:'SC-100',courtStreet:'600 Example Drive',courtCityZip:'Sonoma CA 95476',courtBranch:'Fictional Training Court'};
 for(const workflowId of ['summons','small-claims']){
  const record={id:'11111111-1111-4111-8111-111111111111',caseNumber:'TEST-CA-PDF',courtOfOrigin:'Sonoma',plaintiff:'Demo Plaintiff',defendant:'Demo Defendant',stage:'Served',california:{county:'Sonoma',workflowId,intakeDetails:{},service:{method:'Personal service',recipient:'Demo Defendant',address:'123 Fictional Lane',date:'2026-10-17',time:'13:05'}}};
+ if(workflowId==='summons'){
+   await assert.rejects(()=>generateCaliforniaReturnDraft({...record,california:{...record.california,service:{...record.california.service,recipient:'Demo Registered Agent'}}},input),
+     e=>e instanceof CivilError&&/recipient does not match/.test(e.message)&&/recipient’s capacity/.test(e.message));
+ }
  const draft=await generateCaliforniaReturnDraft(record,input),bytes=Buffer.from(draft.base64,'base64'),pdf=await PDFDocument.load(bytes),form=pdf.getForm();
  assert.equal(draft.templateSha256,manifest[workflowId==='summons'?'pos010':'sc104'].templateSha256);
  for(const field of form.getFields()){if(typeof field.getText==='function'&&field.getText()){for(const widget of field.acroField.getWidgets()){const value=widget.dict.get(PDFName.of('V'))||field.acroField.getValue();assert.ok(value,'Updated widget must retain an effective value');assert.ok(widget.dict.lookup(PDFName.of('AP')).get(PDFName.of('N')),'Updated widget must have an appearance');}}}

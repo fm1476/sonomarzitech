@@ -25,7 +25,7 @@ export async function generateCaliforniaReturnDraft(record, input) {
     record.defendant.trim().toLowerCase()
   )
     throw new CivilError(
-      "An agent/entity recipient requires the workflow-specific proof of service.",
+      "The recorded service recipient does not match the defendant/respondent name. This unsigned draft cannot assume direct personal service on the named party. Review the Service record for a typo, or use the legally appropriate agent/entity proof of service and document the recipient’s capacity. Do not change accurate service facts merely to generate a draft.",
     );
   for (const key of ["serverName", "serverAddress", "serverPhone"])
     if (
