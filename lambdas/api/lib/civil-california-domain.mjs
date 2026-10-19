@@ -174,6 +174,7 @@ export function createCaliforniaCase(input, ctx) {
       ledger: [],
       disbursements: [],
       enforcement: [],
+      saleProcess: null,
       intakeDetails: {},
       returnPacket: null,
       serviceTargets: [],
@@ -449,6 +450,86 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       r.stage="Returned to Court";
       r.returnFiledDate=payload.date;
     }
+  }else if(command==="schedule_sheriff_sale"){
+    permission(ctx,"civil_paper_intake");
+    requireValue(c.workflowId==="sheriff-sale","Only sheriff-sale workflows can schedule an execution sale.",409);
+    requireValue(["Ready","Assigned","Attempting","Served"].includes(r.stage),"Approve intake before scheduling a sale.",409);
+    liveWrit();
+    requireValue(!c.saleProcess||["Postponed","Cancelled"].includes(c.saleProcess.status),
+      "An existing active or completed sale cannot be replaced.",409);
+    requireValue(["Real property","Personal property"].includes(payload.propertyType),
+      "Select whether real or personal property is involved.");
+    requireValue(text(payload.propertyDescription,2000)&&text(payload.saleLocation,1000)&&
+      civilDate(payload.saleDate)&&payload.saleDate>=ctx.today,
+      "Property, sale location, and a future sale date are required.");
+    requireValue(text(payload.writReference,500)&&text(payload.noticeAuthority,1000)&&
+      text(payload.legalReviewReference,500),
+      "Record the writ, notice authority, and agency legal review reference.");
+    c.saleProcess={
+      id:ctx.eventId,status:"Scheduled",propertyType:payload.propertyType,
+      propertyDescription:payload.propertyDescription,saleLocation:payload.saleLocation,
+      saleDate:payload.saleDate,writReference:payload.writReference,
+      noticeAuthority:payload.noticeAuthority,legalReviewReference:payload.legalReviewReference,
+      scheduledBy:ctx.userId,scheduledAt:ctx.at,notices:[],approval:null,outcome:null
+    };
+  }else if(command==="record_sheriff_sale_notice"){
+    permission(ctx,"civil_document_generate");
+    const sale=c.saleProcess;
+    requireValue(c.workflowId==="sheriff-sale"&&sale?.status==="Scheduled","Schedule an active sheriff sale before notices.",409);
+    liveWrit();
+    requireValue(text(payload.recipient,500)&&text(payload.method,100)&&
+      ["Personal service","Mail","Posting","Publication","Other"].includes(payload.method)&&
+      civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&
+      text(payload.authorityReference,500),
+      "Notice requires recipient, permitted method, date and authority.");
+    requireValue(c.documents.some(d=>d.id===payload.documentId&&["Court order","Other"].includes(d.kind)),
+      "Attach a copy of the notice or publication evidence before recording delivery.");
+    sale.notices.push({id:ctx.eventId,recipient:payload.recipient,method:payload.method,
+      date:payload.date,authorityReference:payload.authorityReference,
+      documentId:payload.documentId,by:ctx.userId,at:ctx.at});
+  }else if(command==="approve_sheriff_sale"){
+    permission(ctx,"civil_paper_intake");
+    const sale=c.saleProcess;
+    requireValue(c.workflowId==="sheriff-sale"&&sale?.status==="Scheduled","Only a scheduled sale can be approved.",409);
+    liveWrit();
+    requireValue(sale.scheduledBy!==ctx.userId,"A different authorized reviewer must approve the sale.",409);
+    requireValue(sale.notices.length>0,"Record and attach sheriff sale notice evidence before approval.",409);
+    requireValue(!c.deadlines.some(d=>!d.completedAt&&["Notice","Exemption/claim"].includes(d.kind)),
+      "Resolve notice and exemption/claim deadlines before sale approval.",409);
+    requireValue(text(payload.reviewReference,500)&&text(payload.noticeCompletionReference,500)&&
+      text(payload.authorityReference,500),
+      "Independent review, notice completion, and legal authority references are required.");
+    sale.approval={by:ctx.userId,at:ctx.at,reviewReference:payload.reviewReference,
+      noticeCompletionReference:payload.noticeCompletionReference,
+      authorityReference:payload.authorityReference};
+    sale.status="Approved";
+  }else if(command==="record_sheriff_sale_result"){
+    permission(ctx,"civil_paper_intake");
+    const sale=c.saleProcess;
+    requireValue(c.workflowId==="sheriff-sale"&&sale?.status==="Approved","Sheriff sale needs independent approval before an outcome.",409);
+    liveWrit();
+    requireValue(["Sold","No bids","Postponed","Cancelled"].includes(payload.outcome),
+      "Choose a recognized sheriff sale outcome.");
+    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&
+      text(payload.authorityReference,500)&&text(payload.resultReference,500),
+      "Sale outcome needs an actual date, legal authority and supporting reference.");
+    if(payload.outcome==="Sold"){
+      requireValue(Number.isSafeInteger(payload.amountCents)&&payload.amountCents>0&&
+        text(payload.highBidder,500)&&text(payload.proceedsReceiptReference,500),
+        "Record the winning bidder, positive sale amount and financial receipt reference.");
+      requireValue(c.ledger.some(e=>e.direction==="in"&&e.reference===payload.proceedsReceiptReference&&
+        e.amountCents===payload.amountCents),
+        "Record the actual sale proceeds in the case ledger before finalizing a sold sale.");
+    }
+    if(["Postponed","Cancelled"].includes(payload.outcome))
+      requireValue(text(payload.reason,1000),"Explain a postponed or cancelled sale.");
+    sale.outcome={result:payload.outcome,date:payload.date,authorityReference:payload.authorityReference,
+      resultReference:payload.resultReference,reason:payload.reason||"",
+      highBidder:payload.highBidder||"",amountCents:payload.amountCents||0,
+      proceedsReceiptReference:payload.proceedsReceiptReference||"",
+      recordedBy:ctx.userId,at:ctx.at};
+    sale.status=payload.outcome==="Postponed"?"Postponed":
+      payload.outcome==="Cancelled"?"Cancelled":"Completed";
   }else   if (command === "add_safety_flag") {
     permission(ctx, "civil_paper_intake");
     note();
@@ -831,6 +912,9 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       text(payload.formName) && text(payload.reference),
       "Court return form and reference are required.",
     );
+    if(c.workflowId==="sheriff-sale")
+      requireValue(c.saleProcess?.status==="Completed",
+        "Complete the approved sheriff sale outcome before preparing its final return.",409);
     requireValue(
       c.documents.some(
         (d) => d.kind === "Proof of service" || d.kind === "Court return",
@@ -1077,6 +1161,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         text(payload.description),
       "Action date, property/action details and authority reference required.",
     );
+    if(c.workflowId==="sheriff-sale"&&payload.kind==="Sale")
+      requireValue(false,"Use the dedicated sheriff sale notice, approval and outcome workflow.",409);
     if (["Sale", "Possession", "Release"].includes(payload.kind)) {
       requireValue(
         text(payload.approvalReference),
