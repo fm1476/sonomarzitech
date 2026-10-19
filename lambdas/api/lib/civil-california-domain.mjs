@@ -109,7 +109,10 @@ export function availableCaseFunds(record, today) {
   requireValue(civilDate(today), "Valid accounting date required.");
   const held = (record.california.ledger || [])
     .filter(
-      (e) => e.direction === "in" && e.availableOn && e.availableOn > today,
+      (e) => e.direction === "in" && (
+        (e.requiresReleaseReview && !e.releaseReviewedAt) ||
+        (e.availableOn && e.availableOn > today)
+      ),
     )
     .reduce((n, e) => n + e.amountCents, 0);
   return Math.max(0, ledgerBalance(record) - held);
@@ -992,14 +995,44 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       reference: payload.reference,
       party: payload.payer,
       accountingDate: ctx.today,
-      availableOn:
-        payload.kind === "Levy collection" &&
-        String(c.county).trim().toLowerCase() === "sonoma"
-          ? addCivilDays(ctx.today, 21)
-          : ctx.today,
+      // Collection proceeds never become payable solely because a hard-coded
+      // county timer elapsed. A second authorized reviewer must record the
+      // applicable county/order authority, waiting period and actual release.
+      availableOn: payload.kind === "Levy collection" ? null : ctx.today,
+      requiresReleaseReview: payload.kind === "Levy collection",
+      receiptCounty: c.county,
       by: ctx.userId,
       at: ctx.at,
     });
+  } else if (command === "release_collection") {
+    permission(ctx,"civil_fee_manage");
+    note();
+    const entry=c.ledger.find(e=>e.id===payload.collectionId &&
+      e.kind==="Levy collection" && e.direction==="in" &&
+      e.requiresReleaseReview && !e.releaseReviewedAt);
+    requireValue(entry,"Pending levy collection release not found.",404);
+    requireValue(entry.by!==ctx.userId,
+      "A separate finance reviewer must authorize a collection release.",409);
+    requireValue(!unclosedHold(r) &&
+      !c.deadlines.some(d=>!d.completedAt&&d.kind==="Exemption/claim"),
+      "Resolve active claims, stays and exemption deadlines before releasing collection funds.",409);
+    requireValue(text(payload.authorityReference,500) &&
+      text(payload.policyVersion,100) &&
+      text(payload.reviewNote,1000),
+      "Record the county/order authority, policy version and release review rationale.");
+    requireValue(civilDate(payload.earliestReleaseDate) &&
+      payload.earliestReleaseDate>=entry.accountingDate &&
+      payload.earliestReleaseDate<=ctx.today,
+      "Enter the reviewed lawful release date; funds cannot be released early.");
+    requireValue(text(payload.county,150) &&
+      payload.county.toLowerCase()===String(entry.receiptCounty).toLowerCase(),
+      "Holding policy must match the agency county.");
+    entry.availableOn=payload.earliestReleaseDate;
+    entry.releaseReviewedAt=ctx.at;
+    entry.releaseReviewedBy=ctx.userId;
+    entry.releaseAuthority=payload.authorityReference;
+    entry.releasePolicyVersion=payload.policyVersion;
+    entry.releaseReviewNote=payload.reviewNote;
   } else if (command === "expense") {
     permission(ctx, "civil_fee_manage");
     note();
