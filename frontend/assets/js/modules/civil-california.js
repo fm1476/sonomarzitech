@@ -1899,6 +1899,14 @@ ${SonoMarziCivilRecordUI.styles}
                         return '<fieldset class="ca-ser-choice"><legend>Reason unable to serve</legend><div class="ca-ser-choice-options">'+
                           options.reasonCode.map(item=>'<label class="ca-ser-choice-option"><input type="radio" name="reasonCode" value="'+esc(item)+'"><span>'+esc(item)+'</span></label>').join('')+'</div></fieldset>';
                       }
+                      if(key==="targetId"||(key==="documentId"&&action==="prepare_target_return")){
+                        const list=choice(key)||[];
+                        return '<fieldset class="ca-ser-choice"><legend>'+esc(key==="targetId"?"Service recipient":"Signed proof / return")+'</legend>'+
+                          '<div class="ca-ser-choice-options">'+list.map(item=>{
+                            const id=Array.isArray(item)?item[0]:item,label=Array.isArray(item)?item[1]:item;
+                            return '<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>';
+                          }).join('')+'</div></fieldset>';
+                      }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
                           '<input id="ca-assignee-query" class="ca-assignee-query" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ca-assignee-options" placeholder="Search or select an agency person..." autocomplete="off">'+
@@ -2076,7 +2084,9 @@ ${SonoMarziCivilRecordUI.styles}
               "Other",
             ]) +
               '<label class="form-row ca-upload-field">Document<span class="ca-upload-drop"><span class="ca-upload-icon" aria-hidden="true">↑</span><strong>Choose a file to upload</strong><span class="ca-upload-hint">PDF, image or other supported file · Up to 500 MB</span><span class="ca-upload-filename" aria-live="polite">No file selected</span><input name="file" type="file" required aria-label="Choose case document"></span></label>' +
-              ((c.serviceTargets||[]).length?input("targetId","",(c.serviceTargets||[]).map(t=>[t.id,t.name+" · "+t.status]))+"<p>Choose the recipient for a completed signed proof or court return.</p>":"")+
+              ((c.serviceTargets||[]).length?'<fieldset class="ca-ser-choice"><legend>Associated service recipient</legend><div class="ca-ser-choice-options">'+
+                (c.serviceTargets||[]).map(t=>'<label class="ca-ser-choice-option"><input type="radio" name="targetId" value="'+esc(t.id)+'"><span>'+esc(t.name)+'</span></label>').join('')+
+                '</div><p>Required when uploading a recipient-specific signed proof or court return.</p></fieldset>':"")+
               '<label class="form-row">Note <small>(optional)</small><input name="note" placeholder="Additional context for the record"></label>',
             async (data) => {
               if (!data.get("kind"))
