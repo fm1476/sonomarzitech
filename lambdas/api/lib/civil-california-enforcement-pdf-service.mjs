@@ -56,7 +56,10 @@ export async function generateCaliforniaEnforcementUnsignedDraft(record,formCode
   fields.employee=requireText(d.employee,'Employee identity and address');
   fields.totalDue=money(d.totalDueCents,'Total due');
   fields.judgmentDate=requireText(d.judgmentDate,'Judgment date');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(fields.judgmentDate))throw Error('Judgment date must be YYYY-MM-DD.');
+  const date=new Date(fields.judgmentDate+'T00:00:00Z');
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(fields.judgmentDate)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==fields.judgmentDate)throw Error('Valid judgment date is required.');
+  const [year,month,day]=fields.judgmentDate.split('-');
+  fields.judgmentDate=month+'/'+day+'/'+year;
   // Signed order remains a separate human authorization, never generated here.
  } else {
   // WG-005 and WG-006 are declarant forms. Caption-only working copies.
