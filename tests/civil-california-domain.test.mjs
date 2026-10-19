@@ -81,10 +81,16 @@ let levy=ready('bank-levy');
 levy=step(levy,'receipt',{kind:'Levy collection',amountCents:7500,payer:'Demo Bank',reference:'LEVY-COLL-1'});
 fails(levy,'expense',{amountCents:100,authority:'Reviewed',reference:'EXP-HELD'},ctx,/unavailable|released/);
 const collectionId=levy.california.ledger[0].id;
+levy=step(levy,'attach_document',{kind:'Court order',name:'county-release-order.pdf',key:'case/release-order'});
+const releaseEvidenceId=levy.california.documents.at(-1).id;
+fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',
+  policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'}, {...ctx,userId:'second-reviewer'},/supporting release/);
 fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},ctx,/separate finance reviewer/);
 fails(levy,'release_collection',{collectionId,county:'Napa',earliestReleaseDate:'2026-10-17',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},{...ctx,userId:'second-reviewer'},/match the agency county/);
 fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-18',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},{...ctx,userId:'second-reviewer'},/cannot be released early/);
-levy=step(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'sample-policy-2026',authorityReference:'Court authorization test',reviewNote:'Fictional authorized release after all claims resolved'},{...ctx,userId:'second-reviewer'});
+levy=step(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'sample-policy-2026',authorityReference:'Court authorization test',authorityDocumentId:releaseEvidenceId,reviewNote:'Fictional authorized release after all claims resolved'},{...ctx,userId:'second-reviewer'});
+assert.equal(levy.california.ledger[0].releaseAuthorityDocumentId,releaseEvidenceId);
+fails(levy,'remove_document',{documentId:releaseEvidenceId,note:'Delete financial authority'},ctx,/approved financial release/);
 assert.equal(levy.california.ledger[0].releaseReviewedBy,'second-reviewer');
 levy=step(levy,'expense',{amountCents:100,authority:'Reviewed',reference:'EXP-AFTER-RELEASE'});
 // Court-backed possession / property release cannot be recorded merely by
