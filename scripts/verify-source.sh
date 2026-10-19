@@ -77,5 +77,6 @@ node tests/civil-california-refresh.test.mjs
 node tests/civil-california-release-controls.test.mjs
 node tests/civil-california-enforcement-forms.test.mjs
 node tests/civil-california-form-preparation.test.mjs
+node tests/civil-california-pdf-intake.test.mjs
 
 echo "Source checks passed."
