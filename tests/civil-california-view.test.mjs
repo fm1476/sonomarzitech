@@ -52,12 +52,22 @@ assert.equal(root.querySelector('input[name="reviewedForms"][value="SER-001"]').
 await click('#ca-cancel-form');
 await click('[data-action="approve_intake"]');fill({note:'Approve'});await save();assert.match(root.querySelector('#ca-form [role=alert]').textContent,/court packet/);assert.equal(version,2);
 await click('#ca-cancel-form');record=domain.applyCaliforniaCommand(record,'attach_document',{note:'Test',name:'Packet',key:'packet',kind:'Court packet'},ctx);record=domain.applyCaliforniaCommand(record,'attach_document',{note:'Test',name:'Instructions',key:'instructions',kind:'Signed instructions'},ctx);version+=2;await w.CaliforniaCivil.route(root,'civil-board');await click('[data-case]');await click('[data-action="approve_intake"]');fill({note:'Approved'});await save();assert.equal(record.stage,'Ready');await click('[data-action="assign"]');
-const assignee=root.querySelector('select[name="personId"][aria-label="Assignee"]');
-assert.ok(assignee,'Assignee must be an agency roster select, not a free-text ID');
-assert.ok(root.querySelector('.ca-assignee-search'),'Assignee selector must have roster search');
+const assignee=root.querySelector('input[name="personId"][type="hidden"]');
+assert.ok(assignee,'Assignee must retain backend person ID without showing technical IDs');
+const query=root.querySelector('.ca-assignee-query[role="combobox"]');
+assert.ok(query,'Assignee must use one searchable combobox');
+assert.equal(root.querySelector('select[name="personId"]'),null,'Remove redundant native dropdown');
 assert.match(root.querySelector('.ca-assignee-field').textContent,/Assignee/);
-assert.ok([...assignee.options].some(o=>o.value==='person-a'),'Authorized roster member must be selectable');
-fill({personId:'person-a',note:'Assign'});await save();assert.equal(record.stage,'Assigned');
+assert.ok(root.querySelector('[data-assignee-id="person-a"]'),'Authorized agency person must be selectable');
+assert.equal(root.querySelector('.ca-assignee-options').hidden,true,'List should initially be closed');
+await click('.ca-assignee-query');
+assert.equal(root.querySelector('.ca-assignee-options').hidden,false,'Click should open roster');
+query.value='Demo';query.dispatchEvent(new w.Event('input',{bubbles:true}));await tick();
+assert.equal(root.querySelector('[data-assignee-id="person-a"]').hidden,false,'Search should match the officer');
+await click('[data-assignee-id="person-a"]');
+assert.equal(assignee.value,'person-a','Selected display name must map to correct person ID');
+assert.equal(query.value,'Demo Officer');
+fill({note:'Assign'});await save();assert.equal(record.stage,'Assigned');
 // Each detail section must be reachable in exactly one workspace tab.
 const caseTabs=[...root.querySelectorAll('[data-section]')];
 const detailSections=[...root.querySelectorAll('#ca-detail details')];
