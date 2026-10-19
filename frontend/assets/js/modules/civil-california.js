@@ -1238,9 +1238,23 @@ ${SonoMarziCivilRecordUI.styles}
           "SC-104":["Proof of Service—Small Claims","https://selfhelp.courts.ca.gov/jcc-form/SC-104"],
           "SER-001":["Request for Sheriff to Serve Court Papers","https://selfhelp.courts.ca.gov/jcc-form/SER-001"],
           "SER-001A":["Special Instructions for Writs and Levies","https://selfhelp.courts.ca.gov/jcc-form/SER-001A"],
-          "WG-005":["Employer's Return","https://selfhelp.courts.ca.gov/jcc-form/WG-005"]
+          "WG-001":["Application for Earnings Withholding Order","https://selfhelp.courts.ca.gov/jcc-form/WG-001"],
+          "WG-002":["Earnings Withholding Order","https://selfhelp.courts.ca.gov/jcc-form/WG-002"],
+          "WG-003":["Employee Instructions","https://selfhelp.courts.ca.gov/jcc-form/WG-003"],
+          "WG-004":["Earnings Withholding Order for Support","https://selfhelp.courts.ca.gov/jcc-form/WG-004"],
+          "WG-005":["Employer's Return","https://selfhelp.courts.ca.gov/jcc-form/WG-005"],
+          "WG-006":["Claim of Exemption","https://selfhelp.courts.ca.gov/jcc-form/WG-006"],
+          "WG-008":["Notice of Filing of Claim of Exemption","https://selfhelp.courts.ca.gov/jcc-form/WG-008"],
+          "WG-010":["Notice of Hearing on Claim of Exemption","https://selfhelp.courts.ca.gov/jcc-form/WG-010"],
+          "WG-015":["Declaration of Address Verification","https://selfhelp.courts.ca.gov/jcc-form/WG-015"],
+          "EJ-130":["Writ of Execution","https://selfhelp.courts.ca.gov/jcc-form/EJ-130"],
+          "EJ-135":["Declaration of Address Verification","https://selfhelp.courts.ca.gov/jcc-form/EJ-135"],
+          "WG-015/EJ-135":["Address Verification (as applicable)","https://selfhelp.courts.ca.gov/jcc-form/WG-015"]
         };
-        const applicable=[...new Set([...(context.workflows[c.workflowId]?.forms||[]),...(context.workflows[c.workflowId]?.returns||[])])];
+        // Official links provide reference copies, NOT generated/certified court returns.
+        const workflowReferences=c.workflowId==="earnings-withholding"?["EJ-130","WG-001","WG-002","WG-003","WG-005","WG-006","WG-015"]:
+          (context.workflows[c.workflowId]?.writ?["EJ-130","WG-015","EJ-135"]:[]);
+        const applicable=[...new Set([...(context.workflows[c.workflowId]?.forms||[]),...(context.workflows[c.workflowId]?.returns||[]),...workflowReferences])];
         const posChoices=[
           ["POS-010","Summons and complaint"],
           ["POS-020","Other civil papers served personally"],
