@@ -131,6 +131,10 @@ window.CaliforniaCivil = (() => {
     record_return: ["date:date", "reference"],
     hold: ["kind", "reference"],
     resolve_hold: ["holdId", "orderReference"],
+    schedule_sheriff_sale: ["propertyType","propertyDescription","saleLocation","saleDate:date","writReference","noticeAuthority","legalReviewReference"],
+    record_sheriff_sale_notice: ["recipient","method","date:date","authorityReference","documentId"],
+    approve_sheriff_sale: ["reviewReference","noticeCompletionReference","authorityReference"],
+    record_sheriff_sale_result: ["outcome","date:date","authorityReference","resultReference","highBidder","amountCents:money","proceedsReceiptReference","reason"],
     enforcement_event: [
       "kind",
       "date:date",
@@ -178,6 +182,10 @@ window.CaliforniaCivil = (() => {
     record_return: "Record court delivery",
     hold: "Record claim or stay",
     resolve_hold: "Resolve claim or stay",
+    schedule_sheriff_sale: "Schedule sheriff sale",
+    record_sheriff_sale_notice: "Record sheriff sale notice",
+    approve_sheriff_sale: "Approve sheriff sale",
+    record_sheriff_sale_result: "Record sheriff sale outcome",
     enforcement_event: "Record enforcement action",
     receipt: "Record receipt",
     release_collection: "Review and release levy collection",
@@ -196,6 +204,8 @@ window.CaliforniaCivil = (() => {
       .replace("Cents", "($)");
   const options = {
     reasonCode: ["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"],
+    propertyType: ["Real property","Personal property"],
+    outcome: ["Sold","No bids","Postponed","Cancelled"],
     personalDebtStatus: ["Yes","No"],
     result: [
       "Not home",
@@ -1542,7 +1552,12 @@ ${SonoMarziCivilRecordUI.styles}
               ...(c.holds.some((h) => !h.resolvedAt) ? ["resolve_hold"] : []),
               ...(context.workflows[c.workflowId].writ &&
               ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
-                ? ["enforcement_event"]
+                ? ["enforcement_event",
+                   ...(c.workflowId==="sheriff-sale"
+                     ? !c.saleProcess||["Postponed","Cancelled"].includes(c.saleProcess.status)?["schedule_sheriff_sale"]:
+                       c.saleProcess.status==="Scheduled"?["approve_sheriff_sale"]:
+                       c.saleProcess.status==="Approved"?["record_sheriff_sale_result"]:[]:[])
+                  ]
                 : []),
               ...(r.stage === "Return Prepared" && !(c.serviceTargets||[]).length ? ["review_return"] : []),
               ...((c.serviceTargets||[]).some(t=>t.returnPacket?.status==="Return Prepared")?["review_target_return"]:[]),
@@ -1560,6 +1575,7 @@ ${SonoMarziCivilRecordUI.styles}
           if (can("civil_document_generate"))
             actions.push(
               "notice",
+              ...(c.workflowId==="sheriff-sale"&&c.saleProcess?.status==="Scheduled"?["record_sheriff_sale_notice"]:[]),
               ...(canDraft && !(c.serviceTargets||[]).length ? ["generate_return_draft"] : []),
               ...((c.serviceTargets||[]).some(t=>["Served","Unable to Serve"].includes(t.status)&&!t.returnPacket)?["prepare_target_return"]:[]),
               ...((c.serviceTargets||[]).some(t=>t.returnPacket?.status==="Reviewed")?["record_target_return"]:[]),
@@ -1754,6 +1770,8 @@ ${SonoMarziCivilRecordUI.styles}
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "collectionId" ? c.ledger.filter(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt).map(e=>[e.id,e.reference+" · "+money(e.amountCents)])
+                    : key === "method" && action==="record_sheriff_sale_notice" ?
+                      ["Personal service","Mail","Posting","Publication","Other"]
                     : key === "targetId" ? (c.serviceTargets||[]).filter(t=>
                         action==="remove_service_target"?t.status==="Pending":
                         action==="target_attempt"||action==="target_serve"||action==="target_unserved"?["Pending","Attempting"].includes(t.status):
@@ -1906,6 +1924,14 @@ ${SonoMarziCivilRecordUI.styles}
                             const id=Array.isArray(item)?item[0]:item,label=Array.isArray(item)?item[1]:item;
                             return '<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>';
                           }).join('')+'</div></fieldset>';
+                      }
+                      if(action==="schedule_sheriff_sale"&&key==="propertyType"||
+                         action==="record_sheriff_sale_result"&&key==="outcome"||
+                         action==="record_sheriff_sale_notice"&&key==="method"){
+                        const values=choice(key)||[];
+                        return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
+                          values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+
+                          '</div></fieldset>';
                       }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
