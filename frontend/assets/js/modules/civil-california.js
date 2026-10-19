@@ -135,7 +135,10 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_notice: ["recipient","method","date:date","authorityReference","documentId"],
     approve_sheriff_sale: ["reviewReference","noticeCompletionReference","authorityReference"],
     record_sheriff_sale_result: ["outcome","date:date","authorityReference","resultReference","highBidder","amountCents:money","proceedsReceiptReference","reason"],
+    request_enforcement_authorization: ["kind","propertyDescription","authorityReference","reason","evidenceDocumentId"],
+    approve_enforcement_authorization: ["authorizationId","reviewReference","noticeReviewReference"],
     enforcement_event: [
+      "authorizationId",
       "kind",
       "date:date",
       "description",
@@ -186,6 +189,8 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_notice: "Record sheriff sale notice",
     approve_sheriff_sale: "Approve sheriff sale",
     record_sheriff_sale_result: "Record sheriff sale outcome",
+    request_enforcement_authorization: "Request property release or possession approval",
+    approve_enforcement_authorization: "Independently approve enforcement",
     enforcement_event: "Record enforcement action",
     receipt: "Record receipt",
     release_collection: "Review and release levy collection",
@@ -1552,7 +1557,8 @@ ${SonoMarziCivilRecordUI.styles}
               ...(c.holds.some((h) => !h.resolvedAt) ? ["resolve_hold"] : []),
               ...(context.workflows[c.workflowId].writ &&
               ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
-                ? ["enforcement_event",
+                ? ["enforcement_event","request_enforcement_authorization",
+                   ...((c.enforcementAuthorizations||[]).some(a=>a.status==="Pending")?["approve_enforcement_authorization"]:[]),
                    ...(c.workflowId==="sheriff-sale"
                      ? !c.saleProcess||["Postponed","Cancelled"].includes(c.saleProcess.status)?["schedule_sheriff_sale"]:
                        c.saleProcess.status==="Scheduled"?["approve_sheriff_sale"]:
@@ -1769,6 +1775,11 @@ ${SonoMarziCivilRecordUI.styles}
                       : method!=="Substituted service")
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
+                    : key === "authorizationId" ? (c.enforcementAuthorizations||[]).filter(a=>
+                      action==="approve_enforcement_authorization"?a.status==="Pending":a.status==="Approved")
+                      .map(a=>[a.id,a.kind+" · "+a.propertyDescription+" · "+a.status])
+                    : key === "evidenceDocumentId" ? c.documents.filter(d=>
+                      ["Court order","Writ","Other"].includes(d.kind)).map(d=>[d.id,d.kind+" · "+d.name])
                     : key === "collectionId" ? c.ledger.filter(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt).map(e=>[e.id,e.reference+" · "+money(e.amountCents)])
                     : key === "method" && action==="record_sheriff_sale_notice" ?
                       ["Personal service","Mail","Posting","Publication","Other"]
@@ -1932,6 +1943,19 @@ ${SonoMarziCivilRecordUI.styles}
                         return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
                           values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+
                           '</div></fieldset>';
+                      }
+                      if((action==="request_enforcement_authorization"&&key==="kind")||
+                         (action==="enforcement_event"&&key==="kind")){
+                        const values=action==="request_enforcement_authorization"?["Release","Possession"]:
+                          ["Levy","Notice","Inventory","Custody","Release","Sale","Possession","Employer response","Remittance"];
+                        return '<fieldset class="ca-ser-choice"><legend>Enforcement action</legend><div class="ca-ser-choice-options">'+
+                          values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="kind" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+'</div>'+
+                          (action==="enforcement_event"?'<p>Release and possession require a previously approved independent authorization.</p>':'')+'</fieldset>';
+                      }
+                      if(["authorizationId","evidenceDocumentId"].includes(key)){
+                        const values=choice(key)||[];
+                        return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
+                          values.map(([id,label])=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>').join('')+'</div></fieldset>';
                       }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
