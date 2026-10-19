@@ -360,7 +360,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     liveWrit();
     const target=targetFor(payload.targetId);
     requireValue(["Pending","Attempting"].includes(target.status),"This recipient already has a recorded outcome.",409);
-    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(payload.time||""),
+    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.time||""),
       "Valid attempt date and time are required.");
     requireValue(["Not home","No contact","Refused","Moved","Bad address","Business closed","Evading","Other"].includes(payload.result),
       "Select a recognized attempt result.");
@@ -376,7 +376,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     const target=targetFor(payload.targetId);
     requireValue(["Pending","Attempting"].includes(target.status),"This recipient already has a recorded outcome.",409);
     if(command==="target_serve"){
-      requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(payload.time||""),
+      requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.time||""),
         "Service date and time are required.");
       requireValue(text(payload.recipient)&&text(payload.address)&&text(payload.method),"Recipient, location and method required.");
       requireValue(["Personal service","Substituted service","Court-authorized alternative","First-class mail"].includes(payload.method),
