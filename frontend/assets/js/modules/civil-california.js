@@ -1337,14 +1337,20 @@ ${SonoMarziCivilRecordUI.styles}
         const standardDraft=["summons","small-claims"].includes(c.workflowId);
         const draftSupported=standardDraft?c.service?.method==="Personal service":
           ["Personal service","First-class mail"].includes(c.service?.method);
+        const recipientDraftAvailable=(c.serviceTargets||[]).some(t=>
+          t.status==="Served"&&t.outcome?.status==="Served"&&
+          t.outcome?.recipient?.trim().toLowerCase()===t.name?.trim().toLowerCase()&&
+          (standardDraft?t.outcome?.method==="Personal service":
+            ["Personal service","First-class mail"].includes(t.outcome?.method)));
+        const canTargetDraft=can("civil_document_generate")&&recipientDraftAvailable;
         const canDraft=can("civil_document_generate")&&draftSupported&&r.stage==="Served";
         const draftHint=!draftSupported?"This recorded service method requires a manually completed or agency-approved court return."
           :r.stage!=="Served"?"Record completed personal service before generating a draft."
           :c.service?.method!=="Personal service"?"Automatic drafts currently support personal service only. Use the official form for this service method."
           :!can("civil_document_generate")?"Your role does not allow court-form generation.":"";
         formLibrary.innerHTML='<div class="ca-forms-head"><div><h3>Court forms & templates</h3><p>Choose the appropriate form, review recorded facts and complete the required signatures before submitting to court.</p></div></div>'+
-          '<div class="ca-draft-feature"><div class="ca-draft-feature-icon">▤</div><div class="ca-draft-feature-copy"><strong>Generate court return draft</strong><p>'+esc(canDraft?"Prefill an unsigned official PDF from the case record. Review all fields, certify, sign and upload the completed document.":draftHint)+'</p></div>'+
-          (canDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">Generate unsigned draft →</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
+          '<div class="ca-draft-feature"><div class="ca-draft-feature-icon">▤</div><div class="ca-draft-feature-copy"><strong>Generate court return draft</strong><p>'+esc(canTargetDraft?"Generate a separate unsigned official PDF for each eligible served recipient. Select the recipient and verify the paper, method, signature and legal capacity before submitting.":canDraft?"Prefill an unsigned official PDF from the case record. Review all fields, certify, sign and upload the completed document.":draftHint)+'</p></div>'+
+          (canDraft||canTargetDraft?'<button type="button" id="ca-generate-draft" class="btn btn-primary">'+(canTargetDraft?'Generate recipient draft →':'Generate unsigned draft →')+'</button>':'<span class="ca-form-code">Manual review</span>')+'</div>'+
           '<div class="ca-pos-catalog"><div class="ca-pos-heading"><h4>California proof-of-service forms</h4><span>Four common Judicial Council forms</span></div><p>Choose based on the papers and the actual method of service. A recommendation is not a legal determination.</p>'+
           '<div class="ca-pos-preflight"><strong>Form selection review</strong><p>'+esc(selectionGuidance)+'</p>'+
           (missingProofFacts.length?'<p class="ca-pos-missing">Before preparing a return, verify: '+missingProofFacts.map(esc).join('; ')+'</p>':'<p class="ca-pos-ready">Core case and service facts are recorded. Confirm server qualifications, documents served, declarations and signature before filing.</p>')+'</div><div class="ca-form-resource-grid">'+posChoices.map(([code,description])=>{const source=formSources[code];return '<article class="ca-form-resource"><div class="ca-pos-title"><span class="ca-form-code">'+code+'</span>'+(suggestedPos===code?'<span class="ca-pos-suggested">Review for this case</span>':'')+'</div><strong>'+esc(source[0])+'</strong><small>'+esc(description)+'</small><a class="btn btn-outline" href="'+source[1]+'" target="_blank" rel="noopener noreferrer">Open official form ↗</a></article>';}).join('')+'</div><details class="ca-pos-supplementals"><summary>Need to list additional documents or people served?</summary><p>These are official continuation forms used when the relevant proof-of-service form needs additional space. They are separate from the four main POS forms.</p><div class="ca-pos-supplemental-grid">'+posSupplemental.map(([code,description])=>'<span><strong>'+esc(code)+'</strong> · '+esc(description)+'</span>').join('')+'</div></details></div>'+
@@ -1397,7 +1403,7 @@ ${SonoMarziCivilRecordUI.styles}
 
         panel.querySelector("#ca-actions")?.after(formLibrary);
         formLibrary.querySelector("#ca-generate-draft")?.addEventListener("click",()=>{
-          const actionButton=panel.querySelector('[data-action="generate_return_draft"]');
+          const actionButton=panel.querySelector('[data-action="'+(canTargetDraft?'generate_target_return_draft':'generate_return_draft')+'"]');
           if(actionButton)actionButton.click();
           else status("Draft generation is not available for the current case state or your role.");
         });
