@@ -546,8 +546,17 @@ ${SonoMarziCivilRecordUI.styles}
 
 
 .ca-classic .ca-assignee-field{display:flex;flex-direction:column;gap:9px}
-.ca-classic .ca-assignee-search,.ca-classic .ca-assignee-field select{font-size:15px;min-height:45px;width:100%}
-.ca-classic .ca-assignee-field select{cursor:pointer}
+.ca-classic .ca-assignee-field>label{font-size:16px;font-weight:700}
+.ca-classic .ca-assignee-picker{position:relative;width:100%}
+.ca-classic .ca-assignee-query{appearance:none;-webkit-appearance:none;box-sizing:border-box;display:block;width:100%;min-height:49px;padding:12px 16px;font-size:16px;line-height:1.4;background:var(--ca-surface,#162236)!important;color:var(--text,#e4ecf9)!important;border:1px solid var(--ca-border,#304258);border-radius:10px;caret-color:var(--text,#e4ecf9);color-scheme:dark}
+.ca-classic .ca-assignee-query::placeholder{color:var(--text-dim,#9eaebf);opacity:1}
+[data-theme="light"] .ca-classic .ca-assignee-query{color-scheme:light}
+.ca-classic .ca-assignee-query:focus-visible{outline:2px solid var(--ca-accent);outline-offset:2px}
+.ca-classic .ca-assignee-options{position:relative;max-height:290px;overflow-y:auto;background:var(--ca-surface,#162236);border:1px solid var(--ca-border,#304258);border-radius:10px;margin-top:6px;padding:5px;box-shadow:0 10px 24px rgba(0,0,0,.2)}
+.ca-classic .ca-assignee-options[hidden],.ca-classic .ca-assignee-options [hidden]{display:none!important}
+.ca-classic .ca-assignee-options button{display:block;width:100%;text-align:left;font:inherit;font-size:15px;color:var(--text,#e4ecf9);background:transparent;border:0;border-radius:7px;padding:12px 14px;cursor:pointer}
+.ca-classic .ca-assignee-options button:hover,.ca-classic .ca-assignee-options button:focus-visible{background:rgba(56,132,225,.18);outline:2px solid var(--ca-accent);outline-offset:-2px}
+.ca-classic .ca-assignee-empty,.ca-classic .ca-assignee-no-results{font-size:14px;color:var(--text-dim);padding:12px 14px}
 
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
@@ -695,13 +704,69 @@ ${SonoMarziCivilRecordUI.styles}
         route(root, id);
       };
       draw();
-      root.addEventListener("input", event=>{
-        if(!event.target.matches(".ca-assignee-search"))return;
-        const selector=event.target.closest(".ca-assignee-field")?.querySelector('select[name="personId"]');
-        if(!selector)return;
-        const term=event.target.value.trim().toLocaleLowerCase();
-        for(const option of selector.options)if(option.value)option.hidden=!option.textContent.toLocaleLowerCase().includes(term);
-        if(selector.selectedOptions[0]?.hidden)selector.value="";
+      root.addEventListener("input",event=>{
+        if(!event.target.matches(".ca-assignee-query"))return;
+        const box=event.target.closest(".ca-assignee-picker");
+        const query=event.target.value.trim().toLocaleLowerCase();
+        let count=0;
+        box.querySelectorAll("[data-assignee-id]").forEach(item=>{
+          const matches=item.textContent.toLocaleLowerCase().includes(query);
+          item.hidden=!matches;if(matches)count++;
+        });
+        box.querySelector(".ca-assignee-no-results").hidden=count>0;
+        box.querySelector(".ca-assignee-options").hidden=false;
+        event.target.setAttribute("aria-expanded","true");
+      });
+      root.addEventListener("click",event=>{
+        const person=event.target.closest("[data-assignee-id]");
+        if(person){
+          const box=person.closest(".ca-assignee-picker");
+          box.querySelector('input[name="personId"]').value=person.dataset.assigneeId;
+          const search=box.querySelector(".ca-assignee-query");
+          search.value=person.textContent.trim();
+          search.setAttribute("aria-expanded","false");
+          box.querySelector(".ca-assignee-options").hidden=true;
+          return;
+        }
+        const query=event.target.closest(".ca-assignee-query");
+        if(query){
+          const box=query.closest(".ca-assignee-picker");
+          box.querySelector(".ca-assignee-options").hidden=false;
+          query.setAttribute("aria-expanded","true");
+          return;
+        }
+        const box=root.querySelector(".ca-assignee-picker");
+        if(box&&!event.target.closest(".ca-assignee-picker")){
+          box.querySelector(".ca-assignee-options").hidden=true;
+          box.querySelector(".ca-assignee-query").setAttribute("aria-expanded","false");
+        }
+      });
+      root.addEventListener("keydown",event=>{
+        if(!event.target.matches(".ca-assignee-query"))return;
+        const box=event.target.closest(".ca-assignee-picker");
+        if(event.key==="Escape"){
+          box.querySelector(".ca-assignee-options").hidden=true;
+          event.target.setAttribute("aria-expanded","false");
+        }
+        if(event.key==="ArrowDown"){
+          event.preventDefault();
+          box.querySelector(".ca-assignee-options").hidden=false;
+          box.querySelector("[data-assignee-id]:not([hidden])")?.focus();
+        }
+      });
+      root.addEventListener("keydown",event=>{
+        if(!event.target.matches("[data-assignee-id]"))return;
+        if(event.key==="ArrowDown"||event.key==="ArrowUp"){
+          event.preventDefault();
+          const options=[...event.target.closest(".ca-assignee-options").querySelectorAll("[data-assignee-id]:not([hidden])")];
+          const i=options.indexOf(event.target);
+          options[(i+(event.key==="ArrowDown"?1:-1)+options.length)%options.length]?.focus();
+        }
+        if(event.key==="Escape"){
+          const box=event.target.closest(".ca-assignee-picker");
+          box.querySelector(".ca-assignee-options").hidden=true;
+          box.querySelector(".ca-assignee-query").focus();
+        }
       });
       function form(title, html, save) {
         const target = root.querySelector("#ca-form");
@@ -1727,11 +1792,13 @@ ${SonoMarziCivilRecordUI.styles}
                           ? r.returnByDate
                           : c.intakeDetails[key] || "";
                       if (key === "personId" && action === "assign") {
-                        return '<label class="form-row ca-assignee-field">Assignee'+
-                          '<input type="search" class="ca-assignee-search" placeholder="Search agency personnel..." aria-label="Search available assignees" autocomplete="off">'+
-                          '<select name="personId" required aria-label="Assignee"><option value="">Select assignee...</option>'+
-                          roster.map(([id,label])=>'<option value="'+esc(id)+'">'+esc(label)+'</option>').join('')+
-                          '</select></label>';
+                        return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
+                          '<input id="ca-assignee-query" class="ca-assignee-query" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ca-assignee-options" placeholder="Search or select an agency person..." autocomplete="off">'+
+                          '<input type="hidden" name="personId" value="">'+
+                          '<div class="ca-assignee-options" id="ca-assignee-options" role="listbox" hidden>'+
+                          roster.map(([id,label])=>'<button type="button" role="option" data-assignee-id="'+esc(id)+'">'+esc(label)+'</button>').join('')+
+                          '<div class="ca-assignee-no-results" hidden>No matching people</div></div>'+
+                          '</div>'+(!roster.length?'<p class="ca-assignee-empty">No active agency personnel were found. Add personnel in Personnel Administration before assigning this case.</p>':'')+'</div>';
                       }
                       if (key === "reviewedForms") {
                         const required=context.workflows[c.workflowId]?.forms||[];
