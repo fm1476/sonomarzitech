@@ -40,7 +40,7 @@ r=go(r,'target_unserved',{targetId:two,reasonCode:'Unable to locate',attemptsSum
 fail(r,'attach_document',{kind:'Court return',name:'missing-target.pdf',key:'bad-proof'},/recipient not found/);
 r=go(r,'attach_document',{kind:'Proof of service',name:'proof-one.pdf',key:'proof-one',targetId:one});
 r=go(r,'attach_document',{kind:'Court return',name:'return-two.pdf',key:'proof-two',targetId:two});
-const [docOne,docTwo]=r.california.documents.filter(d=>d.targetId).map(d=>d.id);
+const [docOne,docTwo]=r.california.documents.filter(d=>d.targetId&&["Proof of service","Court return"].includes(d.kind)).map(d=>d.id);
 fail(r,'prepare_target_return',{targetId:one,documentId:docTwo,formName:'POS-010',reference:'Return 1'},/recipient-linked/);
 r=go(r,'prepare_target_return',{targetId:one,documentId:docOne,formName:'POS-010',reference:'Return 1'});
 r=go(r,'prepare_target_return',{targetId:two,documentId:docTwo,formName:'Non-service return',reference:'Return 2'});
