@@ -879,6 +879,28 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       by:ctx.userId,reasonCode:payload.reasonCode,reasonDetail:payload.reasonDetail||"",
       attemptsSummary:payload.attemptsSummary,at:ctx.at,note:payload.note||""
     };
+  } else if(command==="generate_target_return_draft"){
+    permission(ctx,"civil_document_generate");
+    note();
+    const target=targetFor(payload.targetId);
+    requireValue(target.status==="Served"&&target.outcome?.status==="Served",
+      "Only a recipient with completed service can generate an official court draft.",409);
+    requireValue(target.outcome.recipient?.trim().toLocaleLowerCase()===target.name.trim().toLocaleLowerCase(),
+      "The served recipient differs from the service target; review legal capacity and the correct official form.",409);
+    requireValue(
+      (["summons","small-claims"].includes(c.workflowId)&&
+        !["POS-020","POS-030","POS-040"].includes(payload.formCode))||
+      (!["summons","small-claims"].includes(c.workflowId)&&
+        ["POS-020","POS-030","POS-040"].includes(payload.formCode)),
+      "Choose an official form supported by this recipient's workflow.",409);
+    requireValue(/^[a-f0-9]{64}$/.test(payload.pdfHash||"")&&
+      /^[a-f0-9]{64}$/.test(payload.templateHash||""),
+      "An authenticated server-generated unsigned PDF is required.",409);
+    c.draftReturns??=[];
+    c.draftReturns.push({id:ctx.eventId,targetId:target.id,
+      formName:payload.formCode||(c.workflowId==="summons"?"POS-010":"SC-104"),
+      sha256:payload.pdfHash,templateSha256:payload.templateHash,
+      unsigned:true,by:ctx.userId,at:ctx.at});
   } else if (command === "generate_return_draft") {
     requireValue(!targets.length,
       "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
