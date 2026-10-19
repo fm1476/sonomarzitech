@@ -11,7 +11,7 @@ for(const kind of ['Court packet','Signed instructions','Writ'])r=go(r,'attach_d
 r=go(r,'approve_intake');r=go(r,'assign',{personId:'officer'});
 r=go(r,'serve',{date:'2026-10-18',time:'10:00',recipient:'Debtor',address:'123 Fictional Property',method:'Personal service'});
 deny(r,'enforcement_event',{kind:'Sale',date:'2026-10-18',description:'Generic sale',authorityReference:'Writ'},/dedicated sheriff sale/);
-deny(r,'prepare_return',{formName:'Sale return',reference:'R'},/completed proof\/return/);
+deny(r,'prepare_return',{formName:'Sale return',reference:'R'},/Complete the approved sheriff sale outcome/);
 r=go(r,'schedule_sheriff_sale',{propertyType:'Real property',propertyDescription:'Parcel fictional',saleLocation:'County annex',saleDate:'2026-10-18',writReference:'EJ-130 test',noticeAuthority:'Reviewed statutory notice requirements',legalReviewReference:'Legal-acceptance-test'});
 deny(r,'approve_sheriff_sale',{reviewReference:'SUP-1',noticeCompletionReference:'Notices',authorityReference:'Order'},/different authorized/,{userId:'civil-clerk'});
 deny(r,'approve_sheriff_sale',{reviewReference:'SUP-1',noticeCompletionReference:'Notices',authorityReference:'Order'},/notice evidence/,{userId:'supervisor'});
