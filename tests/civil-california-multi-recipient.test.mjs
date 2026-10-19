@@ -31,6 +31,8 @@ const [docOne,docTwo]=r.california.documents.filter(d=>d.targetId).map(d=>d.id);
 fail(r,'prepare_target_return',{targetId:one,documentId:docTwo,formName:'POS-010',reference:'Return 1'},/recipient-linked/);
 r=go(r,'prepare_target_return',{targetId:one,documentId:docOne,formName:'POS-010',reference:'Return 1'});
 r=go(r,'prepare_target_return',{targetId:two,documentId:docTwo,formName:'Non-service return',reference:'Return 2'});
+fail(r,'remove_document',{documentId:docOne,note:'Try tampering'},/linked to a recipient return/);
+fail(r,'replace_document',{documentId:docTwo,name:'replacement.pdf',key:'replacement',note:'Try tampering'},/linked to a recipient return/);
 fail(r,'review_target_return',{targetId:one,reviewReference:'SUP-1'},/independent/);
 r=go(r,'review_target_return',{targetId:one,reviewReference:'SUP-1'},{userId:'supervisor'});
 r=go(r,'review_target_return',{targetId:two,reviewReference:'SUP-2'},{userId:'supervisor'});
