@@ -192,6 +192,34 @@ window.CaliforniaCivil = (() => {
       "Court-authorized alternative",
     ],
   };
+  // Mirror the versioned server schema; CI checks keys remain aligned.
+  const serReviewFields={
+    ser001:[
+      ['requesterName','Requesting party name'],['requesterMailingAddress','Requester mailing address'],
+      ['serviceTargetType','Who is being served?',['Person','Entity']],
+      ['serviceTargetName','Person/entity to serve'],['serviceTargetDetails','Identifying information or agent (if available)'],
+      ['serviceAddressType','Service address type',['Home','Business','Other']],
+      ['serviceAvailability','Best service time / access instructions (if available)'],
+      ['documentsDescription','Documents actually presented for service'],
+      ['hearingStatus','Court hearing?',['Yes','No','Unknown']],
+      ['safetyAccessibilityStatus','Reported safety/accessibility?',['No issues reported','Issues reported','Not established']],
+      ['safetyAccessibilityDetails','Unverified reported safety or accessibility information']
+    ],
+    ser001a:[
+      ['requesterRole','Requesting party role / creditor status'],
+      ['targetRelationship','Person/entity relationship to property',['Judgment debtor','Third party property holder','Property occupant','Other']],
+      ['writType','Writ / enforcement document'],
+      ['writCopyStatus','Writ copy status',['Original','Electronic certified copy','Previously lodged copy','Other']],
+      ['judgmentDetails','Judgment date, amount, debtor and creditor'],
+      ['propertyAndLocation','Property/account description and location'],
+      ['ownersAndInterests','Other owners or interests'],
+      ['dwellingStatus','Dwelling involved?',['Yes','No','Unknown']],
+      ['personalDebtStatus','Personal-debt judgment?',['Yes','No','Undetermined']],
+      ['addressVerificationReference','WG-015/EJ-135 verification reference, when applicable'],
+      ['specialInstructions','Special sheriff enforcement instructions']
+    ]
+  };
+  const narrativeNoteActions=new Set(['retire_safety_flag','remove_document','replace_document','reopen_return','cancel','hold','resolve_hold','approve_disbursement','record_disbursement','reconcile','enforcement_event','expense']);
   const money = (n) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -558,6 +586,7 @@ ${SonoMarziCivilRecordUI.styles}
 .ca-classic .ca-assignee-options button:hover,.ca-classic .ca-assignee-options button:focus-visible{background:rgba(56,132,225,.18);outline:2px solid var(--ca-accent);outline-offset:-2px}
 .ca-classic .ca-assignee-empty,.ca-classic .ca-assignee-no-results{font-size:14px;color:var(--text-dim);padding:12px 14px}
 
+.ca-classic .ca-ser-review{border:1px solid var(--ca-border);border-radius:12px;padding:18px;margin:16px 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ca-classic .ca-ser-review legend{font-size:17px;font-weight:750;padding:0 8px}.ca-classic .ca-ser-review>p{grid-column:1/-1;font-size:14px;color:var(--text-dim);line-height:1.5}.ca-classic .ca-ser-review .form-row{min-width:0}.ca-classic .ca-ser-review input,.ca-classic .ca-ser-review select{width:100%;max-width:100%;box-sizing:border-box;background:var(--ca-surface)!important;color:var(--text)!important;color-scheme:dark;border:1px solid var(--ca-border);border-radius:8px;padding:12px;font-size:15px;min-height:44px}.ca-classic .ca-action-note p{font-size:13px;color:var(--text-dim);line-height:1.4}@media(max-width:700px){.ca-classic .ca-ser-review{grid-template-columns:1fr;padding:12px}}
 </style><div class="panel ca-classic"><div class="panel-head"><h3>Civil Process</h3></div><div class="panel-body"><p class="ca-subtitle">${esc(context.profile.county ? context.profile.county + " County, California" : "California")} ${context.profile.status === "test" ? " · Test environment" : ""}</p><p id="ca-status" role="status"></p><div class="toolbar ca-list-toolbar"><button class="btn btn-outline" id="ca-refresh">Refresh</button> ${can("civil_paper_intake") ? '<button class="btn btn-primary" id="ca-new">New case</button>' : ""} ${report && can("civil_reports_export") ? '<button class="btn btn-outline" id="ca-export">Export CSV</button>' : ""}</div>${id==="civil-board"?SonoMarziCivilBoardUI.styles+'<div class="ca-shared-board-controls">'+SonoMarziCivilBoardUI.filters({ids:{search:"ca-search",type:"ca-type-filter",location:"ca-location-filter"},types:boardOptions.types,locations:boardOptions.locations})+'</div>':`<label class="form-row" id="ca-search-label">Search cases<input id="ca-search" placeholder="Case, party, address, stage or due date"></label>`}${report ? '<div id="ca-report"></div>' : ""}<div class="ca-view-controls" role="group" aria-label="Case display mode"><button type="button" class="btn btn-outline" id="ca-view-cards" aria-pressed="true">${id === "civil-calendar" ? "▦ Calendar" : "▦ Cards"}</button><button type="button" class="btn btn-outline" id="ca-view-table" aria-pressed="false">☷ Table</button></div><div id="ca-list"></div><div id="ca-detail"></div><div id="ca-form"></div></div></div>`;
       const status = (msg) => {
         root.querySelector("#ca-status").textContent = msg;
@@ -1829,7 +1858,17 @@ ${SonoMarziCivilRecordUI.styles}
                           : choice(key),
                       );
                     })
-                    .join("") + input("note"),
+                    .join("") + (action==='intake_details'
+                      ? Object.entries(serReviewFields).filter(([section])=>(context.workflows[c.workflowId]?.forms||[]).includes(section==='ser001'?'SER-001':'SER-001A')).map(([section,items])=>
+                          '<fieldset class="ca-ser-review"><legend>'+section.toUpperCase()+' · Confidential sheriff intake review</legend>'+
+                          '<p>Record details from the actual signed instructions. Do not treat unverified safety claims as confirmed officer-safety flags.</p>'+
+                          items.map(([key,label,choices])=>'<label class="form-row">'+esc(label)+
+                            (choices?'<select name="'+section+'__'+key+'"><option value="">Select...</option>'+choices.map(option=>'<option value="'+esc(option)+'"'+((c.intakeDetails?.[section]?.[key]||'')===option?' selected':'')+'>'+esc(option)+'</option>').join('')+'</select>':
+                              '<input type="text" name="'+section+'__'+key+'" maxlength="2000" value="'+esc(c.intakeDetails?.[section]?.[key]||'')+'">')+
+                            '</label>').join('')+'</fieldset>'
+                        ).join('') : '')+
+                    '<div class="ca-action-note">'+input("note")+
+                      (!narrativeNoteActions.has(action)?'<p>Optional comments. The action, staff member, timestamp and case status are recorded automatically.</p>':'<p>Required: explain the decision or exception.</p>')+'</div>',
                   async (data) => {
                     const payload = Object.fromEntries(data);
                     if(action==="generate_return_draft"){
@@ -1846,6 +1885,15 @@ ${SonoMarziCivilRecordUI.styles}
                       const required=context.workflows[c.workflowId]?.forms||[];
                       const selected=data.getAll("reviewedForms").map(value=>String(value));
                       payload.reviewedForms=[...new Set(selected.filter(code=>required.includes(code)))];
+                      for(const section of Object.keys(serReviewFields)){
+                        if(!required.includes(section==='ser001'?'SER-001':'SER-001A'))continue;
+                        payload[section]={};
+                        for(const [key] of serReviewFields[section]){
+                          const inputName=section+'__'+key;
+                          payload[section][key]=String(data.get(inputName)||'').trim();
+                          delete payload[inputName];
+                        }
+                      }
                     }
                     const result = await command(action, payload);
                     if (result.draft) {
