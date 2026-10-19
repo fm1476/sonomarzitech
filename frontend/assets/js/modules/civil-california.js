@@ -1407,6 +1407,75 @@ ${SonoMarziCivilRecordUI.styles}
           if(actionButton)actionButton.click();
           else status("Draft generation is not available for the current case state or your role.");
         });
+        // New official enforcement forms are unsigned working copies. Only
+        // permitted users can generate them; signatures remain manual.
+        const enforcementOptions=c.workflowId==="earnings-withholding"
+          ? ["WG-002","WG-005","WG-006"]
+          : ["bank-levy","personal-property-levy","real-property-levy","execution"].includes(c.workflowId)
+            ? ["EJ-150"] : [];
+        if(enforcementOptions.length&&can("civil_document_generate")&&!["Closed","Cancelled"].includes(r.stage)){
+          const section=document.createElement("section");
+          section.className="ca-draft-feature";
+          section.innerHTML='<div class="ca-draft-feature-copy"><strong>Prepare official enforcement forms</strong><p>Generate unsigned drafts from reviewed case facts. No signature or declaration is created automatically.</p></div>'+
+            '<div class="ca-form-resource-grid">'+enforcementOptions.map(code=>
+              '<button type="button" class="btn btn-outline" data-ca-enforcement-form="'+esc(code)+'">Prepare '+esc(code)+' draft</button>').join("")+'</div>';
+          formLibrary.append(section);
+          section.querySelectorAll("[data-ca-enforcement-form]").forEach(button=>button.addEventListener("click",()=>{
+            const code=button.dataset.caEnforcementForm;
+            const common='<label class="form-row">Levying officer name and address<input name="levyingOfficer" required maxlength="250"></label>';
+            const extra=code==="WG-002"
+              ?'<label class="form-row">Employer name and address<input name="employer" required maxlength="250"></label>'+
+               '<label class="form-row">Employee name and address<input name="employee" required maxlength="250"></label>'+
+               '<label class="form-row">Court judgment date<input type="date" name="judgmentDate" required></label>'+
+               '<label class="form-row">Total due ($)<input type="number" name="totalDue" step="0.01" min="0" required></label>'
+              :code==="EJ-150"
+              ?'<label class="form-row">Levy target<input name="levyTarget" maxlength="250" required></label>'+
+               '<label class="form-row">Court-issued writ reference<input name="issuedWritReference" maxlength="250" required></label>'+
+               '<label class="form-row">Notice date<input type="date" name="noticeDate" required></label>'+
+               '<label class="form-row">Judgment debtor<input name="judgmentDebtor" maxlength="250" required></label>'+
+               '<label class="form-row">Person notified<input name="personNotified" maxlength="250" required></label>'+
+               '<label class="form-row">Property description<input name="propertyDescription" maxlength="250" required></label>'+
+               ['totalDue','levyFee','sheriffDisbursementFee','recoverableCosts','dailyInterest'].map(k=>
+                 '<label class="form-row">'+esc(k)+' ($)<input type="number" step="0.01" min="0" name="'+k+'" required></label>').join("")
+              :'<p>Only the case caption and levying officer information will be prefilled. The employer or claimant must complete their own declaration.</p>';
+            form("Prepare "+code+" unsigned PDF",common+extra+
+              '<label class="form-row">Reason for generation<input name="note" required maxlength="500" value="Prepare unsigned official court working copy"></label>',
+              async values=>{
+                const source=Object.fromEntries(values.entries());
+                const payload={formCode:code,note:source.note,levyingOfficer:source.levyingOfficer};
+                if(code==="WG-002"){
+                  payload.order={levyingOfficer:source.levyingOfficer,employer:source.employer,employee:source.employee,
+                    judgmentDate:source.judgmentDate,totalDueCents:cents(source.totalDue)};
+                }else if(code==="EJ-150"){
+                  payload.notice={levyingOfficer:source.levyingOfficer,levyTarget:source.levyTarget,
+                    issuedWritReference:source.issuedWritReference,noticeDate:source.noticeDate,
+                    judgmentDebtor:source.judgmentDebtor,personNotified:source.personNotified,
+                    propertyDescription:source.propertyDescription};
+                  for(const key of ["totalDue","levyFee","sheriffDisbursementFee","recoverableCosts","dailyInterest"])
+                    payload.notice[key+"Cents"]=cents(source[key]);
+                }
+                const result=await command("generate_enforcement_draft",payload);
+                if(!result.draft)throw Error("No PDF was returned by the server.");
+                const bytes=Uint8Array.from(atob(result.draft.base64),char=>char.charCodeAt(0));
+                const url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+                const link=document.createElement("a");link.href=url;link.download=result.draft.filename;link.click();
+                setTimeout(()=>URL.revokeObjectURL(url),1000);
+                try{
+                  const uploaded=await AWS_ATTACHMENTS.upload(new File([bytes],result.draft.filename,{type:"application/pdf"}),
+                    {collection:"civil.papers",itemId:caseId});
+                  const saved=await api("command",{id:caseId,expectedVersion:result.version,command:"attach_document",
+                    payload:{name:result.draft.filename,key:uploaded.storageKey,kind:"Unsigned return draft",
+                      note:"Unsigned "+code+" working copy; SHA-256 "+result.draft.sha256}},scope);
+                  const index=rows.findIndex(x=>x.record.id===caseId);
+                  if(index>=0)rows[index]=saved;
+                  draw();await detail(caseId);
+                  status(code+" unsigned draft downloaded and archived to Documents.");
+                }catch(error){
+                  status(code+" draft downloaded, but archive failed: "+error.message);
+                }
+              });
+          }));
+        }
         const sections=[...panel.querySelectorAll("details")];
         const titles=sections.map(section=>section.querySelector("summary")?.textContent?.trim()||"Case record");
         const documentSection=panel.querySelector("#ca-documents");
