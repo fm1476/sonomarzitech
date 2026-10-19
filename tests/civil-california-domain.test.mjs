@@ -6,12 +6,21 @@ let seq=0;
 const step=(r,command,payload={},actor=ctx)=>applyCaliforniaCommand(r,command,{note:'Fictional verification',...payload},{...actor,eventId:String(++seq)});
 const fails=(r,command,payload={},actor=ctx,pattern)=>{const snapshot=structuredClone(r);assert.throws(()=>step(r,command,payload,actor),pattern);assert.deepEqual(r,snapshot,'Rejected command must not mutate original');};
 const doc=(r,kind)=>step(r,'attach_document',{name:kind+'.pdf',key:'uploaded/'+kind,kind});
+const serEvidence={
+  ser001:{requesterName:'Demo Requester',requesterMailingAddress:'P.O. Box 10, Sonoma, CA',serviceTargetType:'Person',serviceTargetName:'Demo Defendant',serviceAddressType:'Home',documentsDescription:'Summons and complaint',hearingStatus:'No',safetyAccessibilityStatus:'No issues reported'},
+  ser001a:{requesterRole:'Judgment creditor',targetRelationship:'Judgment debtor',writType:'Writ of execution',writCopyStatus:'Original',propertyAndLocation:'Demo property, Sonoma, California',dwellingStatus:'No',personalDebtStatus:'No'}
+};
 const ready=workflowId=>{
  let r=createCaliforniaCase(intake(workflowId),ctx);
  fails(r,'approve_intake');
- r=step(r,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed court order',formReviewReference:'Reviewed current court forms',reviewedForms:CA_WORKFLOWS[workflowId].forms,issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',propertyDescription:'Fictional parcel',financialInstitution:'Demo Bank'});
+ r=step(r,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed court order',formReviewReference:'Reviewed current court forms',reviewedForms:CA_WORKFLOWS[workflowId].forms,...(CA_WORKFLOWS[workflowId].forms.includes('SER-001')?{ser001:serEvidence.ser001}:{}),...(CA_WORKFLOWS[workflowId].forms.includes('SER-001A')?{ser001a:serEvidence.ser001a}:{}),issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',propertyDescription:'Fictional parcel',financialInstitution:'Demo Bank'});
  r=doc(doc(r,'Court packet'),'Signed instructions');if(CA_WORKFLOWS[workflowId].writ)r=doc(r,'Writ');return step(r,'approve_intake');
 };
+// Routine structured actions no longer demand repetitive notes.
+let noNoteCase=createCaliforniaCase(intake('summons'),ctx);
+noNoteCase=applyCaliforniaCommand(noNoteCase,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court order',formReviewReference:'Reviewed',reviewedForms:['SER-001'],ser001:serEvidence.ser001},ctx);
+assert.equal(noNoteCase.california.history.at(-1).note,'');
+assert.throws(()=>applyCaliforniaCommand(noNoteCase,'cancel',{note:''},ctx),/note|decision|exception/i);
 assert.equal(civilDate('2026-02-29'),false);assert.equal(civilDate('2028-02-29'),true);
 assert.throws(()=>createCaliforniaCase({...intake('summons'),receivedDate:'2099-01-01'},ctx));
 assert.throws(()=>createCaliforniaCase(intake('summons'),{...ctx,admin:false,abilities:[]}));
