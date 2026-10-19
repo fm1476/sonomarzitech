@@ -66,6 +66,8 @@ window.CaliforniaCivil = (() => {
       "issuedDate:date",
       "writExpirationDate:date",
       "employerName",
+      "personalDebtStatus",
+      "addressVerificationReference",
       "propertyDescription",
       "financialInstitution",
       "hearingDate:date",
@@ -88,7 +90,7 @@ window.CaliforniaCivil = (() => {
       "courtOrderReference",
       "methodDescription",
     ],
-    unserved: [],
+    unserved: ["reasonCode","reasonDetail","attemptsSummary"],
     generate_return_draft: [
       "serverName",
       "serverAddress",
@@ -117,7 +119,7 @@ window.CaliforniaCivil = (() => {
       "documentId",
     ],
     prepare_return: ["formName", "reference"],
-    review_return: [],
+    review_return: ["reviewReference"],
     record_return: ["date:date", "reference"],
     hold: ["kind", "reference"],
     resolve_hold: ["holdId", "orderReference"],
@@ -175,6 +177,8 @@ window.CaliforniaCivil = (() => {
       .replace(/^./, (s) => s.toUpperCase())
       .replace("Cents", "($)");
   const options = {
+    reasonCode: ["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"],
+    personalDebtStatus: ["Yes","No"],
     result: [
       "Not home",
       "No contact",
@@ -1836,6 +1840,19 @@ ${SonoMarziCivilRecordUI.styles}
                         : key === "returnByDate"
                           ? r.returnByDate
                           : c.intakeDetails[key] || "";
+                      if(action==="intake_details" && key==="personalDebtStatus" && c.workflowId!=="earnings-withholding")return "";
+                      if(action==="intake_details" && key==="addressVerificationReference" && c.workflowId!=="earnings-withholding")return "";
+                      if(action==="intake_details" && key==="personalDebtStatus"){
+                        return '<fieldset class="ca-ser-choice"><legend>Personal-debt judgment?</legend><div class="ca-ser-choice-options">'+
+                          ['Yes','No'].map(item=>'<label class="ca-ser-choice-option"><input type="radio" name="personalDebtStatus" value="'+item+'" '+(value===item?'checked':'')+'><span>'+item+'</span></label>').join('')+
+                          '</div><p>WG-015/EJ-135 is required only where the legal conditions for address verification apply.</p></fieldset>';
+                      }
+                      if(action==="intake_details" && key==="addressVerificationReference")
+                        return '<label class="form-row">Address verification declaration reference (personal debt only)<input name="addressVerificationReference" value="'+esc(value)+'" maxlength="500"></label>';
+                      if(action==="unserved" && key==="reasonCode"){
+                        return '<fieldset class="ca-ser-choice"><legend>Reason unable to serve</legend><div class="ca-ser-choice-options">'+
+                          options.reasonCode.map(item=>'<label class="ca-ser-choice-option"><input type="radio" name="reasonCode" value="'+esc(item)+'"><span>'+esc(item)+'</span></label>').join('')+'</div></fieldset>';
+                      }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
                           '<input id="ca-assignee-query" class="ca-assignee-query" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ca-assignee-options" placeholder="Search or select an agency person..." autocomplete="off">'+
