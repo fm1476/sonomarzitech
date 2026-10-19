@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createCaliforniaCase,applyCaliforniaCommand} from '../lambdas/api/lib/civil-california-domain.mjs';
 let seq=0;const ctx={id:'case-sale',admin:true,userId:'civil-clerk',personId:'officer',today:'2026-10-18',at:'2026-10-18T12:00:00Z',county:'Sonoma',testOnly:true};
-const go=(r,command,payload={},actor={})=>applyCaliforniaCommand(r,command,payload,{...ctx,...actor,eventId:'sale-event-'+(++seq)});
+const go=(r,command,payload={},actor={})=>applyCaliforniaCommand(r,command,{note:'Fictional court review context',...payload},{...ctx,...actor,eventId:'sale-event-'+(++seq)});
 const deny=(r,c,p,pattern,actor={})=>{const before=structuredClone(r);assert.throws(()=>go(r,c,p,actor),pattern);assert.deepEqual(r,before)};
 let r=createCaliforniaCase({workflowId:'sheriff-sale',caseNumber:'TEST-SALE',courtOfOrigin:'Fictional Court',plaintiff:'Judgment creditor',defendant:'Debtor',receivedDate:'2026-10-17',serviceAddresses:[{address:'123 Fictional Property'}]},ctx);
 const one={requesterName:'Creditor',requesterMailingAddress:'PO Box 10',serviceTargetType:'Person',serviceTargetName:'Debtor',serviceAddressType:'Home',documentsDescription:'Writ',hearingStatus:'No',safetyAccessibilityStatus:'No issues reported'};
