@@ -1,6 +1,6 @@
 import {SONOMA_FEE_REFERENCE} from './lib/civil-california-fees.mjs';
 import {calendarEvents,validateCalendarRange} from './lib/civil-california-calendar.mjs';
-import {generateCaliforniaReturnDraft} from './lib/civil-california-returns.mjs';
+import {generateCaliforniaReturnDraft,generateCaliforniaTargetReturnDraft} from './lib/civil-california-returns.mjs';
 import {readinessStatus,saveReadinessEvidence} from './lib/civil-california-readiness.mjs';
 import {californiaFinancialReport} from './lib/civil-california-reporting.mjs';
 import {randomUUID,createHash} from 'node:crypto';
@@ -150,9 +150,12 @@ export async function californiaCivilApi(client,auth,body){
             AND m.status='active' AND u.status='active' LIMIT 1`,[tenantId,agencyId,payload.personId]);
         if(!active.rows.length)throw new CivilError('Choose an active member of this agency.');
       }
-      if(command==='generate_return_draft'){
+      if(command==='generate_return_draft'||command==='generate_target_return_draft'){
         if(!access.admin&&!granted.includes('civil_document_generate'))throw new CivilError('Court document permission is required.',403);
-        generatedDraft=await generateCaliforniaReturnDraft(existing.value,payload);payload.pdfHash=generatedDraft.sha256;payload.templateHash=generatedDraft.templateSha256;
+        generatedDraft=command==='generate_target_return_draft'?
+          await generateCaliforniaTargetReturnDraft(existing.value,payload):
+          await generateCaliforniaReturnDraft(existing.value,payload);
+        payload.pdfHash=generatedDraft.sha256;payload.templateHash=generatedDraft.templateSha256;
       }
       if(command==='attach_document')await verifyAttachmentForParent(tenantId,agencyId,payload.key,'civil.papers',id);
       record=applyCaliforniaCommand(existing.value,command,payload,ctx);version=Number(existing.version)+1;
