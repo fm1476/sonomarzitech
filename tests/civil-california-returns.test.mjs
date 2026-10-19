@@ -4,6 +4,7 @@ import pdfLib from '../lambdas/api/node_modules/pdf-lib/cjs/index.js';
 const {PDFDocument,PDFName}=pdfLib;
 const manifest=JSON.parse(await readFile(new URL('../lambdas/api/templates/civil/manifest.json',import.meta.url),'utf8'));
 import {generateCaliforniaReturnDraft} from '../lambdas/api/lib/civil-california-returns.mjs';
+import {CivilError} from '../lambdas/api/lib/civil-california-domain.mjs';
 const input={serverName:'Demo Officer',serverAddress:'123 Training Lane',serverPhone:'555-0100',smallClaimsDocument:'SC-100',courtStreet:'600 Example Drive',courtCityZip:'Sonoma CA 95476',courtBranch:'Fictional Training Court'};
 for(const workflowId of ['summons','small-claims']){
  const record={id:'11111111-1111-4111-8111-111111111111',caseNumber:'TEST-CA-PDF',courtOfOrigin:'Sonoma',plaintiff:'Demo Plaintiff',defendant:'Demo Defendant',stage:'Served',california:{county:'Sonoma',workflowId,intakeDetails:{},service:{method:'Personal service',recipient:'Demo Defendant',address:'123 Fictional Lane',date:'2026-10-17',time:'13:05'}}};
