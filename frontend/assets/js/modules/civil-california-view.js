@@ -257,6 +257,17 @@ window.CaliforniaCivilView = (() => {
             "No notices recorded.",
           ),
       )}
+      ${c.workflowId==="sheriff-sale"?section("Enforcement: Sheriff sale",
+        facts([
+          ["Sale stage",c.saleProcess?.status||"Not scheduled"],
+          ["Property type",c.saleProcess?.propertyType||"Pending"],
+          ["Property",c.saleProcess?.propertyDescription||"Pending"],
+          ["Date / location",(c.saleProcess?.saleDate||"Pending")+" · "+(c.saleProcess?.saleLocation||"Pending")],
+          ["Independent approval",c.saleProcess?.approval?.reviewReference||"Not approved"],
+          ["Outcome",c.saleProcess?.outcome?.result||"Not completed"],
+          ["Sale proceeds reference",c.saleProcess?.outcome?.proceedsReceiptReference||"Not recorded"],
+        ])+table(["Notice date","Recipient","Method","Authority"],(c.saleProcess?.notices||[]).map(n=>
+          [date(n.date),n.recipient,n.method,n.authorityReference]),"No sale notices recorded.")):''}
       ${section(
         "Enforcement actions",
         table(
