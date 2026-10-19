@@ -391,6 +391,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
           "Court order and method description required.");
       if(payload.method==="First-class mail")
         requireValue(!["summons","small-claims"].includes(c.workflowId),"Mail alone cannot substitute for the court-approved summons method.");
+      if(payload.mailingDate)requireValue(civilDate(payload.mailingDate)&&payload.mailingDate>=payload.date&&payload.mailingDate<=ctx.today,
+        "Recipient mailing date must be valid and cannot precede the recorded delivery.");
       target.outcome={status:"Served",date:payload.date,time:payload.time,recipient:payload.recipient,
         address:payload.address,method:payload.method,recipientRelationship:payload.recipientRelationship||"",
         diligenceReference:payload.diligenceReference||"",mailingDate:payload.mailingDate||"",
@@ -583,6 +585,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     const previous=c.documents[index];
     requireValue(!c.returnPacket?.documentId || c.returnPacket.documentId!==previous.id,
       "This document is linked to the court return and cannot be replaced.",409);
+    requireValue(!targets.some(t=>t.returnPacket?.documentId===previous.id),
+      "This signed proof is linked to a recipient return and cannot be replaced.",409);
     requireValue(text(payload.name,255)&&text(payload.key,1500),"Replacement filename and uploaded object key are required.");
     requireValue(!c.documents.some(d=>d.key===payload.key),"Document is already attached.",409);
     const next={id:ctx.eventId,name:payload.name,key:payload.key,kind:previous.kind,uploadedBy:ctx.userId,at:ctx.at,replacesDocumentId:previous.id};
@@ -605,6 +609,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     const previous=c.documents[index];
     requireValue(!c.returnPacket?.documentId || c.returnPacket.documentId!==previous.id,
       "This document is linked to the court return and cannot be removed.",409);
+    requireValue(!targets.some(t=>t.returnPacket?.documentId===previous.id),
+      "This signed proof is linked to a recipient return and cannot be removed.",409);
     c.documents.splice(index,1);
     r.attachedDocuments=(r.attachedDocuments||[]).filter(d=>d.id!==previous.id);
     c.removedDocuments??=[];
