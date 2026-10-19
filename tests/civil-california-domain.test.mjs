@@ -33,6 +33,19 @@ for(const workflowId of Object.keys(CA_WORKFLOWS)){
  fails(r,'attempt',{date:'2026-10-18',time:'10:00',result:'Not home'});
  r=step(r,'attempt',{date:'2026-10-17',time:'10:00',result:'Not home'});
  r=step(r,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'});
+ if(workflowId==='sheriff-sale'){
+   r=step(r,'schedule_sheriff_sale',{propertyType:'Personal property',propertyDescription:'Fictional parcel',
+     saleLocation:'County annex',saleDate:'2026-10-17',writReference:'Fictional writ',noticeAuthority:'Fictional reviewed notice authority',
+     legalReviewReference:'Fictional legal acceptance'});
+   r=step(r,'attach_document',{kind:'Other',name:'Fictional sale notice',key:'sale-notice-'+workflowId});
+   const saleNoticeId=r.california.documents.at(-1).id;
+   r=step(r,'record_sheriff_sale_notice',{recipient:'Interested persons',method:'Publication',date:'2026-10-17',
+     authorityReference:'Reviewed fictional notice',documentId:saleNoticeId});
+   r=step(r,'approve_sheriff_sale',{reviewReference:'Supervisor-approval',noticeCompletionReference:'Notices-verified',
+     authorityReference:'Court packet'},{...ctx,userId:'sale-approver'});
+   r=step(r,'record_sheriff_sale_result',{outcome:'No bids',date:'2026-10-17',
+     authorityReference:'Court packet',resultReference:'No bidders'});
+ }
  fails(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});
  r=doc(r,'Proof of service');r=step(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});fails(r,'review_return',{},ctx,/different supervisor/);
  fails(r,'review_return',{}, {...ctx,userId:'reviewer'},/review reference/);r=step(r,'review_return',{reviewReference:'SUP-REVIEW-001'}, {...ctx,userId:'reviewer'});assert.equal(r.california.returnPacket.reviewReference,'SUP-REVIEW-001');r=step(r,'record_return',{date:'2026-10-17',reference:'Court receipt'});r=step(r,'close');assert.equal(r.stage,'Closed');fails(r,'receipt',{kind:'Service fee',amountCents:100,payer:'Demo',reference:'R1'});
