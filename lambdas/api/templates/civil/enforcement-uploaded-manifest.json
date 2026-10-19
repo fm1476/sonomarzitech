@@ -1,0 +1,37 @@
+{
+  "EJ-130": {
+    "templateSha256": "c90f4938097db8f56b602b8f8d3d21379beb56129f5dac2ad6b35b3029316859",
+    "pages": 4,
+    "fields": 97,
+    "issuance": "court-issued only",
+    "generatable": false
+  },
+  "EJ-150": {
+    "templateSha256": "51911e968e5c58be90823a30e3e96c0fa444d5a8bce44337072397bb171ea5e7",
+    "pages": 2,
+    "fields": 66,
+    "issuance": "levying-officer draft",
+    "generatable": false
+  },
+  "WG-002": {
+    "templateSha256": "449a8e53d2acfb5039ac74be8798d7a89808e53dc8cb090e00301163ebf9cda0",
+    "pages": 2,
+    "fields": 37,
+    "issuance": "levying-officer draft",
+    "generatable": false
+  },
+  "WG-005": {
+    "templateSha256": "005d3fd9076203d4a6fb39d4fb57bab9d06f2a5d8f9b7bc9e49180afdc3de791",
+    "pages": 2,
+    "fields": 62,
+    "issuance": "employer-declared",
+    "generatable": false
+  },
+  "WG-006": {
+    "templateSha256": "5f843bacf9168254599bc7b62cae207c923e873d3401997bc6312c82b6ae253b",
+    "pages": 2,
+    "fields": 49,
+    "issuance": "claimant-declared",
+    "generatable": false
+  }
+}
