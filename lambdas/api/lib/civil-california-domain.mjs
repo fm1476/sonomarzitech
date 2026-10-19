@@ -176,6 +176,7 @@ export function createCaliforniaCase(input, ctx) {
       enforcement: [],
       enforcementAuthorizations: [],
       employerReturns: [],
+      propertyItems: [],
       saleProcess: null,
       intakeDetails: {},
       returnPacket: null,
@@ -670,6 +671,9 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       "This document is linked to the court return and cannot be replaced.",409);
     requireValue(!targets.some(t=>t.returnPacket?.documentId===previous.id),
       "This signed proof is linked to a recipient return and cannot be replaced.",409);
+    requireValue(!(c.propertyItems||[]).some(item=>item.documentId===previous.id||
+      item.custodyEvents.some(e=>e.documentId===previous.id)),
+      "This document supports the property register or custody history and cannot be replaced.",409);
     requireValue(text(payload.name,255)&&text(payload.key,1500),"Replacement filename and uploaded object key are required.");
     requireValue(!c.documents.some(d=>d.key===payload.key),"Document is already attached.",409);
     const next={id:ctx.eventId,name:payload.name,key:payload.key,kind:previous.kind,uploadedBy:ctx.userId,at:ctx.at,replacesDocumentId:previous.id};
@@ -694,6 +698,9 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       "This document is linked to the court return and cannot be removed.",409);
     requireValue(!targets.some(t=>t.returnPacket?.documentId===previous.id),
       "This signed proof is linked to a recipient return and cannot be removed.",409);
+    requireValue(!(c.propertyItems||[]).some(item=>item.documentId===previous.id||
+      item.custodyEvents.some(e=>e.documentId===previous.id)),
+      "This document supports the property register or custody history and cannot be removed.",409);
     c.documents.splice(index,1);
     r.attachedDocuments=(r.attachedDocuments||[]).filter(d=>d.id!==previous.id);
     c.removedDocuments??=[];
@@ -1168,6 +1175,51 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     authorization.reviewReference=payload.reviewReference;
     authorization.noticeReviewReference=payload.noticeReviewReference;
     authorization.status="Approved";
+  } else if(command==="register_property_item"){
+    permission(ctx,"civil_paper_intake");
+    note();
+    requireValue(["writ-execution","personal-property-levy","real-property-levy","possession","sheriff-sale"].includes(c.workflowId),
+      "Item-level property management is not part of this workflow.",409);
+    requireValue(["Ready","Assigned","Attempting","Served"].includes(r.stage),
+      "Approve the court packet before registering property.",409);
+    liveWrit();
+    requireValue(["Real property","Personal property"].includes(payload.propertyType),
+      "Select the property category.");
+    requireValue(text(payload.description,2000)&&text(payload.location,1000)&&text(payload.inventoryReference,500),
+      "Property description, location and inventory authority reference required.");
+    requireValue(c.documents.some(d=>d.id===payload.documentId&&["Writ","Court order","Other"].includes(d.kind)),
+      "Link a writ, court order or signed inventory document for this property.",409);
+    c.propertyItems??=[];
+    requireValue(c.propertyItems.length<250,"The property register supports up to 250 items per case.",409);
+    const item={id:ctx.eventId,propertyType:payload.propertyType,description:payload.description,
+      location:payload.location,inventoryReference:payload.inventoryReference,
+      documentId:payload.documentId,registeredBy:ctx.userId,registeredAt:ctx.at,
+      custodyEvents:[],currentCustodian:null,currentLocation:payload.location};
+    c.propertyItems.push(item);
+  } else if(command==="record_property_custody"){
+    permission(ctx,"civil_paper_intake");
+    note();
+    const item=(c.propertyItems||[]).find(p=>p.id===payload.propertyItemId);
+    requireValue(item,"Select a registered case property item.",404);
+    requireValue(["Received","Transferred","Stored","Inspected"].includes(payload.eventType),
+      "Select a recognized custody record event.");
+    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today,
+      "Record a valid custody event date.");
+    requireValue(text(payload.custodian,250)&&text(payload.location,1000)&&
+      text(payload.chainOfCustodyReference,500),
+      "Responsible custodian, present location and evidence reference are required.");
+    const proof=c.documents.find(d=>d.id===payload.documentId&&["Other","Court order","Writ"].includes(d.kind));
+    requireValue(proof,"Attach the receipt, inventory record or other custody evidence.",409);
+    if(["Transferred","Stored"].includes(payload.eventType))
+      requireValue(item.custodyEvents.length>0,
+        "Record initial custody before transferring or storing property.",409);
+    const event={id:ctx.eventId,eventType:payload.eventType,date:payload.date,
+      fromCustodian:item.currentCustodian||"",toCustodian:payload.custodian,
+      previousLocation:item.currentLocation||"",location:payload.location,
+      chainOfCustodyReference:payload.chainOfCustodyReference,documentId:proof.id,
+      by:ctx.userId,at:ctx.at};
+    item.custodyEvents.push(event);item.currentCustodian=payload.custodian;
+    item.currentLocation=payload.location;
   } else if(command==="record_employer_return"){
     permission(ctx,"civil_paper_intake");
     note();

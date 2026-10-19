@@ -137,6 +137,8 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_result: ["outcome","date:date","authorityReference","resultReference","highBidder","amountCents:money","proceedsReceiptReference","reason"],
     request_enforcement_authorization: ["kind","propertyDescription","authorityReference","reason","evidenceDocumentId"],
     approve_enforcement_authorization: ["authorizationId","reviewReference","noticeReviewReference"],
+    register_property_item: ["propertyType","description","location","inventoryReference","documentId"],
+    record_property_custody: ["propertyItemId","eventType","date:date","custodian","location","chainOfCustodyReference","documentId"],
     record_employer_return: ["employerName","employerReference","orderServedDate:date","returnReceivedDate:date","employmentStatus","statusDetails","documentId"],
     enforcement_event: [
       "authorizationId",
@@ -192,6 +194,8 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_result: "Record sheriff sale outcome",
     request_enforcement_authorization: "Request property release or possession approval",
     approve_enforcement_authorization: "Independently approve enforcement",
+    register_property_item: "Register property and inventory",
+    record_property_custody: "Record property custody",
     record_employer_return: "Record WG-005 employer return",
     enforcement_event: "Record enforcement action",
     receipt: "Record receipt",
@@ -213,6 +217,7 @@ window.CaliforniaCivil = (() => {
     reasonCode: ["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"],
     employmentStatus: ["Employed","Not employed","Employment ended","Multiple orders","Other"],
     propertyType: ["Real property","Personal property"],
+    eventType: ["Received","Transferred","Stored","Inspected"],
     outcome: ["Sold","No bids","Postponed","Cancelled"],
     personalDebtStatus: ["Yes","No"],
     result: [
@@ -1561,6 +1566,8 @@ ${SonoMarziCivilRecordUI.styles}
               ...(context.workflows[c.workflowId].writ &&
               ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
                 ? ["enforcement_event",
+                  ...(["writ-execution","personal-property-levy","real-property-levy","possession","sheriff-sale"].includes(c.workflowId)?["register_property_item",
+                    ...((c.propertyItems||[]).length?["record_property_custody"]:[])]:[]),
                   ...(c.workflowId==="earnings-withholding"?["record_employer_return"]:[]),
                   "request_enforcement_authorization",
                    ...((c.enforcementAuthorizations||[]).some(a=>a.status==="Pending")?["approve_enforcement_authorization"]:[]),
@@ -1780,6 +1787,7 @@ ${SonoMarziCivilRecordUI.styles}
                       : method!=="Substituted service")
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
+                    : key === "propertyItemId" ? (c.propertyItems||[]).map(item=>[item.id,item.description+" · "+item.currentLocation])
                     : key === "authorizationId" ? (c.enforcementAuthorizations||[]).filter(a=>
                       action==="approve_enforcement_authorization"?a.status==="Pending":a.status==="Approved")
                       .map(a=>[a.id,a.kind+" · "+a.propertyDescription+" · "+a.status])
@@ -1800,7 +1808,9 @@ ${SonoMarziCivilRecordUI.styles}
                           .filter((d) => !d.completedAt)
                           .map((d) => [d.id, d.title + " · " + d.dueDate])
                       : key === "documentId"
-                        ? c.documents.filter(d=>action==="record_employer_return"?
+                        ? c.documents.filter(d=>["register_property_item","record_property_custody"].includes(action)?
+                           ["Writ","Court order","Other"].includes(d.kind):
+                           action==="record_employer_return"?
                            /WG[- ]?005|employer.?s? return/i.test(d.name):
                            action!=="prepare_target_return"||["Proof of service","Court return"].includes(d.kind)).map((d) => [
                             d.id,
@@ -1959,11 +1969,18 @@ ${SonoMarziCivilRecordUI.styles}
                           values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="kind" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+'</div>'+
                           (action==="enforcement_event"?'<p>Release and possession require a previously approved independent authorization.</p>':'')+'</fieldset>';
                       }
-                      if(["authorizationId","evidenceDocumentId"].includes(key)||
+                      if(["propertyItemId","authorizationId","evidenceDocumentId"].includes(key)||
+                         (["register_property_item","record_property_custody"].includes(action)&&key==="documentId")||
                          (action==="record_employer_return"&&key==="documentId")){
                         const values=choice(key)||[];
                         return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
                           values.map(([id,label])=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>').join('')+'</div></fieldset>';
+                      }
+                      if(["register_property_item","record_property_custody"].includes(action)&&
+                         ["propertyType","eventType"].includes(key)){
+                        const values=options[key]||[];
+                        return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
+                          values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+'</div></fieldset>';
                       }
                       if(action==="record_employer_return"&&key==="employmentStatus"){
                         return '<fieldset class="ca-ser-choice"><legend>Employer reported status</legend><div class="ca-ser-choice-options">'+

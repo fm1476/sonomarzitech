@@ -274,6 +274,12 @@ window.CaliforniaCivilView = (() => {
             e.employerName,e.employmentStatus,date(e.orderServedDate),date(e.returnReceivedDate),
             date(e.dueDate),e.receivedAfterGuidanceDate?"Received after guidance date":"Received within guidance date",
             e.employerReference]),"No employer returns recorded.")):''}
+      ${(c.propertyItems||[]).length?section("Property inventory and custody",
+        table(["Property","Category","Current custodian","Current location","Custody events","Authority"],
+          (c.propertyItems||[]).map(item=>[
+            item.description,item.propertyType,item.currentCustodian||"Not recorded",
+            item.currentLocation,String(item.custodyEvents.length),item.inventoryReference
+          ]),"No property items recorded.")):''}
       ${section(
         "Enforcement actions",
         table(
