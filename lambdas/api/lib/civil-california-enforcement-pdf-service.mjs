@@ -24,7 +24,7 @@ export async function generateCaliforniaEnforcementUnsignedDraft(record,formCode
  const mappings=JSON.parse(await readFile(mappingUrl,'utf8'));
  const info=manifest[formCode],mapping=mappings[formCode];
  if(!info?.templateSha256||!mapping)throw Error('Official PDF template approval is missing.');
- const templateBytes=await readFile(new URL('../templates/civil/'+basename[formCode]+'.pdf',import.meta.url));
+ const templateBytes=await readFile(new URL('../templates/civil/'+basename[formCode]+'-normalized.pdf',import.meta.url));
  const fields={
   caseNumber:requireText(record.caseNumber,'Case number'),
   plaintiff:requireText(record.plaintiff,'Plaintiff'),
@@ -66,7 +66,7 @@ export async function generateCaliforniaEnforcementUnsignedDraft(record,formCode
   fields.levyingOfficer=requireText(params.levyingOfficer,'Levying officer');
  }
  return renderMappedCaliforniaCourtDraft({
-  templateBytes,expectedTemplateSha256:info.templateSha256,
+  templateBytes,expectedTemplateSha256:info.normalizedSha256,
   fields,mapping,formCode
  });
 }
