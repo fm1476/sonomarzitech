@@ -30,6 +30,7 @@ jobs:
           node tests/civil-ser-review.test.mjs
           node tests/civil-california-domain.test.mjs
           node tests/civil-california-multi-recipient.test.mjs
+          node tests/civil-california-sheriff-sale.test.mjs
           node tests/civil-california-safety-flags.test.mjs
           node tests/civil-record-ui.test.mjs
           node tests/civil-shared-board.test.mjs
