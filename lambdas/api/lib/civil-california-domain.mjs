@@ -175,6 +175,7 @@ export function createCaliforniaCase(input, ctx) {
       disbursements: [],
       enforcement: [],
       enforcementAuthorizations: [],
+      employerReturns: [],
       saleProcess: null,
       intakeDetails: {},
       returnPacket: null,
@@ -1167,6 +1168,37 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     authorization.reviewReference=payload.reviewReference;
     authorization.noticeReviewReference=payload.noticeReviewReference;
     authorization.status="Approved";
+  } else if(command==="record_employer_return"){
+    permission(ctx,"civil_paper_intake");
+    note();
+    requireValue(c.workflowId==="earnings-withholding",
+      "Employer returns apply only to earnings-withholding cases.",409);
+    requireValue(["Ready","Assigned","Attempting","Served"].includes(r.stage),
+      "Approve intake before recording the employer's return.",409);
+    liveWrit();
+    requireValue(text(payload.employerName,250)&&text(payload.employerReference,500),
+      "Employer name and employer return reference are required.");
+    requireValue(civilDate(payload.orderServedDate)&&payload.orderServedDate>=r.receivedDate&&
+      payload.orderServedDate<=ctx.today&&civilDate(payload.returnReceivedDate)&&
+      payload.returnReceivedDate>=payload.orderServedDate&&payload.returnReceivedDate<=ctx.today,
+      "Record valid earnings-withholding order service and employer-return receipt dates.");
+    requireValue(["Employed","Not employed","Employment ended","Multiple orders","Other"].includes(payload.employmentStatus),
+      "Select the employer's reported employment status.");
+    if(payload.employmentStatus==="Other")requireValue(text(payload.statusDetails,1000),
+      "Explain the alternative employer-response status.");
+    const proof=c.documents.find(d=>d.id===payload.documentId&&["Other","Court return"].includes(d.kind));
+    requireValue(proof&&/WG[- ]?005|employer.?s? return/i.test(proof.name),
+      "Attach the employer's WG-005 return before recording its response.");
+    c.employerReturns??=[];
+    requireValue(!c.employerReturns.some(e=>e.employerReference===payload.employerReference),
+      "This employer return reference has already been recorded.",409);
+    const dueDate=addCivilDays(payload.orderServedDate,15);
+    c.employerReturns.push({id:ctx.eventId,employerName:payload.employerName,
+      employerReference:payload.employerReference,orderServedDate:payload.orderServedDate,
+      returnReceivedDate:payload.returnReceivedDate,employmentStatus:payload.employmentStatus,
+      statusDetails:payload.statusDetails||"",documentId:proof.id,
+      dueDate,receivedAfterGuidanceDate:payload.returnReceivedDate>dueDate,
+      by:ctx.userId,at:ctx.at});
   } else if (command === "enforcement_event") {
     permission(ctx, "civil_paper_intake");
     note();
@@ -1209,6 +1241,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     );
     if(c.workflowId==="sheriff-sale"&&payload.kind==="Sale")
       requireValue(false,"Use the dedicated sheriff sale notice, approval and outcome workflow.",409);
+    if(c.workflowId==="earnings-withholding"&&payload.kind==="Employer response")
+      requireValue(false,"Record the signed WG-005 employer return in the dedicated Employer Return workflow.",409);
     let approvedAuthorization=null;
     if(["Release","Possession"].includes(payload.kind)){
       approvedAuthorization=(c.enforcementAuthorizations||[]).find(a=>
