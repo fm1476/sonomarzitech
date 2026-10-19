@@ -12,7 +12,9 @@ for(const [code,file] of Object.entries({'WG-002':'wg002.pdf','WG-005':'wg005.pd
  test('official '+code+' binary matches approval manifest and field map',async()=>{
   const bytes=await readFile(new URL(file,home));
   assert.equal(createHash('sha256').update(bytes).digest('hex'),manifest[code].templateSha256);
-  const doc=await PDFDocument.load(bytes);
+  const normalized=await readFile(new URL(file.replace('.pdf','-normalized.pdf'),home));
+  assert.equal(createHash('sha256').update(normalized).digest('hex'),manifest[code].normalizedSha256);
+  const doc=await PDFDocument.load(normalized);
   assert.equal(doc.getPageCount(),manifest[code].pages);
   assert.equal(doc.getForm().getFields().length,manifest[code].fields);
   const actual=new Set(doc.getForm().getFields().map(f=>f.getName()));
