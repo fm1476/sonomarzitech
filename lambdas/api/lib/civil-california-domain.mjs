@@ -637,6 +637,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     r.assignedServerId = payload.personId;
     r.stage = "Assigned";
   } else if (command === "attempt") {
+    requireValue(!targets.length,"Use recipient-specific attempts for this case.",409);
     permission(ctx, "civil_paper_log_attempt");
     requireValue(
       own || ctx.admin || can(ctx, "civil_paper_intake"),
