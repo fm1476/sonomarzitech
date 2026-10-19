@@ -3,7 +3,7 @@ import {writeFile,readFile} from 'node:fs/promises';
 import pdfLib from '../lambdas/api/node_modules/pdf-lib/cjs/index.js';
 const {PDFDocument,PDFName}=pdfLib;
 const manifest=JSON.parse(await readFile(new URL('../lambdas/api/templates/civil/manifest.json',import.meta.url),'utf8'));
-import {generateCaliforniaReturnDraft} from '../lambdas/api/lib/civil-california-returns.mjs';
+import {generateCaliforniaReturnDraft,generateCaliforniaTargetReturnDraft} from '../lambdas/api/lib/civil-california-returns.mjs';
 import {CivilError} from '../lambdas/api/lib/civil-california-domain.mjs';
 const input={serverName:'Demo Officer',serverAddress:'123 Training Lane',serverPhone:'555-0100',smallClaimsDocument:'SC-100',courtStreet:'600 Example Drive',courtCityZip:'Sonoma CA 95476',courtBranch:'Fictional Training Court'};
 for(const workflowId of ['summons','small-claims']){
@@ -48,4 +48,23 @@ for(const [code,method] of [['POS-020','Personal service'],['POS-030','First-cla
  await assert.rejects(()=>generateCaliforniaReturnDraft({...record,california:{...record.california,service:{...record.california.service,method:method==='First-class mail'?'Personal service':'First-class mail'}}},details),/requires|supports/);
  if(process.env.CIVIL_PDF_QA_DIR)await writeFile(process.env.CIVIL_PDF_QA_DIR+'/'+code+'-unsigned.pdf',bytes);
 }
+const individual={
+ id:'22222222-2222-4222-8222-222222222222',caseNumber:'CASE-MULTI-01',
+ courtOfOrigin:'Fictional Court',plaintiff:'Fictional Plaintiff',defendant:'Main Defendant',
+ stage:'Attempting',california:{county:'Sonoma',workflowId:'summons',serviceTargets:[
+ {id:'recipient-1',name:'Defendant Alpha',status:'Served',outcome:{
+   status:'Served',method:'Personal service',recipient:'Defendant Alpha',
+   address:'123 Demo Way',date:'2026-10-17',time:'12:05'}},
+ {id:'recipient-2',name:'Defendant Beta',status:'Unable to Serve',
+   outcome:{status:'Unable to Serve',reasonCode:'Unable to locate'}}]}};
+const generated=await generateCaliforniaTargetReturnDraft(individual,{...input,targetId:'recipient-1',formCode:'POS-010'});
+assert.equal(generated.formName,'POS-010');
+assert.ok(generated.filename.includes('recipient-1'));
+const targetPdf=await PDFDocument.load(Buffer.from(generated.base64,'base64'));
+assert.ok(targetPdf.getForm().getFields().some(field=>typeof field.getText==='function'&&field.getText()==='Defendant Alpha'));
+assert.equal(individual.stage,'Attempting','PDF generation cannot change case status');
+await assert.rejects(()=>generateCaliforniaTargetReturnDraft(individual,{...input,targetId:'recipient-2',formCode:'POS-010'}),/completed service/);
+await assert.rejects(()=>generateCaliforniaTargetReturnDraft({...individual,california:{...individual.california,
+ serviceTargets:[{...individual.california.serviceTargets[0],outcome:{...individual.california.serviceTargets[0].outcome,recipient:'Agent Person'}}]}},
+ {...input,targetId:'recipient-1',formCode:'POS-010'}),/agent\/entity proof/);
 console.log('California return drafts: official editable POS-010/SC-104 fields, XFA removal, blank signatures/certifications and overflow rejection passed.');

@@ -7,6 +7,24 @@ const templateUrls = {
   summons: new URL("../templates/civil/pos010.pdf", import.meta.url),
   "small-claims": new URL("../templates/civil/sc104.pdf", import.meta.url),
 };
+// Produce an unsigned official template for one independently recorded service
+// target. The synthetic snapshot is used for PDF rendering only; case facts
+// are not altered and agent/substitute service remains subject to form gates.
+export async function generateCaliforniaTargetReturnDraft(record,input){
+  const target=record.california?.serviceTargets?.find(t=>t.id===input?.targetId);
+  if(!target)throw new CivilError("Choose a recipient on this case.",404);
+  if(target.status!=="Served"||target.outcome?.status!=="Served")
+    throw new CivilError("Record completed service on this recipient before generating a court form.",409);
+  const outcome=target.outcome;
+  if(outcome.recipient?.trim().toLocaleLowerCase()!==target.name.trim().toLocaleLowerCase())
+    throw new CivilError("The recorded recipient differs from the named service target. Verify the actual person and legal capacity, and use an applicable agent/entity proof of service rather than forcing a direct-service draft.",409);
+  const snapshot={...record,defendant:target.name,stage:"Served",
+    california:{...record.california,service:{
+      method:outcome.method,recipient:outcome.recipient,address:outcome.address,
+      date:outcome.date,time:outcome.time}}};
+  const draft=await generateCaliforniaReturnDraft(snapshot,input);
+  return {...draft,filename:"recipient-"+target.id+"-"+draft.filename};
+}
 export async function generateCaliforniaReturnDraft(record, input) {
   if(["POS-020","POS-030","POS-040"].includes(input?.formCode))return generateAdditionalCaliforniaPosDraft(record,input);
   const c = record.california,

@@ -20,6 +20,13 @@ r=go(r,'approve_intake');
 r=go(r,'assign',{personId:'officer-1'});
 fail(r,'serve',{date:'2026-10-18',time:'10:00',recipient:'Respondent One',address:'123 Demo Lane',method:'Personal service'},/recipient-specific/);
 r=go(r,'target_serve',{targetId:one,date:'2026-10-18',time:'10:00',recipient:'Respondent One',address:'123 Demo Lane',method:'Personal service'});
+fail(r,'generate_target_return_draft',{targetId:one,formCode:'POS-010',pdfHash:'bogus',templateHash:'bogus'},/authenticated server-generated/);
+r=go(r,'generate_target_return_draft',{targetId:one,formCode:'POS-010',
+  pdfHash:'a'.repeat(64),templateHash:'b'.repeat(64)});
+assert.equal(r.california.draftReturns.at(-1).targetId,one);
+assert.equal(r.california.draftReturns.at(-1).unsigned,true);
+fail(r,'generate_target_return_draft',{targetId:two,formCode:'POS-010',
+  pdfHash:'a'.repeat(64),templateHash:'b'.repeat(64)},/completed service/);
 fail(r,'prepare_return',{formName:'POS-010',reference:'Packet'},/separately/);
 fail(r,'target_unserved',{targetId:two,reasonCode:'Unable to locate',attemptsSummary:'No contact'},/attempt/);
 r=go(r,'target_attempt',{targetId:two,date:'2026-10-18',time:'11:00',result:'No contact'});
