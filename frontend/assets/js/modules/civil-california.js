@@ -154,7 +154,7 @@ window.CaliforniaCivil = (() => {
       "approvalReference",
     ],
     receipt: ["kind", "amountCents:money", "payer", "reference"],
-    release_collection: ["collectionId","county","earliestReleaseDate:date","policyVersion","authorityReference","reviewNote"],
+    release_collection: ["collectionId","county","earliestReleaseDate:date","policyVersion","authorityReference","authorityDocumentId","reviewNote"],
     expense: ["amountCents:money", "authority", "reference"],
     request_disbursement: [
       "amountCents:money",
@@ -1805,6 +1805,7 @@ ${SonoMarziCivilRecordUI.styles}
                       .map(a=>[a.id,a.kind+" · "+a.propertyDescription+" · "+a.status])
                     : key === "evidenceDocumentId" ? c.documents.filter(d=>
                       ["Court order","Writ","Other"].includes(d.kind)).map(d=>[d.id,d.kind+" · "+d.name])
+                    : key === "authorityDocumentId" ? c.documents.filter(d=>["Court order","Writ","Other"].includes(d.kind)).map(d=>[d.id,d.kind+" · "+d.name])
                     : key === "collectionId" ? c.ledger.filter(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt).map(e=>[e.id,e.reference+" · "+money(e.amountCents)])
                     : key === "method" && action==="record_sheriff_sale_notice" ?
                       ["Personal service","Mail","Posting","Publication","Other"]
@@ -1987,7 +1988,7 @@ ${SonoMarziCivilRecordUI.styles}
                           values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="kind" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+'</div>'+
                           (action==="enforcement_event"?'<p>Release and possession require a previously approved independent authorization.</p>':'')+'</fieldset>';
                       }
-                      if(["propertyItemId","authorizationId","evidenceDocumentId"].includes(key)||
+                      if(["propertyItemId","authorizationId","evidenceDocumentId","authorityDocumentId"].includes(key)||
                          (["register_property_item","record_property_custody"].includes(action)&&key==="documentId")||
                          (action==="record_employer_return"&&key==="documentId")){
                         const values=choice(key)||[];
