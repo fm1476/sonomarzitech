@@ -289,7 +289,7 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       requireValue(typeof payload.note==='string'&&payload.note.length<=2000,
         'Action note must be no longer than 2,000 characters.');
     if(noteRequiredFor.has(command))
-      requireValue(text(payload.note), 'Explain the decision or exception in the required note.');
+      requireValue(text(payload.note), 'A documented action note is required for this decision or exception.');
   };
   c.deadlines ??= [];
   c.notices ??= [];
