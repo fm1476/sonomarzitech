@@ -174,6 +174,7 @@ export function createCaliforniaCase(input, ctx) {
       ledger: [],
       disbursements: [],
       enforcement: [],
+      enforcementAuthorizations: [],
       saleProcess: null,
       intakeDetails: {},
       returnPacket: null,
@@ -1121,6 +1122,51 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       orderReference: payload.orderReference,
       resolution: payload.note,
     });
+  } else if(command==="request_enforcement_authorization"){
+    permission(ctx,"civil_paper_intake");
+    note();
+    requireValue(["Ready","Assigned","Attempting","Served"].includes(r.stage),
+      "Complete intake before requesting enforcement authorization.",409);
+    liveWrit();
+    requireValue(CA_WORKFLOWS[c.workflowId].writ,
+      "This case is not an enforcement workflow.",409);
+    requireValue(!unclosedHold(r),"An unresolved claim or stay blocks new enforcement authorization.",409);
+    requireValue(["Release","Possession"].includes(payload.kind),
+      "Choose a custody/property release or possession authorization type.");
+    requireValue(text(payload.propertyDescription,2000)&&text(payload.authorityReference,500)&&
+      text(payload.reason,1000),
+      "Record the property, supporting legal authority and purpose of the proposed enforcement action.");
+    const evidence=c.documents.find(d=>d.id===payload.evidenceDocumentId&&
+      ["Court order","Writ","Other"].includes(d.kind));
+    requireValue(evidence,
+      "Attach and select the controlling writ, court order or enforcement evidence.",409);
+    c.enforcementAuthorizations??=[];
+    requireValue(!c.enforcementAuthorizations.some(a=>a.kind===payload.kind&&
+      a.status==="Pending"&&a.propertyDescription===payload.propertyDescription),
+      "An identical proposed enforcement action is already awaiting review.",409);
+    c.enforcementAuthorizations.push({id:ctx.eventId,status:"Pending",kind:payload.kind,
+      propertyDescription:payload.propertyDescription,authorityReference:payload.authorityReference,
+      evidenceDocumentId:evidence.id,reason:payload.reason,requestedBy:ctx.userId,
+      requestedAt:ctx.at,reviewedBy:null,reviewedAt:null,reviewReference:null,consumedAt:null});
+  } else if(command==="approve_enforcement_authorization"){
+    permission(ctx,"civil_paper_intake");
+    note();
+    const authorization=(c.enforcementAuthorizations||[]).find(a=>a.id===payload.authorizationId);
+    requireValue(authorization?.status==="Pending","A pending enforcement authorization is required.",409);
+    requireValue(authorization.requestedBy!==ctx.userId,
+      "A separate authorized reviewer must approve release or possession.",409);
+    liveWrit();
+    requireValue(!unclosedHold(r)&&!c.deadlines.some(d=>!d.completedAt&&
+      ["Notice","Sale","Possession","Exemption/claim"].includes(d.kind)),
+      "Resolve applicable notice, possession and claim deadlines before approval.",409);
+    requireValue(c.documents.some(d=>d.id===authorization.evidenceDocumentId),
+      "The controlling court document is no longer attached.",409);
+    requireValue(text(payload.reviewReference,500)&&text(payload.noticeReviewReference,500),
+      "Record independent review and confirmation of notice/deadline requirements.");
+    authorization.reviewedBy=ctx.userId;authorization.reviewedAt=ctx.at;
+    authorization.reviewReference=payload.reviewReference;
+    authorization.noticeReviewReference=payload.noticeReviewReference;
+    authorization.status="Approved";
   } else if (command === "enforcement_event") {
     permission(ctx, "civil_paper_intake");
     note();
@@ -1163,6 +1209,17 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     );
     if(c.workflowId==="sheriff-sale"&&payload.kind==="Sale")
       requireValue(false,"Use the dedicated sheriff sale notice, approval and outcome workflow.",409);
+    let approvedAuthorization=null;
+    if(["Release","Possession"].includes(payload.kind)){
+      approvedAuthorization=(c.enforcementAuthorizations||[]).find(a=>
+        a.id===payload.authorizationId&&a.status==="Approved"&&a.kind===payload.kind&&!a.consumedAt);
+      requireValue(approvedAuthorization,
+        "An independent, unconsumed enforcement authorization is required for possession or property release.",409);
+      requireValue(c.documents.some(d=>d.id===approvedAuthorization.evidenceDocumentId),
+        "The approved controlling court document must remain attached.",409);
+      requireValue(text(payload.approvalReference)&&payload.approvalReference===approvedAuthorization.reviewReference,
+        "Use the recorded independent authorization reference.",409);
+    }
     if (["Sale", "Possession", "Release"].includes(payload.kind)) {
       requireValue(
         text(payload.approvalReference),
@@ -1180,7 +1237,11 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         409,
       );
     }
+    if(approvedAuthorization){approvedAuthorization.status="Completed";
+      approvedAuthorization.consumedAt=ctx.at;approvedAuthorization.completedBy=ctx.userId;}
     c.enforcement.push({
+      authorizationId:approvedAuthorization?.id||null,
+      evidenceDocumentId:approvedAuthorization?.evidenceDocumentId||null,
       kind: payload.kind,
       date: payload.date,
       description: payload.description,

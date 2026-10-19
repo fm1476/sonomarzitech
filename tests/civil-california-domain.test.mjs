@@ -87,6 +87,26 @@ fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDat
 levy=step(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'sample-policy-2026',authorityReference:'Court authorization test',reviewNote:'Fictional authorized release after all claims resolved'},{...ctx,userId:'second-reviewer'});
 assert.equal(levy.california.ledger[0].releaseReviewedBy,'second-reviewer');
 levy=step(levy,'expense',{amountCents:100,authority:'Reviewed',reference:'EXP-AFTER-RELEASE'});
+// Court-backed possession / property release cannot be recorded merely by
+// typing an approval reference. Independent authorization and evidence are required.
+let possession=ready('possession');
+fails(possession,'enforcement_event',{kind:'Possession',date:'2026-10-17',description:'Demo possession',authorityReference:'Writ',approvalReference:'typed by preparer'},ctx,/independent.*authorization/);
+possession=step(possession,'attach_document',{kind:'Court order',name:'signed-possession-order.pdf',key:'demo-possession-order'});
+const evidenceDocumentId=possession.california.documents.at(-1).id;
+possession=step(possession,'request_enforcement_authorization',{kind:'Possession',propertyDescription:'Fictional unit 1',
+  authorityReference:'Court order',reason:'Possession authorized by reviewed order',evidenceDocumentId});
+const authorizationId=possession.california.enforcementAuthorizations.at(-1).id;
+fails(possession,'approve_enforcement_authorization',{authorizationId,reviewReference:'Supervisor-1',noticeReviewReference:'Notice checked'},ctx,/separate authorized reviewer/);
+possession=step(possession,'approve_enforcement_authorization',{authorizationId,reviewReference:'Supervisor-1',
+  noticeReviewReference:'Court notices verified'},{...ctx,userId:'independent-supervisor'});
+fails(possession,'enforcement_event',{authorizationId,kind:'Possession',date:'2026-10-17',
+  description:'Fictional possession',authorityReference:'Order',approvalReference:'wrong-reference'},ctx,/independent authorization reference/);
+possession=step(possession,'enforcement_event',{authorizationId,kind:'Possession',date:'2026-10-17',
+  description:'Fictional possession',authorityReference:'Order',approvalReference:'Supervisor-1'});
+assert.equal(possession.california.enforcementAuthorizations[0].status,'Completed');
+assert.equal(possession.california.enforcement.at(-1).evidenceDocumentId,evidenceDocumentId);
+fails(possession,'enforcement_event',{authorizationId,kind:'Possession',date:'2026-10-17',
+  description:'Duplicate event',authorityReference:'Order',approvalReference:'Supervisor-1'},ctx,/unconsumed enforcement authorization/);
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
 // An unsigned generated working copy must never count as a signed proof of service.
