@@ -99,6 +99,11 @@ window.CaliforniaCivil = (() => {
       "methodDescription",
     ],
     unserved: ["reasonCode","reasonDetail","attemptsSummary"],
+    generate_target_return_draft: [
+      "targetId","serverName","serverAddress","serverPhone","attorneyPartyInfo","attorneyPhone",
+      "attorneyEmail","courtStreet","courtCityZip","courtBranch","smallClaimsDocument",
+      "formCode","documentsServed","mailingCityState","mailingMethod"
+    ],
     generate_return_draft: [
       "serverName",
       "serverAddress",
@@ -164,6 +169,7 @@ window.CaliforniaCivil = (() => {
     cancel: [],
   };
   const labels = {
+    generate_target_return_draft: "Generate recipient's unsigned court form",
     generate_return_draft: "Generate unsigned court form",
     reopen_return: "Reopen return for correction",
     deadline: "Track deadline",
@@ -1595,6 +1601,10 @@ ${SonoMarziCivilRecordUI.styles}
               "notice",
               ...(c.workflowId==="sheriff-sale"&&c.saleProcess?.status==="Scheduled"?["record_sheriff_sale_notice"]:[]),
               ...(canDraft && !(c.serviceTargets||[]).length ? ["generate_return_draft"] : []),
+              ...((c.serviceTargets||[]).some(t=>t.status==="Served"&&
+                t.outcome?.recipient?.trim().toLowerCase()===t.name?.trim().toLowerCase()&&
+                ["Personal service","First-class mail"].includes(t.outcome?.method))?
+                ["generate_target_return_draft"]:[]),
               ...((c.serviceTargets||[]).some(t=>["Served","Unable to Serve"].includes(t.status)&&!t.returnPacket)?["prepare_target_return"]:[]),
               ...((c.serviceTargets||[]).some(t=>t.returnPacket?.status==="Reviewed")?["record_target_return"]:[]),
               ...(["Served", "Unable to Serve"].includes(r.stage) && !(c.serviceTargets||[]).length
@@ -1797,6 +1807,9 @@ ${SonoMarziCivilRecordUI.styles}
                     : key === "method" && action==="record_sheriff_sale_notice" ?
                       ["Personal service","Mail","Posting","Publication","Other"]
                     : key === "targetId" ? (c.serviceTargets||[]).filter(t=>
+                        action==="generate_target_return_draft"?
+                          t.status==="Served"&&["Personal service","First-class mail"].includes(t.outcome?.method)&&
+                          t.outcome.recipient?.trim().toLowerCase()===t.name?.trim().toLowerCase():
                         action==="remove_service_target"?t.status==="Pending":
                         action==="target_attempt"||action==="target_serve"||action==="target_unserved"?["Pending","Attempting"].includes(t.status):
                         action==="prepare_target_return"?["Served","Unable to Serve"].includes(t.status)&&!t.returnPacket:
@@ -1876,8 +1889,11 @@ ${SonoMarziCivilRecordUI.styles}
                                           "Remittance",
                                         ]
                                 : undefined;
-                const draftContext=action==="generate_return_draft" ? (()=>{
-                  const service=c.service||{};
+                const draftContext=["generate_return_draft","generate_target_return_draft"].includes(action) ? (()=>{
+                  const firstTarget=action==="generate_target_return_draft"?
+                    (c.serviceTargets||[]).find(t=>t.status==="Served"&&
+                      t.outcome?.recipient?.trim().toLowerCase()===t.name?.trim().toLowerCase()):null;
+                  const service=firstTarget?.outcome||c.service||{};
                   const facts=[
                     ["Official form",c.workflowId==="summons"?"POS-010":c.workflowId==="small-claims"?"SC-104":c.service?.method==="First-class mail"?"POS-030":"POS-020 / POS-040"],
                     ["Case number",r.caseNumber],["Court",r.courtOfOrigin],
@@ -1996,9 +2012,10 @@ ${SonoMarziCivilRecordUI.styles}
                           '<div class="ca-assignee-no-results" hidden>No matching people</div></div>'+
                           '</div>'+(!roster.length?'<p class="ca-assignee-empty">No active agency personnel were found. Add personnel in Personnel Administration before assigning this case.</p>':'')+'</div>';
                       }
-                      if(action==="generate_return_draft" && (key==="mailingMethod"||key==="mailingCityState") && c.service?.method!=="First-class mail")
+                      if(["generate_return_draft","generate_target_return_draft"].includes(action) && (key==="mailingMethod"||key==="mailingCityState") &&
+                        !(action==="generate_target_return_draft"?(c.serviceTargets||[]).some(t=>t.status==="Served"&&t.outcome?.method==="First-class mail"):c.service?.method==="First-class mail"))
                         return "";
-                      if(action==="generate_return_draft" && key==="mailingMethod"){
+                      if(["generate_return_draft","generate_target_return_draft"].includes(action) && key==="mailingMethod"){
                         return '<fieldset class="ca-court-mailing-choice"><legend>Mailing Method</legend>'+
                           '<p>Select the method actually used for mailing, as supported by the court form. This is required only for an applicable mail-service draft.</p>'+
                           [['USPS deposit','Deposited with USPS'],['Business collection','Business outgoing-mail collection']].map(([code,label])=>
@@ -2048,7 +2065,7 @@ ${SonoMarziCivilRecordUI.styles}
                       (!narrativeNoteActions.has(action)?'<p>Optional. The action, staff member, timestamp and case status are recorded automatically.</p>':'<p>Required: explain the decision or exception.</p>')+'</div>',
                   async (data) => {
                     const payload = Object.fromEntries(data);
-                    if(action==="generate_return_draft"){
+                    if(["generate_return_draft","generate_target_return_draft"].includes(action)){
                       if(payload.reviewConfirmed!=="yes")throw Error("Confirm that the generated court form will require review and signing.");
                       delete payload.reviewConfirmed;
                     }
@@ -2097,6 +2114,7 @@ ${SonoMarziCivilRecordUI.styles}
                           payload:{
                             name:result.draft.filename,key:uploaded.storageKey,
                             kind:"Unsigned return draft",
+                            targetId:action==="generate_target_return_draft"?payload.targetId:null,
                             note:"Archived unsigned "+result.draft.formName+" working copy; SHA-256 "+result.draft.sha256
                           }
                         },scope);
