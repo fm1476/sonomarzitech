@@ -25,6 +25,12 @@ r=go(r,'generate_target_return_draft',{targetId:one,formCode:'POS-010',
   pdfHash:'a'.repeat(64),templateHash:'b'.repeat(64)});
 assert.equal(r.california.draftReturns.at(-1).targetId,one);
 assert.equal(r.california.draftReturns.at(-1).unsigned,true);
+r=go(r,'attach_document',{kind:'Unsigned return draft',name:'POS-010-target.pdf',
+  key:'draft-target-one',targetId:one});
+assert.equal(r.california.documents.at(-1).targetId,one);
+assert.equal(r.california.documents.at(-1).kind,'Unsigned return draft');
+fail(r,'attach_document',{kind:'Unsigned return draft',name:'invalid-target.pdf',
+  key:'draft-wrong-target',targetId:'unknown'},/recipient not found/);
 fail(r,'generate_target_return_draft',{targetId:two,formCode:'POS-010',
   pdfHash:'a'.repeat(64),templateHash:'b'.repeat(64)},/completed service/);
 fail(r,'prepare_return',{formName:'POS-010',reference:'Packet'},/separately/);
