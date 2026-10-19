@@ -18,4 +18,8 @@ for(const [section,fields] of [['ser001',SER001_FIELDS],['ser001a',SER001A_FIELD
   const portion=ui.slice(ui.indexOf('  const serReviewFields='),ui.indexOf('  const narrativeNoteActions'));
   for(const [key] of fields)assert.ok(portion.includes("['"+key+"'"),'UI missing '+section+' '+key);
 }
+assert.match(ui,/\['serviceTargetType','Recipient Type',\['Person','Entity'\]\]/);
+assert.match(ui,/\['serviceAddressType','Service Location Type',\['Home','Business','Other'\]\]/);
+assert.match(ui,/\['documentsDescription','Documents to Be Served'\]/);
+assert.ok(ui.includes('.ca-ser-review .form-row input,.ca-classic .ca-ser-review .form-row select{margin-top:auto'),'Inputs must align along the bottoms of their grid rows');
 console.log('SER-001 / SER-001A structured intake review rules and UI schema parity passed.');
