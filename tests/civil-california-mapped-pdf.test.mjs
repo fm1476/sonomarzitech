@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {PDFDocument} from '../lambdas/api/node_modules/pdf-lib/dist/pdf-lib.esm.js';
+import pdfLib from '../lambdas/api/node_modules/pdf-lib/cjs/index.js';
+const {PDFDocument}=pdfLib;
 import {renderMappedCaliforniaCourtDraft} from '../lambdas/api/lib/civil-california-mapped-pdf.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 async function fixture(){
