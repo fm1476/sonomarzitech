@@ -1358,7 +1358,7 @@ ${SonoMarziCivilRecordUI.styles}
             const found=formSources[code];
             return '<article class="ca-form-resource"><span class="ca-form-code">'+esc(code)+'</span><strong>'+esc(found?.[0]||"Agency or process-specific return")+'</strong>'+
               (found?'<a class="btn btn-outline" href="'+found[1]+'" target="_blank" rel="noopener noreferrer">View official form ↗</a>':'<span class="ca-form-notice">Confirm the approved form or local return template for this process.</span>')+'</article>';
-          }).join('')+'</div><p class="ca-form-disclaimer">Form links open California Courts resources. Unsigned prefill is available for qualifying personally served summons and small-claims cases only. All generated drafts require review and signature before filing.</p>';
+          }).join('')+'</div><p class="ca-form-disclaimer">Official form links open California Courts resources. Supported proof-of-service and enforcement forms can be prepared as unsigned working drafts. Verify legal requirements, declarations and signatures before official use.</p>';
         formLibrary.hidden=true;
         // Court forms are a working area, not a dead-end: provide an explicit
         // route to attach the reviewed and signed proof before return preparation.
