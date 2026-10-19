@@ -1,3 +1,4 @@
+import {validateSerIntake,normalizeSerIntake,serReviewRequiredForms,CA_SER_INTAKE_VERSION} from './civil-california-ser-review.mjs';
 // California case-management workflow. Legal dates and fee authority are entered
 // from reviewed court packets; this engine never invents statutory deadlines.
 export const CA_RULE_VERSION = "2026.01.0";
@@ -211,6 +212,10 @@ function intakeReady(record) {
     text(details.formReviewReference),
     "Record the packet/form review reference.",
   );
+  // Required source data is retained and validated, not just a "forms reviewed" checkbox.
+  // Existing approved cases remain unchanged; new approvals require completed evidence.
+  const missingSer=validateSerIntake(details,workflow.forms,c.documents);
+  requireValue(missingSer.length===0,missingSer[0]||"Structured sheriff intake review is incomplete.");
   if (workflow.writ) {
     requireValue(
       civilDate(details.issuedDate) && civilDate(details.writExpirationDate),
@@ -272,8 +277,20 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
   const own = r.assignedServerId === ctx.personId;
   const mayWork = ctx.admin || can(ctx, "civil_paper_view_all") || own;
   requireValue(mayWork, "This case is not assigned to you.", 403);
-  const note = () =>
-    requireValue(text(payload.note), "A documented action note is required.");
+  // Structured actions already have actor, timestamp, before/after stage and entered facts
+  // in the audit log. Require narrative only for sensitive discretionary decisions.
+  const noteRequiredFor=new Set([
+    'retire_safety_flag','remove_document','replace_document','reopen_return',
+    'cancel','hold','resolve_hold','approve_disbursement','record_disbursement',
+    'reconcile','enforcement_event','expense'
+  ]);
+  const note=()=>{
+    if(payload.note!==undefined)
+      requireValue(typeof payload.note==='string'&&payload.note.length<=2000,
+        'Action note must be no longer than 2,000 characters.');
+    if(noteRequiredFor.has(command))
+      requireValue(text(payload.note), 'Explain the decision or exception in the required note.');
+  };
   c.deadlines ??= [];
   c.notices ??= [];
   const disbursementReady = () =>
@@ -349,6 +366,19 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         );
         c.intakeDetails[key] = payload[key].trim();
       }
+    const requiredSer=serReviewRequiredForms(CA_WORKFLOWS[c.workflowId].forms);
+    for(const section of ['ser001','ser001a']){
+      if(payload[section]===undefined)continue;
+      requireValue(section==='ser001'?requiredSer.ser001:requiredSer.ser001a,
+        'This sheriff instruction form does not apply to the selected workflow.');
+      let sanitized;
+      try{sanitized=normalizeSerIntake(payload[section]);}
+      catch(e){throw new CivilError(e.message);}
+      c.intakeDetails[section]={...(c.intakeDetails[section]||{}),...sanitized};
+      c.intakeDetails[section+'ReviewedBy']=ctx.userId;
+      c.intakeDetails[section+'ReviewedAt']=ctx.at;
+      c.intakeDetails[section+'SourceVersion']=CA_SER_INTAKE_VERSION;
+    }
     if (payload.reviewedForms !== undefined) {
       requireValue(
         Array.isArray(payload.reviewedForms) &&
