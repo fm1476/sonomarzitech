@@ -886,6 +886,26 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       by:ctx.userId,reasonCode:payload.reasonCode,reasonDetail:payload.reasonDetail||"",
       attemptsSummary:payload.attemptsSummary,at:ctx.at,note:payload.note||""
     };
+  } else if(command==="generate_enforcement_draft"){
+    permission(ctx,"civil_document_generate");
+    note();
+    requireValue(["WG-002","EJ-150","WG-005","WG-006"].includes(payload.formCode),
+      "Choose a supported unsigned enforcement form.",409);
+    const applicable={
+      "WG-002":["earnings-withholding"],
+      "WG-005":["earnings-withholding"],
+      "WG-006":["earnings-withholding"],
+      "EJ-150":["bank-levy","personal-property-levy","real-property-levy","execution"]
+    };
+    requireValue(applicable[payload.formCode].includes(c.workflowId),
+      "This form is not allowed for this workflow.",409);
+    requireValue(/^[a-f0-9]{64}$/.test(payload.pdfHash||"")&&
+      /^[a-f0-9]{64}$/.test(payload.templateHash||""),
+      "An authenticated generated draft is required.",409);
+    c.draftReturns??=[];
+    c.draftReturns.push({id:ctx.eventId,formName:payload.formCode,
+      sha256:payload.pdfHash,templateSha256:payload.templateHash,
+      unsigned:true,by:ctx.userId,at:ctx.at});
   } else if(command==="generate_target_return_draft"){
     permission(ctx,"civil_document_generate");
     note();

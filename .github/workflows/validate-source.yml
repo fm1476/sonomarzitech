@@ -25,6 +25,11 @@ jobs:
       - name: Install API dependencies for official return template checks
         run: npm ci --prefix lambdas/api --ignore-scripts --no-audit --no-fund
 
+      - name: Normalize official encrypted PDFs for PDF regression checks
+        run: |
+          python -m pip install --disable-pip-version-check pymupdf==1.26.7
+          python scripts/normalize-ca-court-templates.py
+
       - name: Verify California PostgreSQL and staff forms
         run: |
           node tests/civil-ser-review.test.mjs
@@ -40,6 +45,11 @@ jobs:
           node tests/civil-california-presentation.test.mjs
           mkdir -p artifacts/civil-pdf
           CIVIL_PDF_QA_DIR=artifacts/civil-pdf node tests/civil-california-returns.test.mjs
+          node tests/civil-california-pdf-intake.test.mjs
+          node tests/civil-california-mapped-pdf.test.mjs
+          node tests/civil-california-uploaded-forms.test.mjs
+          node tests/civil-california-form-preparation.test.mjs
+          node tests/civil-california-enforcement-forms.test.mjs
 
       - name: Preserve example unsigned Judicial Council form drafts
         if: always()
