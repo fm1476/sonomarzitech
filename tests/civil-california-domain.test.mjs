@@ -124,6 +124,26 @@ assert.equal(wg.california.employerReturns[0].receivedAfterGuidanceDate,true);
 fails(wg,'record_employer_return',{employerName:'Demo Employer',employerReference:'EMP-1',
   orderServedDate:'2026-10-17',returnReceivedDate:'2026-11-10',employmentStatus:'Employed',
   documentId:wgDoc},employerReviewDay,/already been recorded/);
+// Evidence-linked chain of property custody is recorded per asset.
+let asset=ready('personal-property-levy');
+fails(asset,'register_property_item',{propertyType:'Personal property',description:'Fictional electronics',location:'Storage A',inventoryReference:'INV-1',documentId:'missing'},ctx,/Link a writ/);
+asset=step(asset,'attach_document',{kind:'Other',name:'inventory-signed.pdf',key:'inventory-proof'});
+const inventoryDoc=asset.california.documents.at(-1).id;
+asset=step(asset,'register_property_item',{propertyType:'Personal property',description:'Fictional electronics',
+  location:'Storage A',inventoryReference:'INV-1',documentId:inventoryDoc});
+const assetId=asset.california.propertyItems[0].id;
+fails(asset,'record_property_custody',{propertyItemId:assetId,eventType:'Transferred',
+  date:'2026-10-17',custodian:'Property technician',location:'Locker 4',
+  chainOfCustodyReference:'CHAIN-1',documentId:inventoryDoc},ctx,/initial custody/);
+asset=step(asset,'record_property_custody',{propertyItemId:assetId,eventType:'Received',
+  date:'2026-10-17',custodian:'Deputy One',location:'Temporary evidence locker',
+  chainOfCustodyReference:'CHAIN-1',documentId:inventoryDoc});
+asset=step(asset,'record_property_custody',{propertyItemId:assetId,eventType:'Transferred',
+  date:'2026-10-17',custodian:'Property technician',location:'Locker 4',
+  chainOfCustodyReference:'CHAIN-2',documentId:inventoryDoc});
+assert.equal(asset.california.propertyItems[0].currentCustodian,'Property technician');
+assert.equal(asset.california.propertyItems[0].custodyEvents[1].fromCustodian,'Deputy One');
+fails(asset,'remove_document',{documentId:inventoryDoc,note:'Try remove custody evidence'},ctx,/property register/);
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
 // An unsigned generated working copy must never count as a signed proof of service.
