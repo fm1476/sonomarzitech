@@ -1847,7 +1847,7 @@ ${SonoMarziCivilRecordUI.styles}
                         const required=context.workflows[c.workflowId]?.forms||[];
                         const checked=new Set(Array.isArray(value)?value:[]);
                         return '<fieldset class="ca-reviewed-forms"><legend>Reviewed Forms</legend>'+
-                          '<p class="ca-reviewed-help">Select each required document after you have reviewed it against the court packet. Selecting a form records your review, not its legal approval.</p>'+
+                          '<p class="ca-reviewed-help">Select reviewed documents from the actual packet. WG-015/EJ-135 is conditionally required for a personal-debt judgment; it is not universally mandatory for every levy. Selecting a form records review, not legal approval.</p>'+
                           (required.length?required.map(code=>{
                             const details=formSources[code]||[code,null];
                             return '<label class="ca-reviewed-option"><input type="checkbox" name="reviewedForms" value="'+esc(code)+'" '+(checked.has(code)?'checked':'')+'>'+
@@ -1880,7 +1880,7 @@ ${SonoMarziCivilRecordUI.styles}
                               '<input type="text" name="'+section+'__'+key+'" maxlength="2000" value="'+esc(c.intakeDetails?.[section]?.[key]||'')+'">')+
                             '</label>').join('')+'</fieldset>'
                         ).join('') : '')+
-                    '<div class="ca-action-note">'+input("note").replace('>Note<',narrativeNoteActions.has(action)?'>Reason (required)<':'>Optional Comments<')+
+                    '<div class="ca-action-note">'+input("note").replace('>Note<input',narrativeNoteActions.has(action)?'>Reason (required)<input':'>Optional Comments<input')+
                       (!narrativeNoteActions.has(action)?'<p>Optional. The action, staff member, timestamp and case status are recorded automatically.</p>':'<p>Required: explain the decision or exception.</p>')+'</div>',
                   async (data) => {
                     const payload = Object.fromEntries(data);
