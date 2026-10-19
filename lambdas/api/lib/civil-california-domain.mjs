@@ -648,12 +648,15 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     );
     if(targets.length&&["Proof of service","Court return"].includes(payload.kind))
       targetFor(payload.targetId);
+    if(payload.targetId&&payload.kind==="Unsigned return draft")
+      targetFor(payload.targetId);
     const d = {
       id: ctx.eventId,
       name: payload.name,
       key: payload.key,
       kind: payload.kind,
-      targetId:targets.length&&["Proof of service","Court return"].includes(payload.kind)?payload.targetId:null,
+      targetId:(targets.length&&["Proof of service","Court return"].includes(payload.kind))||
+        (payload.kind==="Unsigned return draft"&&payload.targetId)?payload.targetId:null,
       uploadedBy: ctx.userId,
       at: ctx.at,
     };
