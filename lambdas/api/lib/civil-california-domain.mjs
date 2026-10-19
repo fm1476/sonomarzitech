@@ -204,9 +204,9 @@ function intakeReady(record) {
   );
   requireValue(
     Array.isArray(details.reviewedForms) &&
-      workflow.forms.every((f) => details.reviewedForms.includes(f)),
-    "Review all applicable instruction/declaration forms: " +
-      workflow.forms.join(", "),
+      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||details.ser001a?.personalDebtStatus==='Yes').every(f=>details.reviewedForms.includes(f)),
+    "Review all required instruction/declaration forms for this case, including personal-debt address verification if applicable: " +
+      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||details.ser001a?.personalDebtStatus==='Yes').join(", "),
   );
   requireValue(
     text(details.formReviewReference),
