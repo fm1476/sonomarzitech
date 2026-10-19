@@ -4,7 +4,7 @@ import {californiaEnforcementFormReadiness} from './civil-california-enforcement
 // Employer statements, judicial issuance and declarations must NEVER be inferred.
 const fail=message=>{const e=new Error(message);e.code='CIVIL_FORM_VALIDATION';throw e;};
 const value=(v,max=250)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():'';
-const safeDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&!Number.isNaN(Date.parse(v))?v:'';
+const safeDate=v=>{\n if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(v||''))return '';\n const d=new Date(v+'T00:00:00.000Z');\n return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:'';\n};
 export function prepareCaliforniaEnforcementFormData(record,formCode,options={}){
  const readiness=californiaEnforcementFormReadiness(record,formCode,options);
  const c=record.california;
@@ -26,8 +26,8 @@ export function prepareCaliforniaEnforcementFormData(record,formCode,options={})
   const target=value(notice.levyTarget);
   const writ=value(notice.issuedWritReference);
   const noticeDate=safeDate(notice.noticeDate);
-  if(!target||!writ||!noticeDate)fail('Levy target, court-issued writ reference and notice date are required.');
-  if(c.holds?.some(h=>!h.resolvedAt&&!h.closedAt))fail('Unresolved hold requires review before preparing a levy notice.');
+  if(!target||!writ||!noticeDate)fail('Levy target, court-issued writ reference and valid notice date are required.');
+  if(c.holds?.some(h=>!h.resolvedAt&&!h.closedAt&&!h.releasedAt))fail('Unresolved hold requires review before preparing a levy notice.');
   return {...common,preparedFor:'levying-officer',
     fields:{caseNumber:record.caseNumber,plaintiff:record.plaintiff,defendant:record.defendant,
       county:common.county,levyTarget:target,issuedWritReference:writ,noticeDate,
