@@ -137,6 +137,7 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_result: ["outcome","date:date","authorityReference","resultReference","highBidder","amountCents:money","proceedsReceiptReference","reason"],
     request_enforcement_authorization: ["kind","propertyDescription","authorityReference","reason","evidenceDocumentId"],
     approve_enforcement_authorization: ["authorizationId","reviewReference","noticeReviewReference"],
+    record_employer_return: ["employerName","employerReference","orderServedDate:date","returnReceivedDate:date","employmentStatus","statusDetails","documentId"],
     enforcement_event: [
       "authorizationId",
       "kind",
@@ -191,6 +192,7 @@ window.CaliforniaCivil = (() => {
     record_sheriff_sale_result: "Record sheriff sale outcome",
     request_enforcement_authorization: "Request property release or possession approval",
     approve_enforcement_authorization: "Independently approve enforcement",
+    record_employer_return: "Record WG-005 employer return",
     enforcement_event: "Record enforcement action",
     receipt: "Record receipt",
     release_collection: "Review and release levy collection",
@@ -209,6 +211,7 @@ window.CaliforniaCivil = (() => {
       .replace("Cents", "($)");
   const options = {
     reasonCode: ["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"],
+    employmentStatus: ["Employed","Not employed","Employment ended","Multiple orders","Other"],
     propertyType: ["Real property","Personal property"],
     outcome: ["Sold","No bids","Postponed","Cancelled"],
     personalDebtStatus: ["Yes","No"],
@@ -1557,7 +1560,9 @@ ${SonoMarziCivilRecordUI.styles}
               ...(c.holds.some((h) => !h.resolvedAt) ? ["resolve_hold"] : []),
               ...(context.workflows[c.workflowId].writ &&
               ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
-                ? ["enforcement_event","request_enforcement_authorization",
+                ? ["enforcement_event",
+                  ...(c.workflowId==="earnings-withholding"?["record_employer_return"]:[]),
+                  "request_enforcement_authorization",
                    ...((c.enforcementAuthorizations||[]).some(a=>a.status==="Pending")?["approve_enforcement_authorization"]:[]),
                    ...(c.workflowId==="sheriff-sale"
                      ? !c.saleProcess||["Postponed","Cancelled"].includes(c.saleProcess.status)?["schedule_sheriff_sale"]:
@@ -1795,7 +1800,9 @@ ${SonoMarziCivilRecordUI.styles}
                           .filter((d) => !d.completedAt)
                           .map((d) => [d.id, d.title + " · " + d.dueDate])
                       : key === "documentId"
-                        ? c.documents.filter(d=>action!=="prepare_target_return"||["Proof of service","Court return"].includes(d.kind)).map((d) => [
+                        ? c.documents.filter(d=>action==="record_employer_return"?
+                           /WG[- ]?005|employer.?s? return/i.test(d.name):
+                           action!=="prepare_target_return"||["Proof of service","Court return"].includes(d.kind)).map((d) => [
                             d.id,
                             d.kind + " · " + d.name,
                           ])
@@ -1952,10 +1959,16 @@ ${SonoMarziCivilRecordUI.styles}
                           values.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="kind" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+'</div>'+
                           (action==="enforcement_event"?'<p>Release and possession require a previously approved independent authorization.</p>':'')+'</fieldset>';
                       }
-                      if(["authorizationId","evidenceDocumentId"].includes(key)){
+                      if(["authorizationId","evidenceDocumentId"].includes(key)||
+                         (action==="record_employer_return"&&key==="documentId")){
                         const values=choice(key)||[];
                         return '<fieldset class="ca-ser-choice"><legend>'+esc(name(key))+'</legend><div class="ca-ser-choice-options">'+
                           values.map(([id,label])=>'<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>').join('')+'</div></fieldset>';
+                      }
+                      if(action==="record_employer_return"&&key==="employmentStatus"){
+                        return '<fieldset class="ca-ser-choice"><legend>Employer reported status</legend><div class="ca-ser-choice-options">'+
+                          options.employmentStatus.map(v=>'<label class="ca-ser-choice-option"><input type="radio" name="employmentStatus" value="'+esc(v)+'"><span>'+esc(v)+'</span></label>').join('')+
+                          '</div></fieldset>';
                       }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
