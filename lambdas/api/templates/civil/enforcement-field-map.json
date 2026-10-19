@@ -1,0 +1,43 @@
+{
+  "EJ-150": {
+    "caseNumber": "EJ-150[0].Page1[0].p1Caption[0].caseNumber[0].CaseNumber[0]",
+    "plaintiff": "EJ-150[0].Page1[0].p1Caption[0].TitlePartyName[0].Party1[0]",
+    "defendant": "EJ-150[0].Page1[0].p1Caption[0].TitlePartyName[0].Party2[0]",
+    "county": "EJ-150[0].Page1[0].p1Caption[0].CourtInfo[0].CrtCounty[0]",
+    "levyingOfficer": "EJ-150[0].Page1[0].p1Caption[0].LevyOfcrInfo_sf[0].LevyOfcrIInfo1_ft[0]",
+    "debtor": "EJ-150[0].Page1[0].List1[0].Item1[0].lia[0].JudgmentDebtorName[0]",
+    "personNotified": "EJ-150[0].Page1[0].PersonNotified[0]",
+    "propertyDescription": "EJ-150[0].Page1[0].List1[0].Item1[0].lib[0].DescriptionProperty[0]",
+    "totalDue": "EJ-150[0].Page1[0].List3[0].Item3[0].lia[0].TotalDue_ft[0]",
+    "levyFee": "EJ-150[0].Page1[0].List3[0].Item3[0].lib[0].LevyFee_ft[0]",
+    "sheriffDisbursementFee": "EJ-150[0].Page1[0].List3[0].Item3[0].lic[0].SheriffDisbursementFee_ft[0]",
+    "recoverableCosts": "EJ-150[0].Page1[0].List3[0].Item3[0].lid[0].RecoverableCost_ft[0]",
+    "totalWithFees": "EJ-150[0].Page1[0].List3[0].Item3[0].lie[0].TotalAtoD_ft[0]",
+    "dailyInterest": "EJ-150[0].Page1[0].List3[0].Item3[0].lif[0].DailyINterest_ft[0]"
+  },
+  "WG-002": {
+    "caseNumber": "WG-002[0].Page1[0].P1Caption[0].CaptionSub[0].CaseNumber[0].CaseNumber[0]",
+    "plaintiff": "WG-002[0].Page1[0].P1Caption[0].TitlePartyName[0].Petitioner[0]",
+    "defendant": "WG-002[0].Page1[0].P1Caption[0].TitlePartyName[0].Respondent[0]",
+    "county": "WG-002[0].Page1[0].P1Caption[0].CourtInfo[0].CrtCounty[0]",
+    "levyingOfficer": "WG-002[0].Page1[0].P1Caption[0].CaptionSub[0].LevOfcr[0].LevOfcr[0]",
+    "employer": "WG-002[0].Page1[0].Employer[0].employerName[0].FillText90[0]",
+    "employee": "WG-002[0].Page1[0].Employer[0].employeeName[0].FillText90[0]",
+    "totalDue": "WG-002[0].Page1[0].List2[0].Li2[0].NumericField1[0]",
+    "judgmentDate": "WG-002[0].Page1[0].List3[0].Li3[0].DateField2[0]"
+  },
+  "WG-005": {
+    "caseNumber": "WG-005[0].Page1[0].StdP1Header[0].CaseNumber[0].CaseNumber_ft[0]",
+    "plaintiff": "WG-005[0].Page1[0].StdP1Header[0].TitlePartyName[0].Party1_ft[0]",
+    "defendant": "WG-005[0].Page1[0].StdP1Header[0].TitlePartyName[0].Party2_ft[0]",
+    "county": "WG-005[0].Page1[0].StdP1Header[0].CourtInfo[0].CrtCounty_ft[0]",
+    "levyingOfficer": "WG-005[0].Page1[0].StdP1Header[0].LevOfcrInfo_sf[0].LevOfcrInfo_ft[0]"
+  },
+  "WG-006": {
+    "caseNumber": "WG-006[0].Page1[0].Caption[0].CaseNumber[0].CaseNumber1[0]",
+    "plaintiff": "WG-006[0].Page1[0].Caption[0].TitlePartyName[0].Party1[0]",
+    "defendant": "WG-006[0].Page1[0].Caption[0].TitlePartyName[0].Party2[0]",
+    "county": "WG-006[0].Page1[0].Caption[0].CourtInfo[0].CrtCounty[0]",
+    "levyingOfficer": "WG-006[0].Page1[0].Caption[0].LevOfcrInfo_sf[0].LevNumber_name[0]"
+  }
+}
