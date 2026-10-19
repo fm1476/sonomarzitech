@@ -25,6 +25,11 @@ jobs:
       - name: Install API dependencies for official return template checks
         run: npm ci --prefix lambdas/api --ignore-scripts --no-audit --no-fund
 
+      - name: Normalize official encrypted PDFs for PDF regression checks
+        run: |
+          python -m pip install --disable-pip-version-check pymupdf==1.26.7
+          python scripts/normalize-ca-court-templates.py
+
       - name: Verify California PostgreSQL and staff forms
         run: |
           node tests/civil-ser-review.test.mjs
