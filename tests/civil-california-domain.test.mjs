@@ -13,7 +13,7 @@ const serEvidence={
 const ready=workflowId=>{
  let r=createCaliforniaCase(intake(workflowId),ctx);
  fails(r,'approve_intake');
- r=step(r,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed court order',formReviewReference:'Reviewed current court forms',reviewedForms:CA_WORKFLOWS[workflowId].forms,...(CA_WORKFLOWS[workflowId].forms.includes('SER-001')?{ser001:serEvidence.ser001}:{}),...(CA_WORKFLOWS[workflowId].forms.includes('SER-001A')?{ser001a:serEvidence.ser001a}:{}),issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',propertyDescription:'Fictional parcel',financialInstitution:'Demo Bank'});
+ r=step(r,'intake_details',{returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed court order',formReviewReference:'Reviewed current court forms',reviewedForms:CA_WORKFLOWS[workflowId].forms,...(CA_WORKFLOWS[workflowId].forms.includes('SER-001')?{ser001:serEvidence.ser001}:{}),...(CA_WORKFLOWS[workflowId].forms.includes('SER-001A')?{ser001a:serEvidence.ser001a}:{}),issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',personalDebtStatus:'No',propertyDescription:'Fictional parcel',financialInstitution:'Demo Bank'});
  r=doc(doc(r,'Court packet'),'Signed instructions');if(CA_WORKFLOWS[workflowId].writ)r=doc(r,'Writ');return step(r,'approve_intake');
 };
 // Routine structured actions no longer demand repetitive notes.
@@ -35,7 +35,7 @@ for(const workflowId of Object.keys(CA_WORKFLOWS)){
  r=step(r,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'});
  fails(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});
  r=doc(r,'Proof of service');r=step(r,'prepare_return',{formName:'Reviewed return',reference:'Packet'});fails(r,'review_return',{},ctx,/different supervisor/);
- r=step(r,'review_return',{}, {...ctx,userId:'reviewer'});r=step(r,'record_return',{date:'2026-10-17',reference:'Court receipt'});r=step(r,'close');assert.equal(r.stage,'Closed');fails(r,'receipt',{kind:'Service fee',amountCents:100,payer:'Demo',reference:'R1'});
+ fails(r,'review_return',{}, {...ctx,userId:'reviewer'},/review reference/);r=step(r,'review_return',{reviewReference:'SUP-REVIEW-001'}, {...ctx,userId:'reviewer'});assert.equal(r.california.returnPacket.reviewReference,'SUP-REVIEW-001');r=step(r,'record_return',{date:'2026-10-17',reference:'Court receipt'});r=step(r,'close');assert.equal(r.stage,'Closed');fails(r,'receipt',{kind:'Service fee',amountCents:100,payer:'Demo',reference:'R1'});
 }
 let r=ready('bank-levy');r=step(r,'receipt',{kind:'Creditor deposit',amountCents:10000,payer:'Demo',reference:'R1'});assert.equal(ledgerBalance(r),10000);
 fails(r,'receipt',{kind:'Creditor deposit',amountCents:100,payer:'Demo',reference:'R1'},ctx,/already recorded/);
@@ -46,8 +46,24 @@ fails(r,'enforcement_event',{kind:'Levy',date:'2026-10-17',description:'Fictiona
 r=step(r,'resolve_hold',{holdId:r.california.holds[0].id,orderReference:'Court resolution'});
 r=step(r,'enforcement_event',{id:'spoofed',kind:'Levy',date:'2026-10-17',description:'Fictional',authorityReference:'Order'});assert.notEqual(r.california.enforcement[0].id,'spoofed');
 r=step(r,'request_disbursement',{amountCents:10000,payee:'Demo',authority:'Order',reference:'D1'});const disbursementId=r.california.disbursements[0].id;fails(r,'approve_disbursement',{disbursementId});r=step(r,'approve_disbursement',{disbursementId},{...ctx,userId:'finance-reviewer'});r=step(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});assert.equal(ledgerBalance(r),0);fails(r,'record_disbursement',{disbursementId,paymentReference:'CHECK-1'});fails(r,'cancel');r=step(r,'reconcile',{verifiedBalanceCents:0,reference:'Bank reconciliation'});r=step(r,'cancel');assert.equal(r.stage,'Cancelled');
+// Wage-garnishment document applicability: conditional debtor address verification.
+let wage=ready('earnings-withholding');
+assert.equal(wage.stage,'Ready');
+let wageMissing=createCaliforniaCase(intake('earnings-withholding'),ctx);
+wageMissing=step(wageMissing,'intake_details',{
+  returnByDate:'2026-11-15',instructionsReference:'Signed packet',deadlineAuthority:'Reviewed order',
+  formReviewReference:'Reviewed',reviewedForms:['WG-001','WG-002','WG-005'],
+  issuedDate:'2026-10-01',writExpirationDate:'2027-04-01',employerName:'Demo Employer',
+  personalDebtStatus:'Yes',addressVerificationReference:'WG-015 test reference'
+});
+wageMissing=doc(doc(doc(wageMissing,'Court packet'),'Signed instructions'),'Writ');
+fails(wageMissing,'approve_intake',{},ctx,/WG-015 or EJ-135/);
+wageMissing=step(wageMissing,'attach_document',{name:'WG-015-SIGNED.pdf',key:'test/WG015',kind:'Other'});
+fails(wageMissing,'approve_intake',{},ctx,/Review all required/);
+wageMissing=step(wageMissing,'intake_details',{returnByDate:'2026-11-15',reviewedForms:['WG-001','WG-002','WG-005','WG-015/EJ-135']});
+wageMissing=step(wageMissing,'approve_intake');assert.equal(wageMissing.stage,'Ready');
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
-let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});unserved=step(unserved,'unserved');assert.equal(unserved.stage,'Unable to Serve');
+let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
 // An unsigned generated working copy must never count as a signed proof of service.
 let unsignedOnly=step(ready("summons"),"assign",{personId:ctx.personId});
 unsignedOnly=step(unsignedOnly,"serve",{date:"2026-10-17",time:"10:00",recipient:"Demo Defendant",address:"123 Fictional Lane",method:"Personal service"});
