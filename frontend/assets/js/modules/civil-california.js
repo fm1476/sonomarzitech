@@ -1788,6 +1788,8 @@ ${SonoMarziCivilRecordUI.styles}
                   key === "formCode"
                     ? c.workflowId==="summons"?[["POS-010","POS-010 · Proof of Service of Summons"]]
                       :c.workflowId==="small-claims"?[["SC-104","SC-104 · Proof of Service—Small Claims"]]
+                      :action==="generate_target_return_draft"?
+                        [["POS-020","POS-020 · Personal Service—Civil"],["POS-040","POS-040 · Proof of Service—Civil"],["POS-030","POS-030 · First-Class Mail—Civil"]]
                       :c.service?.method==="First-class mail"?[["POS-030","POS-030 · First-Class Mail—Civil"]]
                       :[["POS-020","POS-020 · Personal Service—Civil"],["POS-040","POS-040 · Proof of Service—Civil"]]
                   :key === "mailingMethod" ? ["USPS deposit","Business collection"]
