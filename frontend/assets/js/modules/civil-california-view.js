@@ -202,6 +202,12 @@ window.CaliforniaCivilView = (() => {
             "No service addresses recorded.",
           ),
       )}
+      ${(c.serviceTargets||[]).length?section("Individual service recipients and court returns",
+        table(["Recipient","Service location","Documents","Outcome","Attempts","Return","Court receipt"],
+          (c.serviceTargets||[]).map(t=>[
+            t.name,t.address,t.documentsDescription,t.status,String((t.attempts||[]).length),
+            t.returnPacket?.status||"Not prepared",t.returnPacket?.receiptReference||"Not returned"
+          ]),"No separately tracked recipients.")):''}
       ${section(
         "Service attempts",
         table(
