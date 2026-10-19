@@ -75,6 +75,14 @@ window.CaliforniaCivil = (() => {
       "department",
     ],
     approve_intake: [],
+    add_service_target: ["name","address","documentsDescription"],
+    remove_service_target: ["targetId"],
+    target_attempt: ["targetId","date:date","time:time","result"],
+    target_serve: ["targetId","date:date","time:time","recipient","address","method","recipientRelationship","diligenceReference","mailingDate:date","mailingAddress","courtOrderReference","methodDescription"],
+    target_unserved: ["targetId","reasonCode","reasonDetail","attemptsSummary"],
+    prepare_target_return: ["targetId","formName","reference","documentId"],
+    review_target_return: ["targetId","reviewReference"],
+    record_target_return: ["targetId","date:date","reference"],
     assign: ["personId"],
     attempt: ["date:date", "time:time", "result"],
     serve: [
@@ -153,6 +161,14 @@ window.CaliforniaCivil = (() => {
     notice: "Record notice delivery",
     intake_details: "Review intake details",
     approve_intake: "Approve intake",
+    add_service_target: "Add service recipient",
+    remove_service_target: "Remove service recipient",
+    target_attempt: "Record recipient attempt",
+    target_serve: "Record recipient service",
+    target_unserved: "Record recipient non-service",
+    prepare_target_return: "Prepare recipient court return",
+    review_target_return: "Review recipient court return",
+    record_target_return: "Record recipient court delivery",
     assign: "Assign server",
     attempt: "Log attempt",
     serve: "Record service",
@@ -1518,7 +1534,7 @@ ${SonoMarziCivilRecordUI.styles}
               ...(["Intake", "Ready"].includes(r.stage)
                 ? ["intake_details"]
                 : []),
-              ...(r.stage === "Intake" ? ["approve_intake"] : []),
+              ...(r.stage === "Intake" ? ["add_service_target",...((c.serviceTargets||[]).length?["remove_service_target"]:[]),"approve_intake"] : []),
               ...(["Ready", "Assigned", "Attempting"].includes(r.stage)
                 ? ["assign"]
                 : []),
@@ -1528,7 +1544,8 @@ ${SonoMarziCivilRecordUI.styles}
               ["Ready", "Assigned", "Attempting", "Served"].includes(r.stage)
                 ? ["enforcement_event"]
                 : []),
-              ...(r.stage === "Return Prepared" ? ["review_return"] : []),
+              ...(r.stage === "Return Prepared" && !(c.serviceTargets||[]).length ? ["review_return"] : []),
+              ...((c.serviceTargets||[]).some(t=>t.returnPacket?.status==="Return Prepared")?["review_target_return"]:[]),
               ...(r.stage === "Returned to Court" ? ["close"] : []),
               "cancel",
             );
@@ -1539,12 +1556,14 @@ ${SonoMarziCivilRecordUI.styles}
               can("civil_paper_intake") ||
               r.assignedServerId === context.personId)
           )
-            actions.push("attempt", "serve", "unserved");
+            actions.push(...((c.serviceTargets||[]).length?["target_attempt","target_serve","target_unserved"]:["attempt","serve","unserved"]));
           if (can("civil_document_generate"))
             actions.push(
               "notice",
-              ...(canDraft ? ["generate_return_draft"] : []),
-              ...(["Served", "Unable to Serve"].includes(r.stage)
+              ...(canDraft && !(c.serviceTargets||[]).length ? ["generate_return_draft"] : []),
+              ...((c.serviceTargets||[]).some(t=>["Served","Unable to Serve"].includes(t.status)&&!t.returnPacket)?["prepare_target_return"]:[]),
+              ...((c.serviceTargets||[]).some(t=>t.returnPacket?.status==="Reviewed")?["record_target_return"]:[]),
+              ...(["Served", "Unable to Serve"].includes(r.stage) && !(c.serviceTargets||[]).length
                 ? ["prepare_return"]
                 : []),
               ...(r.stage === "Reviewed" ? ["record_return"] : []),
@@ -1735,12 +1754,19 @@ ${SonoMarziCivilRecordUI.styles}
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
                     : key === "collectionId" ? c.ledger.filter(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt).map(e=>[e.id,e.reference+" · "+money(e.amountCents)])
-                    : key === "deadlineId"
+                    : key === "targetId" ? (c.serviceTargets||[]).filter(t=>
+                        action==="remove_service_target"?t.status==="Pending":
+                        action==="target_attempt"||action==="target_serve"||action==="target_unserved"?["Pending","Attempting"].includes(t.status):
+                        action==="prepare_target_return"?["Served","Unable to Serve"].includes(t.status)&&!t.returnPacket:
+                        action==="review_target_return"?t.returnPacket?.status==="Return Prepared":
+                        action==="record_target_return"?t.returnPacket?.status==="Reviewed":true
+                      ).map(t=>[t.id,t.name+" · "+t.status])
+                      : key === "deadlineId"
                       ? (c.deadlines || [])
                           .filter((d) => !d.completedAt)
                           .map((d) => [d.id, d.title + " · " + d.dueDate])
                       : key === "documentId"
-                        ? c.documents.map((d) => [
+                        ? c.documents.filter(d=>action!=="prepare_target_return"||["Proof of service","Court return"].includes(d.kind)).map((d) => [
                             d.id,
                             d.kind + " · " + d.name,
                           ])
@@ -1872,6 +1898,14 @@ ${SonoMarziCivilRecordUI.styles}
                       if(action==="unserved" && key==="reasonCode"){
                         return '<fieldset class="ca-ser-choice"><legend>Reason unable to serve</legend><div class="ca-ser-choice-options">'+
                           options.reasonCode.map(item=>'<label class="ca-ser-choice-option"><input type="radio" name="reasonCode" value="'+esc(item)+'"><span>'+esc(item)+'</span></label>').join('')+'</div></fieldset>';
+                      }
+                      if(key==="targetId"||(key==="documentId"&&action==="prepare_target_return")){
+                        const list=choice(key)||[];
+                        return '<fieldset class="ca-ser-choice"><legend>'+esc(key==="targetId"?"Service recipient":"Signed proof / return")+'</legend>'+
+                          '<div class="ca-ser-choice-options">'+list.map(item=>{
+                            const id=Array.isArray(item)?item[0]:item,label=Array.isArray(item)?item[1]:item;
+                            return '<label class="ca-ser-choice-option"><input type="radio" name="'+esc(key)+'" value="'+esc(id)+'"><span>'+esc(label)+'</span></label>';
+                          }).join('')+'</div></fieldset>';
                       }
                       if (key === "personId" && action === "assign") {
                         return '<div class="form-row ca-assignee-field"><label for="ca-assignee-query">Assignee</label><div class="ca-assignee-picker">'+
@@ -2050,6 +2084,9 @@ ${SonoMarziCivilRecordUI.styles}
               "Other",
             ]) +
               '<label class="form-row ca-upload-field">Document<span class="ca-upload-drop"><span class="ca-upload-icon" aria-hidden="true">↑</span><strong>Choose a file to upload</strong><span class="ca-upload-hint">PDF, image or other supported file · Up to 500 MB</span><span class="ca-upload-filename" aria-live="polite">No file selected</span><input name="file" type="file" required aria-label="Choose case document"></span></label>' +
+              ((c.serviceTargets||[]).length?'<fieldset class="ca-ser-choice"><legend>Associated service recipient</legend><div class="ca-ser-choice-options">'+
+                (c.serviceTargets||[]).map(t=>'<label class="ca-ser-choice-option"><input type="radio" name="targetId" value="'+esc(t.id)+'"><span>'+esc(t.name)+'</span></label>').join('')+
+                '</div><p>Required when uploading a recipient-specific signed proof or court return.</p></fieldset>':"")+
               '<label class="form-row">Note <small>(optional)</small><input name="note" placeholder="Additional context for the record"></label>',
             async (data) => {
               if (!data.get("kind"))
@@ -2062,6 +2099,7 @@ ${SonoMarziCivilRecordUI.styles}
               });
               await command("attach_document", {
                 kind: data.get("kind"),
+                targetId:String(data.get("targetId")||""),
                 name: file.name,
                 key: meta.storageKey,
                 note: String(data.get("note") || "").trim() || "Document uploaded: " + file.name,
