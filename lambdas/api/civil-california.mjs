@@ -49,7 +49,24 @@ export async function californiaCivilApi(client,auth,body){
   const canView=r=>access.admin||granted.includes('civil_paper_view_all')||granted.includes('civil_paper_view_own')&&r.assignedServerId===access.personId;
   if(operation==='roster'){
     if(!access.admin&&!granted.includes('civil_paper_intake'))return response(403,{success:false,error:'Assignment management is required.'});
-    const roster=await client.query(`SELECT DISTINCT m.person_id,u.display_name AS name,u.email FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.status='active' AND u.status='active' AND m.person_id IS NOT NULL ORDER BY u.display_name,u.email`,[tenantId,agencyId]);
+    const roster=await client.query(`
+      WITH candidates AS (
+        SELECT COALESCE(NULLIF(value->>'id',''),NULLIF(value->>'personId','')) AS person_id,
+          COALESCE(NULLIF(value->>'name',''),NULLIF(TRIM(CONCAT_WS(' ',value->>'firstName',value->>'lastName')),''),NULLIF(value->>'employeeId','')) AS name,
+          NULL::text AS email, 0 AS source_priority
+        FROM suite_records
+        WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+          AND (key::jsonb)->0='["personnel"]'::jsonb
+          AND COALESCE(value->>'employmentStatus','Active') IN ('Active','On Leave')
+        UNION ALL
+        SELECT m.person_id,u.display_name,u.email,1 AS source_priority
+        FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id
+        WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.status='active'
+          AND u.status='active' AND m.person_id IS NOT NULL
+      )
+      SELECT DISTINCT ON(person_id) person_id,COALESCE(NULLIF(name,''),email,person_id) AS name,email
+      FROM candidates WHERE person_id IS NOT NULL AND person_id<>''
+      ORDER BY person_id,source_priority,name`,[tenantId,agencyId]);
     return response(200,{success:true,data:{people:roster.rows}});
   }
   if(operation==='filters'){
@@ -121,7 +138,16 @@ export async function californiaCivilApi(client,auth,body){
       const payload=body.payload||{},command=String(body.command||'');
       if(command==='assign'){
         if(typeof payload.personId!=='string'||!payload.personId.trim()||payload.personId.length>150)throw new CivilError('Choose a valid active member of this agency.');
-        const active=await client.query(`SELECT 1 FROM suite_memberships WHERE tenant_id=$1 AND agency_id=$2 AND person_id=$3 AND status='active' LIMIT 1`,[tenantId,agencyId,payload.personId]);
+        const active=await client.query(`
+          SELECT 1 FROM suite_records
+          WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+            AND (key::jsonb)->0='["personnel"]'::jsonb
+            AND COALESCE(NULLIF(value->>'id',''),value->>'personId')=$3
+            AND COALESCE(value->>'employmentStatus','Active') IN ('Active','On Leave')
+          UNION ALL
+          SELECT 1 FROM suite_memberships m JOIN suite_users u ON u.id=m.user_id
+          WHERE m.tenant_id=$1 AND m.agency_id=$2 AND m.person_id=$3
+            AND m.status='active' AND u.status='active' LIMIT 1`,[tenantId,agencyId,payload.personId]);
         if(!active.rows.length)throw new CivilError('Choose an active member of this agency.');
       }
       if(command==='generate_return_draft'){
