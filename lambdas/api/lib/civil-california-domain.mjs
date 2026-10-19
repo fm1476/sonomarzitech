@@ -25,7 +25,7 @@ export const CA_WORKFLOWS = Object.freeze({
   },
   "earnings-withholding": {
     label: "Earnings Withholding",
-    forms: ["WG-001", "WG-015/EJ-135"],
+    forms: ["WG-001", "WG-002", "WG-005", "WG-015/EJ-135"],
     writ: true,
     returns: ["WG-002 packet / service return"],
   },
@@ -204,9 +204,9 @@ function intakeReady(record) {
   );
   requireValue(
     Array.isArray(details.reviewedForms) &&
-      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||details.ser001a?.personalDebtStatus==='Yes').every(f=>details.reviewedForms.includes(f)),
+      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||(c.workflowId==='earnings-withholding'?details.personalDebtStatus==='Yes':details.ser001a?.personalDebtStatus==='Yes')).every(f=>details.reviewedForms.includes(f)),
     "Review all required instruction/declaration forms for this case, including personal-debt address verification if applicable: " +
-      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||details.ser001a?.personalDebtStatus==='Yes').join(", "),
+      workflow.forms.filter(f=>f!=='WG-015/EJ-135'||(c.workflowId==='earnings-withholding'?details.personalDebtStatus==='Yes':details.ser001a?.personalDebtStatus==='Yes')).join(", "),
   );
   requireValue(
     text(details.formReviewReference),
@@ -230,8 +230,17 @@ function intakeReady(record) {
       "Upload the writ.",
     );
   }
-  if (c.workflowId === "earnings-withholding")
+  if (c.workflowId === "earnings-withholding") {
     requireValue(text(details.employerName), "Employer name is required.");
+    requireValue(["Yes","No"].includes(details.personalDebtStatus),
+      "Determine whether the earnings withholding judgment is for personal debt.");
+    if(details.personalDebtStatus==="Yes"){
+      requireValue(text(details.addressVerificationReference),
+        "Personal-debt garnishment requires an address-verification declaration reference.");
+      requireValue(c.documents.some(d=>d.kind==="Other" && /(?:WG-015|EJ-135)/i.test(d.name)),
+        "Attach the WG-015 or EJ-135 address-verification declaration.");
+    }
+  }
   if (
     ["possession", "real-property-levy", "sheriff-sale"].includes(c.workflowId)
   )
@@ -358,6 +367,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       "hearingDate",
       "hearingTime",
       "department",
+      "personalDebtStatus",
+      "addressVerificationReference",
     ])
       if (payload[key] !== undefined) {
         requireValue(
@@ -629,12 +640,19 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       409,
     );
     note();
-    requireValue(
-      r.attempts.length > 0,
-      "Log at least one attempt before returning unserved.",
-    );
+    requireValue(r.attempts.length > 0,
+      "Log at least one attempt before returning unserved.");
+    requireValue(["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"].includes(payload.reasonCode),
+      "Select a reason why the papers could not be served.");
+    if(payload.reasonCode==="Other") requireValue(text(payload.reasonDetail),
+      "Explain the other non-service reason.");
+    requireValue(text(payload.attemptsSummary),
+      "Summarize the documented attempts supporting non-service.");
     r.stage = "Unable to Serve";
-    c.nonService = { by: ctx.userId, reason: payload.note };
+    c.nonService = {
+      by:ctx.userId,reasonCode:payload.reasonCode,reasonDetail:payload.reasonDetail||"",
+      attemptsSummary:payload.attemptsSummary,at:ctx.at,note:payload.note||""
+    };
   } else if (command === "generate_return_draft") {
     permission(ctx, "civil_document_generate");
     note();
@@ -704,7 +722,10 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     );
     c.returnPacket.reviewedBy = ctx.userId;
     c.returnPacket.reviewedAt = ctx.at;
-    c.returnPacket.reviewReference = payload.note;
+    requireValue(text(payload.reviewReference,500),
+      "Independent review requires a separate review reference.");
+    c.returnPacket.reviewReference = payload.reviewReference;
+    c.returnPacket.reviewNote=payload.note||"";
     r.stage = "Reviewed";
   } else if (command === "record_return") {
     permission(ctx, "civil_document_generate");
