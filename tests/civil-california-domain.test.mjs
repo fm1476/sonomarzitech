@@ -62,6 +62,18 @@ wageMissing=step(wageMissing,'intake_details',{returnByDate:'2026-11-15',reviewe
 fails(wageMissing,'approve_intake',{},ctx,/WG-015 or EJ-135/);
 wageMissing=step(wageMissing,'attach_document',{name:'WG-015-SIGNED.pdf',key:'test/WG015',kind:'Other'});
 wageMissing=step(wageMissing,'approve_intake');assert.equal(wageMissing.stage,'Ready');
+// Levy collections are held until a separate reviewed release, not released by an
+// assumed statewide or Sonoma-only fixed-day timer.
+let levy=ready('bank-levy');
+levy=step(levy,'receipt',{kind:'Levy collection',amountCents:7500,payer:'Demo Bank',reference:'LEVY-COLL-1'});
+fails(levy,'expense',{amountCents:100,authority:'Reviewed',reference:'EXP-HELD'},ctx,/unavailable|released/);
+const collectionId=levy.california.ledger[0].id;
+fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},ctx,/separate finance reviewer/);
+fails(levy,'release_collection',{collectionId,county:'Napa',earliestReleaseDate:'2026-10-17',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},{...ctx,userId:'second-reviewer'},/match the agency county/);
+fails(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-18',policyVersion:'county-reviewed',authorityReference:'court',reviewNote:'Reviewed'},{...ctx,userId:'second-reviewer'},/cannot be released early/);
+levy=step(levy,'release_collection',{collectionId,county:'Sonoma',earliestReleaseDate:'2026-10-17',policyVersion:'sample-policy-2026',authorityReference:'Court authorization test',reviewNote:'Fictional authorized release after all claims resolved'},{...ctx,userId:'second-reviewer'});
+assert.equal(levy.california.ledger[0].releaseReviewedBy,'second-reviewer');
+levy=step(levy,'expense',{amountCents:100,authority:'Reviewed',reference:'EXP-AFTER-RELEASE'});
 let expired=ready('possession');expired.california.intakeDetails.writExpirationDate='2026-10-16';expired=step(expired,'assign',{personId:ctx.personId});fails(expired,'serve',{date:'2026-10-17',time:'11:00',recipient:'Demo',address:'Fictional',method:'Personal service'},ctx,/expired/);
 let unserved=step(ready('summons'),'assign',{personId:ctx.personId});fails(unserved,'unserved');unserved=step(unserved,'attempt',{date:'2026-10-17',time:'09:30',result:'Moved'});fails(unserved,'unserved',{},ctx,/reason/);unserved=step(unserved,'unserved',{reasonCode:'Unable to locate',attemptsSummary:'One attempted visit, subject had moved'});assert.equal(unserved.stage,'Unable to Serve');assert.equal(unserved.california.nonService.reasonCode,'Unable to locate');
 // An unsigned generated working copy must never count as a signed proof of service.
