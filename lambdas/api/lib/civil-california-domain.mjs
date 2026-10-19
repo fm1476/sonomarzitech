@@ -176,6 +176,7 @@ export function createCaliforniaCase(input, ctx) {
       enforcement: [],
       intakeDetails: {},
       returnPacket: null,
+      serviceTargets: [],
       deadlines: [],
       notices: [],
     },
@@ -328,7 +329,125 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
         409,
       );
   };
-  if (command === "add_safety_flag") {
+  const targets=c.serviceTargets||[];
+  const targetFor=id=>{
+    const target=targets.find(t=>t.id===id);
+    requireValue(target,"Service recipient not found on this case.",404);
+    return target;
+  };
+  if(command==="add_service_target"){
+    permission(ctx,"civil_paper_intake");
+    requireValue(r.stage==="Intake","Add individual service recipients before approving intake.",409);
+    requireValue(targets.length<50,"A case supports at most 50 separately tracked recipients.",409);
+    requireValue(text(payload.name,250)&&text(payload.address,1000)&&text(payload.documentsDescription,2000),
+      "Recipient name, service address and documents to be served are required.");
+    requireValue(!targets.some(t=>t.name.toLowerCase()===payload.name.toLowerCase()&&t.address.toLowerCase()===payload.address.toLowerCase()),
+      "That recipient and service address are already listed.",409);
+    targets.push({id:ctx.eventId,name:payload.name,address:payload.address,
+      documentsDescription:payload.documentsDescription,status:"Pending",attempts:[],
+      outcome:null,returnPacket:null,createdBy:ctx.userId,createdAt:ctx.at});
+    c.serviceTargets=targets;
+  }else if(command==="remove_service_target"){
+    permission(ctx,"civil_paper_intake");
+    requireValue(r.stage==="Intake","Service recipients are locked after intake approval.",409);
+    const target=targetFor(payload.targetId);
+    requireValue(target.status==="Pending"&&target.attempts.length===0,"Cannot remove a recipient with recorded service activity.",409);
+    c.serviceTargets=targets.filter(t=>t.id!==target.id);
+  }else if(command==="target_attempt"){
+    permission(ctx,"civil_paper_log_attempt");
+    requireValue(own||ctx.admin||can(ctx,"civil_paper_intake"),"Only assigned staff or a supervisor may record an attempt.",403);
+    requireValue(["Assigned","Attempting"].includes(r.stage),"Assign the case before recording service.",409);
+    liveWrit();
+    const target=targetFor(payload.targetId);
+    requireValue(["Pending","Attempting"].includes(target.status),"This recipient already has a recorded outcome.",409);
+    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(payload.time||""),
+      "Valid attempt date and time are required.");
+    requireValue(["Not home","No contact","Refused","Moved","Bad address","Business closed","Evading","Other"].includes(payload.result),
+      "Select a recognized attempt result.");
+    target.attempts.push({id:ctx.eventId,date:payload.date,time:payload.time,result:payload.result,
+      note:payload.note||"",by:ctx.userId,personId:ctx.personId});
+    target.status="Attempting";
+    r.stage="Attempting";
+  }else if(command==="target_serve"||command==="target_unserved"){
+    permission(ctx,"civil_paper_log_attempt");
+    requireValue(own||ctx.admin||can(ctx,"civil_paper_intake"),"Only assigned staff or a supervisor may record an outcome.",403);
+    requireValue(["Assigned","Attempting"].includes(r.stage),"Assign the case before recording service.",409);
+    liveWrit();
+    const target=targetFor(payload.targetId);
+    requireValue(["Pending","Attempting"].includes(target.status),"This recipient already has a recorded outcome.",409);
+    if(command==="target_serve"){
+      requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(payload.time||""),
+        "Service date and time are required.");
+      requireValue(text(payload.recipient)&&text(payload.address)&&text(payload.method),"Recipient, location and method required.");
+      requireValue(["Personal service","Substituted service","Court-authorized alternative","First-class mail"].includes(payload.method),
+        "Use an approved service method value.");
+      if(payload.method==="Substituted service"){
+        requireValue(["summons","small-claims"].includes(c.workflowId),"This workflow does not permit generic substituted service.");
+        for(const k of ["recipientRelationship","diligenceReference","mailingDate","mailingAddress"])
+          requireValue(text(payload[k]),"Substituted service requires "+k+".");
+      }
+      if(payload.method==="Court-authorized alternative")
+        requireValue(text(payload.courtOrderReference)&&text(payload.methodDescription),
+          "Court order and method description required.");
+      if(payload.method==="First-class mail")
+        requireValue(!["summons","small-claims"].includes(c.workflowId),"Mail alone cannot substitute for the court-approved summons method.");
+      target.outcome={status:"Served",date:payload.date,time:payload.time,recipient:payload.recipient,
+        address:payload.address,method:payload.method,recipientRelationship:payload.recipientRelationship||"",
+        diligenceReference:payload.diligenceReference||"",mailingDate:payload.mailingDate||"",
+        mailingAddress:payload.mailingAddress||"",courtOrderReference:payload.courtOrderReference||"",
+        methodDescription:payload.methodDescription||"",by:ctx.userId,personId:ctx.personId};
+      target.status="Served";
+    }else{
+      requireValue(target.attempts.length>0,"Record an attempt for this recipient before marking unserved.");
+      requireValue(["Unable to locate","No valid service address","Service window expired","Court instructions prevent service","Other"].includes(payload.reasonCode),
+        "Choose the recipient's non-service reason.");
+      if(payload.reasonCode==="Other")requireValue(text(payload.reasonDetail),"Explain the other non-service reason.");
+      requireValue(text(payload.attemptsSummary),"Summarize attempts for this recipient.");
+      target.outcome={status:"Unable to Serve",reasonCode:payload.reasonCode,
+        reasonDetail:payload.reasonDetail||"",attemptsSummary:payload.attemptsSummary,
+        by:ctx.userId,personId:ctx.personId};
+      target.status="Unable to Serve";
+    }
+    r.stage="Attempting";
+  }else if(command==="prepare_target_return"){
+    permission(ctx,"civil_document_generate");
+    const target=targetFor(payload.targetId);
+    requireValue(["Served","Unable to Serve"].includes(target.status),"Record a recipient-specific service outcome first.",409);
+    requireValue(!target.returnPacket,"This recipient already has a return packet.",409);
+    requireValue(text(payload.formName)&&text(payload.reference),"Record the applicable return form and reference.");
+    const document=c.documents.find(d=>d.id===payload.documentId&&d.targetId===target.id&&
+      ["Proof of service","Court return"].includes(d.kind));
+    requireValue(document,"Attach the signed, recipient-linked proof of service or return.",409);
+    target.returnPacket={status:"Return Prepared",documentId:document.id,formName:payload.formName,
+      reference:payload.reference,preparedBy:ctx.userId,preparedAt:ctx.at};
+  }else if(command==="review_target_return"){
+    permission(ctx,"civil_paper_intake");
+    const target=targetFor(payload.targetId);
+    requireValue(target.returnPacket?.status==="Return Prepared","Prepare this recipient's return first.",409);
+    requireValue(target.returnPacket.preparedBy!==ctx.userId&&target.outcome?.by!==ctx.userId,
+      "An independent reviewer must review this recipient's return.",409);
+    requireValue(text(payload.reviewReference,500),"Enter an independent recipient-return review reference.");
+    target.returnPacket.status="Reviewed";
+    target.returnPacket.reviewedBy=ctx.userId;
+    target.returnPacket.reviewedAt=ctx.at;
+    target.returnPacket.reviewReference=payload.reviewReference;
+  }else if(command==="record_target_return"){
+    permission(ctx,"civil_document_generate");
+    const target=targetFor(payload.targetId);
+    requireValue(target.returnPacket?.status==="Reviewed","Recipient return requires independent review.",409);
+    requireValue(civilDate(payload.date)&&payload.date>=r.receivedDate&&payload.date<=ctx.today&&
+      (!target.outcome?.date||payload.date>=target.outcome.date)&&text(payload.reference),
+      "Court delivery date and independent receipt reference required.");
+    target.returnPacket.status="Returned to Court";
+    target.returnPacket.returnedAt=payload.date;
+    target.returnPacket.receiptReference=payload.reference;
+    if(targets.length&&targets.every(t=>t.returnPacket?.status==="Returned to Court")){
+      requireValue(!c.deadlines.some(d=>!d.completedAt),
+        "Complete or resolve all tracked deadlines before final court return.",409);
+      r.stage="Returned to Court";
+      r.returnFiledDate=payload.date;
+    }
+  }else   if (command === "add_safety_flag") {
     permission(ctx, "civil_paper_intake");
     note();
     requireValue(text(payload.reason, 1000), "Describe the officer-safety concern.");
@@ -441,11 +560,14 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       "Document is already attached.",
       409,
     );
+    if(targets.length&&["Proof of service","Court return"].includes(payload.kind))
+      targetFor(payload.targetId);
     const d = {
       id: ctx.eventId,
       name: payload.name,
       key: payload.key,
       kind: payload.kind,
+      targetId:targets.length&&["Proof of service","Court return"].includes(payload.kind)?payload.targetId:null,
       uploadedBy: ctx.userId,
       at: ctx.at,
     };
@@ -558,6 +680,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     });
     r.stage = "Attempting";
   } else if (command === "serve") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_paper_log_attempt");
     requireValue(
       own || ctx.admin || can(ctx, "civil_paper_intake"),
@@ -631,6 +755,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     r.serviceMethod = payload.method;
     r.stage = "Served";
   } else if (command === "unserved") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_paper_log_attempt");
     requireValue(
       own || ctx.admin || can(ctx, "civil_paper_intake"),
@@ -657,6 +783,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       attemptsSummary:payload.attemptsSummary,at:ctx.at,note:payload.note||""
     };
   } else if (command === "generate_return_draft") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_document_generate");
     note();
     requireValue(
@@ -683,6 +811,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
       at: ctx.at,
     });
   } else if (command === "prepare_return") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_document_generate");
     requireValue(
       ["Served", "Unable to Serve"].includes(r.stage),
@@ -709,6 +839,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     };
     r.stage = "Return Prepared";
   } else if (command === "review_return") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_paper_intake");
     requireValue(
       r.stage === "Return Prepared",
@@ -731,6 +863,8 @@ export function applyCaliforniaCommand(before, command, payload, ctx) {
     c.returnPacket.reviewNote=payload.note||"";
     r.stage = "Reviewed";
   } else if (command === "record_return") {
+    requireValue(!targets.length,
+      "This case tracks recipients separately. Use recipient-specific service and court-return actions.",409);
     permission(ctx, "civil_document_generate");
     requireValue(
       r.stage === "Reviewed",
