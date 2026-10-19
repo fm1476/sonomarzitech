@@ -4,7 +4,7 @@ const dom=new JSDOM('<div id="view-civil-board" class="view active"></div>',{run
 let record=null,version=0,requests=[],nextError=null,paged=false,exportConflict=false,reportCalls=0;const allRecords=()=>record?(paged?[record,{...structuredClone(record),id:'case-2',caseNumber:'=DEMO-SECOND'}]:[record]):[];const scope={tenantId:'tenant',agencyId:'agency'};const ctx={admin:true,userId:'a',personId:'person-a',today:'2026-10-17',at:'2026-10-17T12:00:00Z',id:'case-1',county:'Sonoma',testOnly:true,eventId:'e1'};
 w.SuiteStore={mode:()=> 'shared',remoteContext:()=>scope,api:async(path,request)=>{const b=JSON.parse(request.body);requests.push(b);if(nextError){const error=nextError;nextError=null;throw Error(error);}if(b.operation==='context')return {success:true,data:{profile:{profileId:'US-CA',status:'test',county:'Sonoma'},workflows:domain.CA_WORKFLOWS,admin:true,personId:ctx.personId,abilities:[]}};if(b.operation==='report'){reportCalls++;return {success:true,data:{...californiaFinancialReport(allRecords(),b),revision:exportConflict&&reportCalls>1?'changed':'revision'}};}if(b.operation==='filters')return {success:true,data:{types:['Summons and Complaint'],locations:['Fictional Court']}};if(b.operation==='list'){const records=allRecords().filter(r=>!b.query||JSON.stringify(r).toLowerCase().includes(b.query.toLowerCase()));return {success:true,data:{cases:(b.afterKey?records.slice(1):records.slice(0,1)).map(record=>({record,version})),nextCursor:!b.afterKey&&records.length>1?'page-2':null}};}if(b.operation==='get')return {success:true,data:{record,version}};if(b.operation==='create'){record=domain.createCaliforniaCase(b.record,ctx);version=1;return {success:true,data:{record,version}};}if(b.operation==='command'){assert.equal(b.expectedVersion,version);record=domain.applyCaliforniaCommand(record,b.command,b.payload,ctx);version++;return {success:true,data:{record,version}};}if(b.operation==='roster')return {success:true,data:{people:[{person_id:'person-a',name:'Demo Officer'}]}};throw Error(b.operation);}};
 w.AWS_ATTACHMENTS={upload:async()=>({storageKey:'agency/case/packet'}),download:async()=>{}};w.STATE={personnel:[{id:'person-a',name:'Demo Officer'}]};for(const file of ['civil-board-ui','civil-record-ui','civil-california-view','civil-california-calendar','civil-california'])w.eval(fs.readFileSync('frontend/assets/js/modules/'+file+'.js','utf8'));
-const root=w.document.querySelector('#view-civil-board');const tick=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};const click=async selector=>{const el=root.querySelector(selector);assert.ok(el,selector);el.click();await tick();};const fill=values=>{for(const [name,value]of Object.entries(values)){const el=root.querySelector(`[name="${name}"]`);assert.ok(el,name);el.value=value;}};const save=()=>click('#ca-form button[type=submit]');
+const root=w.document.querySelector('#view-civil-board');const tick=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};const click=async selector=>{const el=root.querySelector(selector);assert.ok(el,selector);el.click();await tick();};const fill=values=>{for(const [name,value]of Object.entries(values)){const el=root.querySelector(`[name="${name}"]`);assert.ok(el,name);if(el.type==="radio"){const option=[...root.querySelectorAll(`[name="${name}"]`)].find(x=>x.value===value);assert.ok(option,`Radio option ${name}=${value}`);option.checked=true;}else el.value=value;}};const save=()=>click('#ca-form button[type=submit]');
 assert.equal(await w.CaliforniaCivil.route(root,'civil-board'),true);assert.match(root.textContent,/No papers/);assert.equal(root.querySelector('[data-civil-mode="kanban"]').getAttribute('aria-pressed'),'true');await click('[data-civil-mode="table"]');assert.equal(root.querySelector('[data-civil-mode="table"]').getAttribute('aria-pressed'),'true');await click('[data-civil-mode="kanban"]');assert.equal(root.querySelector('[data-civil-mode="kanban"]').getAttribute('aria-pressed'),'true');await click('#ca-new');assert.equal(w.CaliforniaCivil.hasOpenWork(),true);await click('#ca-refresh');assert.ok(root.querySelector('#ca-form form'),'Refresh must preserve open forms');assert.match(root.querySelector('#ca-form form').textContent,/Workflow Type/);
 assert.ok(root.querySelector('.ca-workflow-picker'),'Workflow picker must render inside the dialog');
 assert.equal(root.querySelectorAll('select[name=workflowId]').length,0,'Native workflow dropdown must not coexist with custom picker');
@@ -43,6 +43,16 @@ assert.ok(reviewCheckbox,'Required SER-001 must be available as a selectable che
 assert.equal(root.querySelectorAll('input[name="reviewedForms"]').length,1,'Only workflow-required forms should appear');
 assert.equal(reviewCheckbox.checked,false,'New intake should not be pre-marked reviewed');
 assert.ok(root.querySelector('a.ca-reviewed-link[href*="SER-001"]'),'Official SER-001 link must be available');
+for(const [name,values] of Object.entries({
+  ser001__serviceTargetType:['Person','Entity'],
+  ser001__serviceAddressType:['Home','Business','Other'],
+  ser001__hearingStatus:['Yes','No','Unknown'],
+  ser001__safetyAccessibilityStatus:['No issues reported','Issues reported','Not established']
+})){
+  const choices=[...root.querySelectorAll('input[type="radio"][name="'+name+'"]')].map(x=>x.value);
+  assert.deepEqual(choices,values,'All selectable choices must be visible and complete for '+name);
+  assert.equal(root.querySelectorAll('select[name="'+name+'"]').length,0,'Do not use browser native select for '+name);
+}
 reviewCheckbox.checked=true;
 fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority:'Court packet',formReviewReference:'Reviewed',note:'',
   ser001__requesterName:'Demo Requester',ser001__requesterMailingAddress:'PO Box 100 Sonoma CA',ser001__serviceTargetType:'Person',
@@ -51,6 +61,7 @@ fill({returnByDate:'2026-11-15',instructionsReference:'Signed',deadlineAuthority
 await save();assert.equal(version,2);
 assert.deepEqual(record.california.intakeDetails.reviewedForms,['SER-001'],'Form review selection must persist');
 assert.equal(record.california.intakeDetails.ser001.serviceTargetName,'Demo Defendant','SER-001 field review must persist');
+assert.equal(record.california.intakeDetails.ser001.safetyAccessibilityStatus,'No issues reported');
 assert.equal(record.california.intakeDetails.ser001ReviewedBy,ctx.userId,'SER-001 review must capture reviewer identity');
 await click('[data-action="intake_details"]');
 assert.equal(root.querySelector('input[name="reviewedForms"][value="SER-001"]').checked,true,'Existing review selections must load checked');
