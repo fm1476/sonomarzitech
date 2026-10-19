@@ -268,6 +268,12 @@ window.CaliforniaCivilView = (() => {
           ["Sale proceeds reference",c.saleProcess?.outcome?.proceedsReceiptReference||"Not recorded"],
         ])+table(["Notice date","Recipient","Method","Authority"],(c.saleProcess?.notices||[]).map(n=>
           [date(n.date),n.recipient,n.method,n.authorityReference]),"No sale notices recorded.")):''}
+      ${c.workflowId==="earnings-withholding"?section("WG-005 Employer Returns",
+        table(["Employer","Status","Order served","Return received","Guidance due","Timing","Reference"],
+          (c.employerReturns||[]).map(e=>[
+            e.employerName,e.employmentStatus,date(e.orderServedDate),date(e.returnReceivedDate),
+            date(e.dueDate),e.receivedAfterGuidanceDate?"Received after guidance date":"Received within guidance date",
+            e.employerReference]),"No employer returns recorded.")):''}
       ${section(
         "Enforcement actions",
         table(
