@@ -131,6 +131,7 @@ window.CaliforniaCivil = (() => {
       "approvalReference",
     ],
     receipt: ["kind", "amountCents:money", "payer", "reference"],
+    release_collection: ["collectionId","county","earliestReleaseDate:date","policyVersion","authorityReference","reviewNote"],
     expense: ["amountCents:money", "authority", "reference"],
     request_disbursement: [
       "amountCents:money",
@@ -163,6 +164,7 @@ window.CaliforniaCivil = (() => {
     resolve_hold: "Resolve claim or stay",
     enforcement_event: "Record enforcement action",
     receipt: "Record receipt",
+    release_collection: "Review and release levy collection",
     expense: "Record authorized expense",
     request_disbursement: "Request disbursement",
     approve_disbursement: "Approve disbursement",
@@ -1536,6 +1538,7 @@ ${SonoMarziCivilRecordUI.styles}
           if (can("civil_fee_manage"))
             actions.push(
               "receipt",
+              ...(c.ledger.some(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt)?["release_collection"]:[]),
               "expense",
               "request_disbursement",
               ...(c.disbursements.some((d) => d.status === "pending")
@@ -1717,6 +1720,7 @@ ${SonoMarziCivilRecordUI.styles}
                       : method!=="Substituted service")
                     : key === "smallClaimsDocument"
                     ? ["SC-100", "SC-120"]
+                    : key === "collectionId" ? c.ledger.filter(e=>e.kind==="Levy collection"&&e.requiresReleaseReview&&!e.releaseReviewedAt).map(e=>[e.id,e.reference+" · "+money(e.amountCents)])
                     : key === "deadlineId"
                       ? (c.deadlines || [])
                           .filter((d) => !d.completedAt)
@@ -1839,6 +1843,8 @@ ${SonoMarziCivilRecordUI.styles}
                           ? context.workflows[c.workflowId].returns[0]
                         : key === "returnByDate"
                           ? r.returnByDate
+                        : key === "county" && action==="release_collection"
+                          ? c.county
                           : c.intakeDetails[key] || "";
                       if(action==="intake_details" && key==="personalDebtStatus" && c.workflowId!=="earnings-withholding")return "";
                       if(action==="intake_details" && key==="addressVerificationReference" && c.workflowId!=="earnings-withholding")return "";
