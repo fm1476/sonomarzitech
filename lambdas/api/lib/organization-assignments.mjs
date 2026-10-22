@@ -64,3 +64,30 @@ JOIN suite_organization_nodes n
  AND n.id=a.organization_id
 WHERE a.tenant_id=$1 AND a.agency_id=$2
 `;
+
+/**
+ * The presence of empty schema tables is NOT evidence that migration finished.
+ * Organizational grants are only switched to canonical resolution once an
+ * agency-scoped explicit activation record is set by a reviewed migration.
+ * A missing activation table/row always stays on the legacy guarded path.
+ */
+export const CANONICAL_ORGANIZATION_ACTIVE_QUERY = `
+SELECT EXISTS (
+  SELECT 1 FROM suite_organization_rollout
+  WHERE tenant_id=$1 AND agency_id=$2
+    AND enabled=true AND activated_at IS NOT NULL
+) AS enabled
+`;
+
+export async function canonicalOrganizationReady(client, tenantId, agencyId) {
+  if (!tenantId || !agencyId) return false;
+  const existing = await client.query(`
+    SELECT to_regclass('suite_person_organization_assignments') AS assignments,
+           to_regclass('suite_organization_nodes') AS nodes,
+           to_regclass('suite_organization_rollout') AS rollout
+  `);
+  const row=existing.rows[0];
+  if(!row?.assignments || !row?.nodes || !row?.rollout)return false;
+  const active=await client.query(CANONICAL_ORGANIZATION_ACTIVE_QUERY,[tenantId,agencyId]);
+  return active.rows[0]?.enabled === true;
+}
