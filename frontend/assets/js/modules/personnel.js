@@ -3018,8 +3018,26 @@ function staffingNeedsEditor(id,record){
   </section>`;
 }
 function readStaffingNeeds(id){
-  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value),preferredCount:Number(row.querySelector('[data-staffing-preferred]').value)}));
-  try{validateStaffingRequirements(rows);return rows;}catch(error){toast(error.message,true);return null;}
+  const root=document.getElementById(id);
+  const controls=[...root.querySelectorAll('[data-staffing-row]')];
+  for(let i=0;i<controls.length;i++){
+    const row=controls[i],name=row.querySelector('[data-staffing-name]'),skill=row.querySelector('[data-staffing-skill]'),minimum=row.querySelector('[data-staffing-count]'),preferred=row.querySelector('[data-staffing-preferred]');
+    const fail=(input,message)=>{toast('Position '+(i+1)+': '+message,true);input.setAttribute('aria-invalid','true');input.focus();input.scrollIntoView({block:'center',behavior:'smooth'});return null;};
+    if(!name.value.trim())return fail(name,'enter a position name, or remove the unused position.');
+    if(!skill.value.trim())return fail(skill,'choose a qualification or Any / None.');
+    const min=Number(minimum.value),pref=Number(preferred.value);
+    if(!minimum.value||!Number.isSafeInteger(min)||min<1||min>5000)return fail(minimum,'minimum staffing must be a whole number between 1 and 5000.');
+    if(!preferred.value||!Number.isSafeInteger(pref)||pref<min||pref>5000)return fail(preferred,'preferred staffing must be at least the minimum (and no more than 5000).');
+    for(const field of [name,skill,minimum,preferred])field.removeAttribute('aria-invalid');
+  }
+  const rows=controls.map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value),preferredCount:Number(row.querySelector('[data-staffing-preferred]').value)}));
+  const seen=new Set();
+  for(let i=0;i<rows.length;i++){
+    const key=rows[i].name.toLowerCase();
+    if(seen.has(key)){toast('Position '+(i+1)+': this position name is already in use. Give each position a unique name.',true);controls[i].querySelector('[data-staffing-name]').focus();return null;}
+    seen.add(key);
+  }
+  try{validateStaffingRequirements(rows);return rows;}catch(error){toast('Check your staffing requirements: '+error.message,true);return null;}
 }
 function wireStaffingNeedsEditor(id,totalId){
   const container=document.getElementById(id),total=document.getElementById(totalId);
