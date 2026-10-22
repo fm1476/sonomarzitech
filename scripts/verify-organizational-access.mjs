@@ -41,3 +41,8 @@ assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['di
 assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['fire']},'p',multiPerson),false);
 assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'other',multiPerson),false);
 console.log('Explicit assignment policy tests passed.');
+
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'p',unitId:'dispatch',active:false}]),false);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'p',unitId:'dispatch',active:true}]),true);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'other',unitId:'dispatch'}]),false);
+console.log('Inactive and unrelated assignments are excluded.');
