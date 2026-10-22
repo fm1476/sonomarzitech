@@ -18,7 +18,12 @@ const wrongMix=[...rows.slice(0,4),{personId:'wrong',staffingCategoryId:'law'}];
 const short=staffingSummary(requirements,wrongMix,5,records);assert.equal(short.staffed,5);assert.equal(short.ok,false);assert.equal(short.categories[2].needed,1);
 assert.equal(staffingSummary(requirements,[...rows,{personId:'multi',staffingCategoryId:'call'}],5,records).staffed,5); // Multi-skilled does not count twice.
 const revoked=records.map(r=>r.personId==='fire1'?{...r,specialSkills:[]}:r);
-assert.equal(staffingSummary(requirements,rows,5,revoked).categories[1].needed,1);
+assert.equal(staffingSummary(requirements,rows,5,revoked).categories[1].needed,0);
+assert.equal(staffingSummary(requirements,rows,5,revoked).advisories.length,1);
+assert.doesNotThrow(()=>validateStaffingRequirements([{id:'sup',name:'Patrol Supervisor',requiredSkill:'rank:Sergeant',count:1}]));
+assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Sergeant'}],'s1',{requiredSkill:'rank:Sergeant'}),true);
+assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Deputy'}],'s1',{requiredSkill:'rank:Sergeant'}),false);
+assert.equal(staffingPersonHasSkill([],'s1',{requiredSkill:'any'}),true);
 const group={id:'g',managerIds:['manager'],visibility:'unit',unitNames:['Dispatch'],active:true};
 const shift={id:'s',workGroupId:'g',minStaff:5,staffingRequirements:requirements,patternType:'weekly',weekdays:[0,1,2,3,4,5,6],published:true};
 const personnel=records.map(r=>({id:r.personId,name:r.personId,unit:'Dispatch'}));
@@ -50,6 +55,13 @@ vm.runInContext(source.slice(source.indexOf('function activeExceptionFor('),sour
 vm.runInContext(source.slice(source.indexOf('function currentPerson()'),source.indexOf('function visibleScheduleWorkGroups()')),context);
 vm.runInContext(source.slice(source.indexOf('function staffingSkillOptions('),source.indexOf('function calendarUnitOptions(')),context);
 vm.runInContext(source.slice(source.indexOf('function onDutyRoster('),source.indexOf('// Overtime hours a person',source.indexOf('function onDutyRoster('))),context);
+const flexibleShift={...shift,staffingOverrides:[
+  {id:'fri',type:'weekday',value:'5',counts:{law:1,fire:1,call:1}},
+  {id:'special',type:'date',value:'2099-01-02',counts:{law:2,fire:1,call:0}}
+]};
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').find(r=>r.id==='call'),undefined);
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').reduce((n,r)=>n+r.count,0),3);
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-09').reduce((n,r)=>n+r.count,0),3);
 assert.equal(context.shiftStaffingSummary(shift,'2099-01-01').ok,true);assert.equal(context.onDutyRoster(shift,'2099-01-01').length,5);assert.equal(context.onDutyRoster(shift,'2999-01-01').length,0);
 context.STATE.pm.scheduleExceptions=[{id:'off',personId:'fire1',startDate:context.fmt(new Date()),endDate:context.fmt(new Date()),code:'VDO'}];
 const gaps=context.computeCoverageGaps(1);assert.equal(gaps.length,1);assert.equal(gaps[0].staffingCategoryId,'fire');assert.equal(gaps[0].needed,1);

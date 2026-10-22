@@ -350,9 +350,28 @@ export function validateSchedulingBatch(snapshot,changes) {
     }
     if(['pm.scheduleShifts','pm.specialEvents'].includes(collection)) {
       try{validateStaffingRequirements(value.staffingRequirements||[]);}catch(error){fail(error.message);}
+      if(collection==='pm.scheduleShifts'){
+        const overrides=value.staffingOverrides||[];
+        if(!Array.isArray(overrides)||overrides.length>50)fail('Use no more than 50 date or weekday staffing overrides.');
+        const used=new Set(),ids=new Set((value.staffingRequirements||[]).map(r=>r.id));
+        for(const rule of overrides){
+          const type=rule?.type;
+          const key=type+':'+rule?.value;
+          if(!['date','weekday'].includes(type)||used.has(key)||typeof rule?.value!=='string')fail('Choose a unique date or weekday for each staffing override.');
+          if(type==='weekday'&&!/^[0-6]$/.test(rule.value))fail('Choose a valid weekday.');
+          if(type==='date'&&(!/^\\d{4}-\\d{2}-\\d{2}$/.test(rule.value)||!Number.isFinite(Date.parse(rule.value+'T12:00:00'))))fail('Choose a valid override date.');
+          used.add(key);
+          if(!rule.counts||typeof rule.counts!=='object'||Array.isArray(rule.counts))fail('Staffing override counts are required.');
+          for(const [id,count] of Object.entries(rule.counts)){
+            if(!ids.has(id)||!Number.isSafeInteger(count)||count<0||count>5000)fail('Override counts must match existing positions and be whole numbers from 0 to 5000.');
+          }
+          const total=(value.staffingRequirements||[]).reduce((n,r)=>n+(rule.counts[r.id]??r.count),0);
+          if(total<1||total>5000)fail('Each override must require between 1 and 5000 personnel.');
+        }
+      }
       const minimum=(value.staffingRequirements||[]).reduce((sum,r)=>sum+r.count,0);
       const catalog=(final['pm.refData']||[]).flatMap(r=>r.skillsCatalog||[]);
-      if((value.staffingRequirements||[]).some(r=>!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a required skill from the Personnel Special Skills Catalog.');
+      if((value.staffingRequirements||[]).some(r=>r.requiredSkill!=='any'&&!String(r.requiredSkill||'').startsWith('rank:')&&!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a required skill from the Personnel Special Skills Catalog, a rank, or Any assigned employee.');
       if(minimum>0&&Number(collection==='pm.specialEvents'?value.staffNeeded:value.minStaff)!==minimum)fail('The total staffing requirement must equal the category requirements.');
     }
     const previousAssignment=(snapshot[collection]||[]).find(row=>row.id===change.itemId);

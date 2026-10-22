@@ -2990,13 +2990,29 @@ function personScheduledDuring(personId,startDate,endDate){
 function canManageOvertimeShift(shift){return !!shift&&(isGlobalScheduleAdmin()||((can('pm_schedule_manage')||can('pm_overtime_manage'))&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.active!==false&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.managerIds?.includes(CURRENT_USER_ID)));}
 function visibleScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canViewWorkGroup(g));}
 function staffingSkillOptions(selected=''){
-  return '<option value="">Select required skill</option>'+[...new Set([...(STATE.pm.refData?.skillsCatalog||[]),...(selected?[selected]:[])])].sort((a,b)=>a.localeCompare(b)).map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('');
+  const skills=[...new Set([...(STATE.pm.refData?.skillsCatalog||[]),...(selected&&!selected.startsWith('rank:')&&selected!=='any'?[selected]:[])])].sort((a,b)=>a.localeCompare(b));
+  const ranks=[...new Set([...(STATE.pm.refData?.ranks||[]),...RANKS,...STATE.pm.records.map(r=>r.rank).filter(Boolean)])].sort((a,b)=>a.localeCompare(b));
+  return '<option value="">Choose qualification or classification...</option>'+
+    '<optgroup label="Classification / Rank">'+ranks.map(rank=>`<option value="rank:${escapeHtml(rank)}" ${selected==='rank:'+rank?'selected':''}>${escapeHtml(rank)}</option>`).join('')+'</optgroup>'+
+    '<optgroup label="Training / Special Skill">'+skills.map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('')+'</optgroup>'+
+    `<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>`;
 }
 function staffingNeedsRow(row={}){
-  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Required skill">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
 }
 function staffingNeedsEditor(id,record){
-  return `<div class="form-row"><label>Staffing Requirements by Category</label><p class="hint">Optional. Define any staffing categories and required counts, such as 2 Deputies and 1 Sergeant, or Law Dispatchers, Fire Dispatchers, and Call Takers. Choose the personnel skill required for each category. Define skills in Personnel Administration → Special Skills Catalog and assign them on the employee record. These are separate from permission roles.</p><div id="${id}">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><button type="button" class="btn btn-sm btn-outline" id="${id}Add">Add Staffing Category</button></div>`;
+  const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length);
+  return `<section class="pm-staff-builder" aria-label="Staffing requirements">
+    <div class="pm-builder-heading"><div><span class="pm-builder-kicker">STEP 3 · STAFFING</span><h3>Who does this shift need?</h3><p>Start with a template, copy another shift, or build your own. Every shift pattern keeps its own requirements.</p></div><span class="pm-builder-total" id="${id}Total">0 positions</span></div>
+    <div class="pm-builder-starters">
+      <button type="button" class="btn btn-outline" data-staffing-preset="patrol" id="${id}Patrol">Patrol example</button>
+      <button type="button" class="btn btn-outline" data-staffing-preset="dispatch" id="${id}Dispatch">Dispatch example</button>
+      <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
+    </div>
+    <div class="form-row pm-builder-copy"><label for="${id}Copy">Copy requirements from another shift</label><select id="${id}Copy"><option value="">Choose an existing shift pattern...</option>${otherPatterns.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.staffingRequirements.reduce((n,r)=>n+Number(r.count||0),0)} positions)</option>`).join('')}</select></div>
+    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div>
+    <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add operational position</button><span class="hint">Qualifications are advisory. The scheduler can still assign someone if a skill is missing.</span></div>
+  </section>`;
 }
 function readStaffingNeeds(id){
   const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value)}));
@@ -3006,7 +3022,32 @@ function wireStaffingNeedsEditor(id,totalId){
   const container=document.getElementById(id),total=document.getElementById(totalId);
   const update=()=>{const rows=[...container.querySelectorAll('[data-staffing-row]')];total.readOnly=rows.length>0;if(rows.length)total.value=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[data-staffing-count]').value)||0),0);};
   container.addEventListener('input',update);container.addEventListener('click',e=>{if(e.target.closest('[data-remove-staffing]')){e.target.closest('[data-staffing-row]').remove();update();}});
-  document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());update();};update();
+  const totalBadge=document.getElementById(id+'Total');
+  const refresh=()=>{update();if(totalBadge){const count=[...container.querySelectorAll('[data-staffing-count]')].reduce((n,field)=>n+(Number(field.value)||0),0);totalBadge.textContent=count+' position'+(count===1?'':'s');}};
+  container.addEventListener('input',refresh);
+  document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();};
+  const catalog=STATE.pm.refData?.skillsCatalog||[];
+  const chooseSkill=keywords=>catalog.find(skill=>keywords.some(k=>skill.toLowerCase().includes(k)))||'';
+  const presets={
+    patrol:[['Patrol Deputy',2,['patrol','law enforcement']],['Patrol Supervisor',1,['sergeant','supervisor']]],
+    dispatch:[['Fire Dispatcher',1,['fire dispatch','fire']],['Law Dispatcher',1,['law dispatch','law']],['Dispatch Supervisor',1,['supervisor','dispatch']]],
+    fire:[['Company Officer',1,['company officer','fire officer']],['Driver / Engineer',1,['engineer','driver']],['Firefighter',2,['firefighter']]]
+  };
+  document.querySelectorAll('[data-staffing-preset]').forEach(button=>button.addEventListener('click',()=>{
+    if(container.querySelector('[data-staffing-row]')&&!confirm('Replace the current staffing requirements with this example?'))return;
+    const chosen=presets[button.dataset.staffingPreset]||[];
+    container.innerHTML=chosen.map(([name,count,skills])=>staffingNeedsRow({name,count,requiredSkill:chooseSkill(skills)||(name.includes('Supervisor')?'rank:Sergeant': 'any')})).join('');
+    refresh();
+    toast('Example loaded. Review the required skills and counts before saving.');
+  }));
+  document.getElementById(id+'Copy').addEventListener('change',e=>{
+    const source=STATE.pm.scheduleShifts.find(p=>p.id===e.target.value);if(!source)return;
+    if(container.querySelector('[data-staffing-row]')&&!confirm('Replace the current staffing requirements with those from '+source.name+'?')){e.target.value='';return;}
+    container.innerHTML=(source.staffingRequirements||[]).map(r=>staffingNeedsRow({...r,id:'cat'+Date.now()+Math.random().toString(36).slice(2,9)})).join('');
+    e.target.value='';
+    refresh();toast('Requirements copied. This pattern can now be edited independently.');
+  });
+  refresh();
 }
 function staffingCategoryOptions(record,selected=''){
   return '<option value="">'+((record?.staffingRequirements||[]).length?'Select Staffing Category':'General / Unclassified')+'</option>'+(record?.staffingRequirements||[]).map(row=>`<option value="${escapeHtml(row.id)}" ${row.id===selected?'selected':''}>${escapeHtml(row.name)}</option>`).join('');
@@ -3024,10 +3065,20 @@ function staffingCategoryName(record,id){return (record?.staffingRequirements||[
 function staffingBreakdownHtml(summary){
   return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
 }
+function effectiveStaffingRequirements(shift,date){
+  const base=shift.staffingRequirements||[];
+  const rule=(shift.staffingOverrides||[]).find(r=>r.type==='date'&&r.value===date)||
+    (shift.staffingOverrides||[]).find(r=>r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
+  if(!rule)return base;
+  return base.map(r=>({...r,count:Object.prototype.hasOwnProperty.call(rule.counts||{},r.id)?Number(rule.counts[r.id]):r.count})).filter(r=>r.count>0);
+}
 function shiftStaffingSummary(shift,date){
   const assigned=STATE.pm.scheduleAssignments.filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
   const coverage=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
-  return staffingSummary(shift.staffingRequirements,[...assigned,...coverage],shift.minStaff,STATE.pm.records);
+  const requirements=effectiveStaffingRequirements(shift,date);
+  const hasOverride=(shift.staffingOverrides||[]).some(r=>r.type==='date'&&r.value===date||r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
+  const minimum=hasOverride?requirements.reduce((n,r)=>n+r.count,0):shift.minStaff;
+  return staffingSummary(requirements,[...assigned,...coverage],minimum,STATE.pm.records);
 }
 function eventStaffingSummary(event){return staffingSummary(event.staffingRequirements,(event.requests||[]).filter(r=>r.status==='awarded'),event.staffNeeded,STATE.pm.records);}
 function openEventStaffingNeedsModal(event){
@@ -4527,19 +4578,50 @@ function openCoverageDetailModal(coverage){
   document.getElementById('mCancel').onclick=closeModal;
 }
 
+function staffingOverrideCard(rule={},base=[]){
+  const id=rule.id||'rule'+Date.now()+Math.random().toString(36).slice(2,8);
+  return `<div class="pm-staff-override-card" data-staff-override data-id="${escapeHtml(id)}">
+    <div class="pm-staff-override-top">
+      <select aria-label="Override type" data-override-type><option value="weekday" ${rule.type!=='date'?'selected':''}>Day of week</option><option value="date" ${rule.type==='date'?'selected':''}>Specific date</option></select>
+      <select aria-label="Day of week" data-override-weekday style="${rule.type==='date'?'display:none':''}">${WEEKDAY_LABELS.map((day,n)=>`<option value="${n}" ${String(rule.value)===String(n)?'selected':''}>${day}</option>`).join('')}</select>
+      <input aria-label="Specific date" data-override-date type="date" value="${rule.type==='date'?escapeHtml(rule.value||''):''}" style="${rule.type==='date'?'':'display:none'}">
+      <button class="btn btn-sm btn-outline" type="button" data-remove-override>Remove</button>
+    </div>
+    <div class="pm-staff-override-counts">${base.map(req=>`<label>${escapeHtml(req.name)}<input type="number" min="0" max="5000" step="1" data-override-category="${escapeHtml(req.id)}" value="${Object.prototype.hasOwnProperty.call(rule.counts||{},req.id)?Number(rule.counts[req.id]):req.count}"></label>`).join('')}</div>
+    <p class="hint">Use 0 if this position isn't required on that day. Does not alter the underlying shift pattern.</p>
+  </div>`;
+}
+function readStaffingOverrides(id,base){
+  const rules=[];
+  for(const element of document.querySelectorAll('#'+id+' [data-staff-override]')){
+    const type=element.querySelector('[data-override-type]').value;
+    const value=type==='date'?element.querySelector('[data-override-date]').value:element.querySelector('[data-override-weekday]').value;
+    if(!value){toast('Choose a date for each staffing override.',true);return null;}
+    const counts={};
+    for(const input of element.querySelectorAll('[data-override-category]')){
+      const n=Number(input.value);
+      if(!Number.isSafeInteger(n)||n<0||n>5000){toast('Override staffing counts must be whole numbers between 0 and 5000.',true);return null;}
+      if(base.some(r=>r.id===input.dataset.overrideCategory))counts[input.dataset.overrideCategory]=n;
+    }
+    if(!Object.values(counts).some(n=>n>0)){toast('Each override needs at least one staffed position.',true);return null;}
+    if(rules.some(r=>r.type===type&&r.value===value)){toast('That staffing override already exists.',true);return null;}
+    rules.push({id:element.dataset.id,type,value,counts});
+  }
+  return rules;
+}
 function openShiftFormModal(existing){
   const groups=manageableScheduleWorkGroups();
   if(!groups.length){toast(isGlobalScheduleAdmin()?'Create or activate a Work Group Calendar before adding a shift pattern.':'An administrator must give you access to an active Work Group Calendar before you can add a shift pattern.',true);return;}
   if(existing&&!canManageScheduleShift(existing))return;
   const editing = !!existing;
   const patternType = existing?.patternType === 'weekly' ? 'weekly' : 'rotation';
-  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').className = 'modal pm-shift-builder-modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>${editing?'Edit Shift Pattern':'New Shift Pattern'}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-head"><div><small class="pm-builder-kicker">SCHEDULING / SHIFT BUILDER</small><h3>${editing?'Edit Shift Pattern':'New Shift Pattern'}</h3><p class="hint">Three steps: identify the shift, choose its rotation, then set staffing.</p></div><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
-      <div class="form-row"><label>Work Group</label><select id="fShiftWorkGroup">${groups.map(g=>`<option value="${g.id}" ${existing?.workGroupId===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></div>
+      <div class="pm-builder-step"><span>STEP 1</span><h4>Shift identity</h4></div><div class="form-row"><label>Work Group</label><select id="fShiftWorkGroup">${groups.map(g=>`<option value="${g.id}" ${existing?.workGroupId===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></div>
       <div class="form-row"><label>Pattern Name</label><input type="text" id="fShiftName" value="${editing?escapeHtml(existing.name):''}" placeholder="e.g. Patrol C - Days"></div>
-      <div class="form-row"><label>Schedule Type</label>
+      <div class="pm-builder-step"><span>STEP 2</span><h4>When does this shift work?</h4></div><div class="form-row"><label>Schedule Type</label>
         <select id="fShiftPatternType">
           <option value="rotation" ${patternType==='rotation'?'selected':''}>Fixed rotation (days on / days off)</option>
           <option value="weekly" ${patternType==='weekly'?'selected':''}>Specific days of the week</option>
@@ -4572,6 +4654,12 @@ function openShiftFormModal(existing){
       </div>
       <div class="form-row"><label>Minimum Staff Required</label><input type="number" min="0" id="fShiftMinStaff" value="${editing?(existing.minStaff||0):1}"></div>
       ${staffingNeedsEditor('fShiftStaffNeeds',existing)}
+      <details class="pm-staff-advanced" ${(existing?.staffingOverrides||[]).length?'open':''}>
+        <summary><strong>Advanced staffing</strong> · Adjust requirements for a weekday or special date</summary>
+        <p class="hint">Optional. For example, Friday may need more dispatchers. Specific-date rules take precedence over weekday rules.</p>
+        <div id="fShiftOverrides">${(existing?.staffingOverrides||[]).map(rule=>staffingOverrideCard(rule,existing?.staffingRequirements||[])).join('')}</div>
+        <button type="button" class="btn btn-outline" id="fShiftAddOverride">+ Add different staffing for a day</button>
+      </details>
       <div class="form-row"><label>Effective Dates <span style="font-weight:400;color:var(--text-dim);">(when this rotation itself is in effect \u2014 not when a specific person is assigned to it)</span></label>
         <div class="form-2col">
           <input type="date" id="fShiftStartDate" value="${editing?(existing.startDate||''):fmt(new Date())}">
@@ -4584,6 +4672,34 @@ function openShiftFormModal(existing){
   `;
   openModal();
   wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
+  const overrideRoot=document.getElementById('fShiftOverrides');
+  const syncOverrideCounts=()=>{
+    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({
+      id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',
+      count:Number(row.querySelector('[data-staffing-count]').value)||1
+    }));
+    overrideRoot.querySelectorAll('[data-staff-override]').forEach(card=>{
+      const existingCounts=Object.fromEntries([...card.querySelectorAll('[data-override-category]')].map(input=>[input.dataset.overrideCategory,Number(input.value)]));
+      const current={id:card.dataset.id,type:card.querySelector('[data-override-type]').value,value:card.querySelector('[data-override-type]').value==='date'?card.querySelector('[data-override-date]').value:card.querySelector('[data-override-weekday]').value,counts:existingCounts};
+      const next=document.createElement('div');next.innerHTML=staffingOverrideCard(current,base);
+      card.replaceWith(next.firstElementChild);
+    });
+  };
+  document.getElementById('fShiftAddOverride').onclick=()=>{
+    syncOverrideCounts();
+    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',count:Number(row.querySelector('[data-staffing-count]').value)||1}));
+    if(!base.length){toast('Add operational positions first.',true);return;}
+    overrideRoot.insertAdjacentHTML('beforeend',staffingOverrideCard({type:'weekday',value:'5'},base));
+  };
+  overrideRoot.addEventListener('change',e=>{
+    if(e.target.matches('[data-override-type]')){
+      const card=e.target.closest('[data-staff-override]');
+      card.querySelector('[data-override-weekday]').style.display=e.target.value==='weekday'?'':'none';
+      card.querySelector('[data-override-date]').style.display=e.target.value==='date'?'':'none';
+    }
+  });
+  overrideRoot.addEventListener('click',e=>{if(e.target.closest('[data-remove-override]'))e.target.closest('[data-staff-override]').remove();});
+  document.getElementById('modalBox').querySelector('.modal-body')?.classList.add('pm-shift-builder-body');
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('fShiftPatternType').addEventListener('change', (e)=>{
@@ -4607,8 +4723,9 @@ function openShiftFormModal(existing){
     const workGroupId=document.getElementById('fShiftWorkGroup').value;
     if(!groups.some(g=>g.id===workGroupId)||(editing&&!canManageScheduleShift(existing)))return;
     const staffingRequirements=readStaffingNeeds('fShiftStaffNeeds');if(!staffingRequirements)return;
+    const staffingOverrides=readStaffingOverrides('fShiftOverrides',staffingRequirements);if(!staffingOverrides)return;
     const data = {
-      name, workGroupId, staffingRequirements,
+      name, workGroupId, staffingRequirements, staffingOverrides,
       patternType: selectedType,
       daysOn: Number(document.getElementById('fShiftDaysOn').value)||4,
       daysOff: Number(document.getElementById('fShiftDaysOff').value)||3,
@@ -5522,3 +5639,11 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-rollcall-stats-st
 if(typeof document!=='undefined'&&!document.getElementById('pm-credential-form-style')){
  const st=document.createElement('style');st.id='pm-credential-form-style';st.textContent='.pm-credential-group{margin:18px 0;border:1px solid var(--border);border-radius:12px;background:rgba(70,125,205,.065);padding:16px}.pm-credential-group h4{font-size:14px;font-weight:800;margin:0 0 12px}.pm-credential-group .hint{font-size:12px;color:var(--text-dim);margin-bottom:0}';document.head.append(st);
 }
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-friendly-shift-style')){
+ const st=document.createElement('style');st.id='pm-friendly-shift-style';
+ st.textContent='.pm-shift-builder-modal{max-width:930px!important;width:min(930px,calc(100vw - 28px))!important;display:flex;flex-direction:column;overflow:hidden!important;max-height:calc(100dvh - 32px)!important}.pm-shift-builder-modal>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:22px 26px!important}.pm-shift-builder-modal .modal-head p{margin:5px 0 0}.pm-builder-kicker{font-size:10px;letter-spacing:.1em;font-weight:800;color:var(--text-dim)}.pm-builder-step{display:flex;align-items:center;gap:13px;border-top:1px solid var(--border);padding:19px 0 13px;margin-top:20px}.pm-builder-step:first-child{margin-top:0;border:0;padding-top:0}.pm-builder-step span{font-size:10px;font-weight:800;background:rgba(67,126,223,.17);color:#8dbbfc;padding:7px 10px;border-radius:8px;white-space:nowrap}.pm-builder-step h4{font-size:15px;margin:0;font-weight:800}.pm-staff-builder{border:1px solid var(--border);border-radius:15px;padding:18px 20px;background:rgba(82,130,199,.045);margin-top:18px}.pm-builder-heading{display:flex;justify-content:space-between;gap:14px;align-items:start;margin-bottom:17px}.pm-builder-heading h3{font-size:18px;margin:5px 0}.pm-builder-heading p{font-size:12px;color:var(--text-dim);margin:0;max-width:530px}.pm-builder-total{background:rgba(48,158,113,.12);border:1px solid rgba(48,158,113,.24);border-radius:9px;font-size:12px;font-weight:800;padding:8px 12px;white-space:nowrap}.pm-builder-starters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}.pm-builder-starters .btn,.pm-builder-foot .btn{border-radius:9px}.pm-builder-copy{margin-bottom:16px!important}.pm-builder-rows{display:flex;flex-direction:column;gap:10px}.pm-builder-rows .staffing-need-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) 90px auto;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:11px}.pm-builder-rows .staffing-need-row input,.pm-builder-rows .staffing-need-row select{min-width:0;width:100%}.pm-builder-foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-top:15px}.pm-builder-foot .hint{font-size:11px;max-width:380px}@media(max-width:690px){.pm-builder-rows .staffing-need-row{grid-template-columns:1fr 1fr}.pm-shift-builder-modal>.modal-body{padding:13px!important}.pm-builder-heading{flex-wrap:wrap}}@media(max-width:420px){.pm-builder-rows .staffing-need-row{grid-template-columns:1fr}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-staff-override-style')){const st=document.createElement('style');st.id='pm-staff-override-style';st.textContent='.pm-staff-advanced{border:1px solid var(--border);border-radius:13px;padding:16px 18px;margin:16px 0}.pm-staff-advanced summary{cursor:pointer;font-size:13px}.pm-staff-advanced>.hint{margin:12px 0}.pm-staff-override-card{border-radius:11px;background:rgba(101,142,191,.055);border:1px solid var(--border);padding:14px;margin:12px 0}.pm-staff-override-top{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.pm-staff-override-top select,.pm-staff-override-top input{flex:1;min-width:120px}.pm-staff-override-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:13px 0}.pm-staff-override-counts label{font-size:11px;color:var(--text-dim)}.pm-staff-override-counts input{width:100%;display:block;margin-top:5px}@media(max-width:620px){.pm-staff-override-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}';document.head.append(st);}
