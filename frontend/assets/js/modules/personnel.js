@@ -2852,22 +2852,30 @@ function renderScheduling(){
   }
   if(!visibleTabs.some(t=>t.key===SCHED_SUBTAB)) SCHED_SUBTAB = visibleTabs[0].key;
   const day=fmt(new Date());
-  const coverageGaps=can('pm_schedule_view')?computeCoverageGaps(7).filter(g=>canViewScheduleShift(g.shift)):[];
-  const upcomingTraining=STATE.pm.trainingRecords.filter(t=>t.recertRequired&&t.recertDate&&t.recertDate<=fmt(addDays(new Date(),30)));
+  const visibleGroups=(STATE.pm.scheduleWorkGroups||[]).filter(canViewWorkGroup);
+  const visibleGroupIds=new Set(visibleGroups.map(g=>g.id));
+  const visibleShifts=(STATE.pm.scheduleShifts||[]).filter(shift=>visibleGroupIds.has(shift.workGroupId));
+  const visibleShiftIds=new Set(visibleShifts.map(shift=>shift.id));
+  const scopedPerson=personId=>isGlobalScheduleAdmin()||personScheduleGroupIds(personId).some(id=>visibleGroupIds.has(id));
+  const coverageGaps=can('pm_schedule_view')?computeCoverageGaps(7).filter(g=>visibleShiftIds.has(g.shift?.id)):[];
+  const upcomingTraining=(can('pm_training_view')||can('pm_training_manage'))?(STATE.pm.trainingRecords||[]).filter(t=>t.recertRequired&&t.recertDate&&t.recertDate<=fmt(addDays(new Date(),30))&&scopedPerson(t.personId)):[];
   const settings=STATE.pm.personnelSettings||{};
   const authorized=settings.authorizedPositionsByUnit||{};
+  const visibleUnits=new Set(visibleGroups.flatMap(group=>group.unitNames||[]).map(u=>String(u).trim().toLowerCase()));
+  // Unit-based vacancy counts are only meaningful when a visible work group maps to units.
+  const canShowVacancies=isGlobalScheduleAdmin()||visibleUnits.size>0;
   const activeByUnit={};
   STATE.pm.records.filter(r=>r.employmentStatus==='Active').forEach(r=>{if(r.unitId)activeByUnit[r.unitId]=(activeByUnit[r.unitId]||0)+1;});
-  const unfilled=Object.entries(authorized).reduce((total,[unit,n])=>total+Math.max(0,(Number(n)||0)-(activeByUnit[unit]||0)),0);
-  const pendingLeave=can('pm_leave_request_approve')?(STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'&&canManagePersonSchedule(r.personId,r,'pm_leave_request_approve')).length:null;
-  const rollcallCount=can('pm_rollcall_view')?(STATE.pm.rollCalls||[]).filter(r=>r.date===day).length:null;
-  const callbackCount=can('pm_overtime_view')?(STATE.pm.otCallbackOptIns||[]).length:null;
+  const unfilled=Object.entries(authorized).filter(([unit])=>isGlobalScheduleAdmin()||visibleUnits.has(String(unit).trim().toLowerCase())).reduce((total,[unit,n])=>total+Math.max(0,(Number(n)||0)-(activeByUnit[unit]||0)),0);
+  const pendingLeave=can('pm_leave_request_approve')?(STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'&&canManagePersonSchedule(r.personId,r,'pm_leave_request_approve')&&scopedPerson(r.personId)).length:null;
+  const rollcallCount=can('pm_rollcall_view')?(STATE.pm.rollCalls||[]).filter(r=>r.date===day&&visibleShiftIds.has(r.shiftId)).length:null;
+  const callbackCount=can('pm_overtime_view')?[...new Set(STATE.pm.otCallbackOptIns||[])].filter(scopedPerson).length:null;
   document.getElementById('view-pm-scheduling').innerHTML = `
     <section class="pm-readiness-brief">
       <div class="pm-readiness-title"><div><small>PERSONNEL / STAFFING INTELLIGENCE</small><h2>Operational readiness</h2><p>Coverage, qualifications and work rules inform staffing decisions. They do not block authorized schedulers.</p></div><span>Next 7 days</span></div>
       <div class="pm-readiness-cards">
         <div><small>Coverage gaps</small><strong>${coverageGaps.length}</strong><span>Unfilled shift requirements</span></div>
-        <div><small>Authorized vacancies</small><strong>${settings.authorizedStaffingEnabled?unfilled:'—'}</strong><span>${settings.authorizedStaffingEnabled?'Positions without active assignments':'Configure in Personnel Admin'}</span></div>
+        <div><small>Authorized vacancies</small><strong>${settings.authorizedStaffingEnabled&&canShowVacancies?unfilled:'—'}</strong><span>${!settings.authorizedStaffingEnabled?'Configure in Personnel Admin':canShowVacancies?'Positions without active assignments':'Unit mapping required'}</span></div>
         <div><small>Qualification advisories</small><strong>${upcomingTraining.length}</strong><span>Expired or expiring credentials</span></div>
         <div><small>Leave decisions</small><strong>${pendingLeave===null?'—':pendingLeave}</strong><span>${pendingLeave===null?'Approval permission required':'Awaiting review'}</span></div>
         <div><small>Today's roll calls</small><strong>${rollcallCount===null?'—':rollcallCount}</strong><span>Recorded vs planned rosters</span></div>
