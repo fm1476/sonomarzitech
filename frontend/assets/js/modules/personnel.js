@@ -4408,6 +4408,35 @@ function renderRollCallSub(){
   }
 }
 
+function openSchedulingDayDetail(date,shifts){
+  const allowed=shifts.filter(shift=>canViewScheduleShift(shift));
+  if(!allowed.length)return;
+  const dayLabel=new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const cards=allowed.map(shift=>{
+    const summary=shiftStaffingSummary(shift,date);
+    const assignments=(STATE.pm.scheduleAssignments||[]).filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
+    const coverages=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
+    const people=[...new Set([...assignments,...coverages].map(a=>a.personId))];
+    const status=!summary.ok?'Below minimum':summary.preferredNeeded>0?'Below preferred':'Preferred staffing met';
+    const color=!summary.ok?'var(--red)':summary.preferredNeeded>0?'var(--gold)':'var(--green)';
+    return `<section style="padding:16px;margin-bottom:12px;border:1px solid var(--border);border-radius:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h4 style="margin:0;">${escapeHtml(shift.name)}</h4><span style="color:${color};font-weight:700;">${status}</span></div>
+      <p class="hint">${escapeHtml(SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd))}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;">
+        <div class="badge">${summary.staffed} scheduled</div><div class="badge">${summary.minStaff} minimum</div><div class="badge">${summary.categories.reduce((n,r)=>n+r.preferredCount,0)||summary.minStaff} preferred</div>
+      </div>
+      ${summary.categories.map(c=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(c.name)}</span><strong style="color:${c.needed?'var(--red)':c.preferredNeeded?'var(--gold)':'var(--green)'};">${c.staffed}/${c.count} min${c.preferredCount>c.count?' · '+c.preferredCount+' preferred':''}</strong></div>`).join('')}
+      <details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:600;">Assigned personnel (${people.length})</summary>${people.map(id=>`<div style="padding:5px 0;">${escapeHtml(personName(id))}</div>`).join('')||'<p class="hint">No assigned personnel.</p>'}</details>
+      ${summary.advisories.length?'<p class="hint" style="color:var(--gold);">Qualification advisories: '+summary.advisories.length+'</p>':''}
+      ${summary.needed||summary.preferredNeeded?'<p class="hint">Coverage opportunity: '+(summary.needed?summary.needed+' minimum position(s) unfilled. ':summary.preferredNeeded+' additional preferred position(s).')+' Scheduler review required for any changes.</p>':''}
+    </section>`;
+  }).join('');
+  document.getElementById('modalBox').className='modal modal-lg';
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><small class="pm-builder-kicker">SCHEDULING / DAY DETAILS</small><h3>${escapeHtml(dayLabel)}</h3><p class="hint">Calendar remains unchanged. Review staffing without editing assignments.</p></div><button class="modal-close" id="mClose" aria-label="Close">×</button></div><div class="modal-body" style="max-height:70vh;overflow:auto;">${cards||'<p>No shifts are visible for this date.</p>'}</div><div class="modal-foot"><button class="btn btn-primary" id="mCancel">Back to Calendar</button></div>`;
+  openModal();
+  document.getElementById('mClose').onclick=closeModal;
+  document.getElementById('mCancel').onclick=closeModal;
+}
 function renderDutyCalendar(body){
   const allGroups=visibleScheduleWorkGroups();
   if(!SCHED_CAL_WORKGROUPS.length) SCHED_CAL_WORKGROUPS=allGroups.map(g=>g.id);
@@ -4442,43 +4471,26 @@ function renderDutyCalendar(body){
     working.sort((a,b)=> (shiftOrder.get(a.shiftId) ?? 999) - (shiftOrder.get(b.shiftId) ?? 999));
     const dayCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && displayedShiftIds.has(c.shiftId) && (SCHED_CAL_SHIFT==='all' || c.shiftId===SCHED_CAL_SHIFT));
     const isToday = dateStr === fmt(new Date());
-    let staffingBadge = '';
-    // A day is operationally covered only when every displayed shift with a configured
-    // minimum meets that minimum. Shifts with no minimum do not create an artificial shortage.
     const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
-    const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&e.endDate>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
-    const staffingChecks = displayedShifts.map(shift=>{
-      return {shift,...shiftStaffingSummary(shift,dateStr)};
-    });
-    const eventChecks=dayEvents.map(e=>({event:e,...eventStaffingSummary(e)}));
-    const dayCovered = staffingChecks.every(x=>x.ok) && eventChecks.every(x=>x.ok);
-    let cellClass = 'cal-cell' + (isToday ? ' cal-cell-today' : '') + (dayCovered ? ' cal-cell-covered' : ' cal-cell-short');
-    if(SCHED_CAL_SHIFT!=='all'){
-      const check=staffingChecks[0];
-      if(check?.minStaff>0) staffingBadge = `<div style="font-size:10px;font-weight:800;color:${check.ok?'var(--green)':'var(--red)'};">${check.staffed}/${check.minStaff} staffed</div>`;
-    }
-    cells += `<div class="${cellClass}">
+    const staffingChecks=displayedShifts.map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
+    const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&(e.endDate||e.startDate)>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
+    const belowMinimum=staffingChecks.some(x=>!x.ok);
+    const belowPreferred=staffingChecks.some(x=>x.preferredNeeded>0);
+    const eventShort=dayEvents.some(e=>!eventStaffingSummary(e).ok);
+    const dayState=belowMinimum||eventShort?'short':belowPreferred?'preferred':'covered';
+    const calendarColor=dayState==='short'?'var(--red)':dayState==='preferred'?'var(--gold)':'var(--green)';
+    const statusLabel=dayState==='short'?'Below minimum':dayState==='preferred'?'Below preferred':'Staffing met';
+    const visibleChecks=staffingChecks.filter(x=>x.minStaff>0||x.categories.length);
+    cells += `<div class="cal-cell ${isToday?'cal-cell-today':''}" style="border-top:3px solid ${calendarColor};">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
-      ${staffingBadge}
-      ${staffingChecks.filter(x=>x.categories.length).map(x=>`<div class="calendar-staffing-breakdown"><strong>${escapeHtml(x.shift.name)}</strong><br>${staffingBreakdownHtml(x)}</div>`).join('')}
-      ${dayEvents.map(e=>{const summary=eventStaffingSummary(e),staffed=summary.staffed,needed=summary.minStaff,ok=summary.ok;return `<a href="#" data-cal-special-event="${e.id}" class="cal-event" style="background:${ok?'var(--green)':'var(--red)'}22;color:${ok?'var(--green)':'var(--red)'};border-left:3px solid ${ok?'var(--green)':'var(--red)'};" title="${escapeHtml(e.name+' — '+staffed+'/'+needed+' staffed')}">${escapeHtml(e.name)} (${staffed}/${needed})</a>${staffingBreakdownHtml(summary)}`;}).join('')}
-      ${working.map(a=>{
-        const shift = shifts.find(s=>s.id===a.shiftId);
-        const color = shift ? shiftColor(shift) : 'var(--blue)';
-        const label = SCHED_CAL_SHIFT==='all' ? `${personName(a.personId)} (${shift?shift.name:''})` : personName(a.personId);
-        return `<a href="#" data-cal-assign-event="${a.id}" class="cal-event" style="background:${color}22;color:${color};border-left:3px solid ${color};" title="${escapeHtml(label)}">${escapeHtml(label)}</a>`;
-      }).join('')}
-      ${excepted.map(({assignment:a,exception:ex})=>{
-        const code = exceptionCodeInfo(ex.code);
-        const label = `${personName(a.personId)} (${ex.code})`;
-        return `<a href="#" data-cal-exception-event="${ex.id}" class="cal-event" style="background:${code.color}22;color:${code.color};border-left:3px solid ${code.color};" title="${escapeHtml(personName(a.personId)+' — '+code.name)}">${escapeHtml(label)}</a>`;
-      }).join('')}
-      ${dayCoverages.map(c=>{
-        const shift = shifts.find(s=>s.id===c.shiftId);
-        const label = SCHED_CAL_SHIFT==='all' ? `${personName(c.personId)} (covering, ${shift?shift.name:''})` : `${personName(c.personId)} (covering)`;
-        return `<a href="#" data-cal-coverage-event="${c.id}" class="cal-event" style="background:${SWAP_COVERAGE_COLOR}22;color:${SWAP_COVERAGE_COLOR};border-left:3px solid ${SWAP_COVERAGE_COLOR};" title="${escapeHtml(personName(c.personId)+(c.swapRequestId?' is covering this shift via an approved swap':' is assigned to this one-off shift'))}">${escapeHtml(label)}</a>`;
-      }).join('')}
-    </div>`;
+      <button type="button" data-sched-day="${dateStr}" aria-label="View staffing for ${dateStr}: ${statusLabel}" style="width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:2px;cursor:pointer;">
+        <span style="font-size:10px;color:${calendarColor};font-weight:700;">${statusLabel}</span>
+        ${visibleChecks.slice(0,3).map(check=>`<span style="display:block;font-size:10px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(check.shift.name)}"><strong>${escapeHtml(check.shift.name)}</strong> ${check.staffed}/${check.minStaff}${check.preferredNeeded>0?' · +'+check.preferredNeeded+' ideal':''}</span>`).join('')}
+        ${visibleChecks.length>3?`<span style="font-size:10px;">+${visibleChecks.length-3} more shifts</span>`:''}
+        ${dayEvents.length?`<span style="display:block;font-size:10px;margin-top:5px;">${dayEvents.length} special event${dayEvents.length===1?'':'s'}</span>`:''}
+        <span style="display:block;font-size:10px;margin-top:6px;color:var(--text-dim);">View day details ›</span>
+      </button>
+    </div>`;;
   }
 
   body.innerHTML = `
@@ -4515,6 +4527,7 @@ function renderDutyCalendar(body){
     <div class="cal-grid-head">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div>
     <div class="cal-grid">${cells}</div>
   `;
+  body.querySelectorAll('[data-sched-day]').forEach(button=>button.addEventListener('click',()=>openSchedulingDayDetail(button.dataset.schedDay,shifts)));
   body.querySelector('#btnExitDraftPreview')?.addEventListener('click',()=>{SCHED_DRAFT_PREVIEW_ID=null;SCHED_CAL_SHIFT='all';renderDutyCalendar(body);});
   body.querySelectorAll('[data-sched-cal-nav]').forEach(b=>b.addEventListener('click', ()=>{
     const dir = b.dataset.schedCalNav;
