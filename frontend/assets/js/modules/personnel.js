@@ -2998,7 +2998,27 @@ function staffingSkillOptions(selected=''){
     `<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>`;
 }
 function staffingNeedsRow(row={}){
-  return `<div class="staffing-need-row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:12px 0;border-bottom:1px solid var(--border)" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Minimum<input data-staffing-count aria-label="Minimum staffing" type="number" min="1" step="1" value="${row.count||1}"></label><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Preferred<input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" step="1" value="${row.preferredCount??row.count??1}"></label><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+  const name=String(row.name||'').trim();
+  return `<div class="staffing-need-row" style="display:block;padding:16px;margin:0 0 12px;border:1px solid var(--border);border-radius:14px;background:var(--surface);" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+      <strong data-staffing-card-title>${escapeHtml(name||'Choose a position')}</strong>
+      <button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove operational position">Remove</button>
+    </div>
+    <div class="form-row" style="margin-bottom:12px;">
+      <label>Operational position <span style="color:var(--red)">*</span></label>
+      <input data-staffing-name aria-label="Operational position name" placeholder="e.g. Patrol Deputy, Fire Dispatcher" value="${escapeHtml(name)}" autocomplete="off">
+      <small class="hint">The role being staffed, not necessarily the employee's rank.</small>
+    </div>
+    <div class="form-row" style="margin-bottom:12px;">
+      <label>Qualification or rank <span class="hint">(advisory)</span></label>
+      <select data-staffing-skill aria-label="Qualification or rank">${staffingSkillOptions(row.requiredSkill||'any')}</select>
+      <small class="hint">Optional eligibility guidance. Authorized schedulers may override a mismatch.</small>
+    </div>
+    <div class="form-2col" style="gap:12px;">
+      <div class="form-row"><label>Minimum people</label><input data-staffing-count aria-label="Minimum staffing" type="number" min="1" max="5000" step="1" value="${row.count??1}"></div>
+      <div class="form-row"><label>Preferred people</label><input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" max="5000" step="1" value="${row.preferredCount??row.count??1}"></div>
+    </div>
+  </div>`;
 }
 function staffingNeedsEditor(id,record){
   const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
@@ -3044,9 +3064,9 @@ function wireStaffingNeedsEditor(id,totalId){
   const update=()=>{const rows=[...container.querySelectorAll('[data-staffing-row]')];total.readOnly=rows.length>0;if(rows.length)total.value=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[data-staffing-count]').value)||0),0);};
   container.addEventListener('input',update);container.addEventListener('click',e=>{if(e.target.closest('[data-remove-staffing]')){e.target.closest('[data-staffing-row]').remove();update();}});
   const totalBadge=document.getElementById(id+'Total');
-  const refresh=()=>{update();const rows=[...container.querySelectorAll('[data-staffing-row]')];let minimum=0,preferred=0;for(const row of rows){const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;minimum+=min;preferred+=pref;}if(totalBadge)totalBadge.textContent=minimum+' minimum · '+preferred+' preferred';const preview=document.getElementById(id+'Preview');if(preview)preview.innerHTML='<strong>Staffing at a glance</strong><p class="hint" style="margin:5px 0">Minimum keeps the shift operational. Preferred is the ideal number of people.</p>'+(rows.length?rows.map(row=>{const name=escapeHtml(row.querySelector('[data-staffing-name]').value||'New position');const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+name+'</span><strong>'+min+' min / '+pref+' preferred</strong></div>';}).join(''):'<p class="hint">Add a position or choose an example to see the staffing plan.</p>')+(preferred<minimum?'<p style="color:var(--red)">Preferred staffing cannot be less than minimum staffing.</p>':'');};
-  container.addEventListener('input',refresh);
-  document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();};
+  const refresh=()=>{update();const rows=[...container.querySelectorAll('[data-staffing-row]')];let minimum=0,preferred=0;for(const row of rows){const title=row.querySelector('[data-staffing-card-title]');if(title)title.textContent=row.querySelector('[data-staffing-name]').value.trim()||'Choose a position';const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;minimum+=min;preferred+=pref;}if(totalBadge)totalBadge.textContent=minimum+' minimum · '+preferred+' preferred';const preview=document.getElementById(id+'Preview');if(preview)preview.innerHTML='<strong>Staffing at a glance</strong><p class="hint" style="margin:5px 0">Minimum keeps the shift operational. Preferred is the ideal number of people.</p>'+(rows.length?rows.map(row=>{const name=escapeHtml(row.querySelector('[data-staffing-name]').value.trim()||'Unnamed position · needs a name');const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+name+'</span><strong>'+min+' min / '+pref+' preferred</strong></div>';}).join(''):'<p class="hint">Add a position or choose an example to see the staffing plan.</p>')+(preferred<minimum?'<p style="color:var(--red)">Preferred staffing cannot be less than minimum staffing.</p>':'');};
+  container.addEventListener('input',refresh);container.addEventListener('change',refresh);
+  document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();container.lastElementChild?.querySelector('[data-staffing-name]')?.focus();};
   const catalog=STATE.pm.refData?.skillsCatalog||[];
   const chooseSkill=keywords=>catalog.find(skill=>keywords.some(k=>skill.toLowerCase().includes(k)))||'';
   const presets={
