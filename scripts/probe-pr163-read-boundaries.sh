@@ -16,6 +16,11 @@ WITH agency AS (
 ), actors AS (
  SELECT u.email,u.cognito_sub,u.id AS user_id,m.person_id,m.role_ids,g.scope,
         COALESCE(pa.enabled,false) AS platform_admin,
+        EXISTS (SELECT 1 FROM suite_records rr
+          WHERE rr.tenant_id=m.tenant_id AND rr.agency_id=m.agency_id AND rr.deleted=false
+            AND (rr.key::jsonb)->0='["roles"]'::jsonb
+            AND rr.value->>'id'=ANY(m.role_ids)
+            AND rr.value->'abilities'->>'pm_records_view'='true') AS pm_records_view,
         COALESCE((SELECT jsonb_agg(DISTINCT a.person_id)
          FROM suite_person_organization_assignments a
          JOIN suite_organization_nodes n ON n.tenant_id=a.tenant_id AND n.agency_id=a.agency_id AND n.id=a.organization_id
@@ -105,7 +110,10 @@ for actor in actors:
  positive=next(((ident(r),str(r.get(k))) for r in entries(records,'pm.records') if ident(r) in expected for k in ['badgeNumber','employeeId','name'] if len(str(r.get(k) or ''))>=3),None)
  if positive:
   pid,query=positive;status,data=invoke(actor,'/global-search',{'query':query})
-  report(label+' authorized person search',status==200 and any(r.get('id')==pid for r in data.get('results',[])))
+  if actor.get('pm_records_view'):
+   report(label+' authorized HR person search',status==200 and any(r.get('id')==pid for r in data.get('results',[])))
+  else:
+   report(label+' HR person search respects role denial',status==200 and not any(r.get('id')==pid for r in data.get('results',[])))
  else:block(label+' positive person search','No searchable authorized HR fixture')
  status,ft=invoke(actor,'/field-training',{'action':'list'})
  if status==403:
