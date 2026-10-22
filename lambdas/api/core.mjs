@@ -1643,13 +1643,15 @@ async function loadPersonnelScope(client, auth) {
   const result=await client.query(
     `SELECT to_regclass('suite_organizational_access') AS relation`
   );
-  if (!result.rows[0]?.relation) return null;
+  if (!result.rows[0]?.relation) return await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId) ? {mode:'none'} : null;
   const grants=await client.query(
     `SELECT scope FROM suite_organizational_access
       WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3`,
     [auth.tenantId,auth.agencyId,auth.userId]
   );
-  return grants.rows.length ? (grants.rows[0].scope ?? {mode:'none'}) : null;
+  if (grants.rows.length) return grants.rows[0].scope ?? {mode:'none'};
+  // Once this agency explicitly activates enforcement, missing grants deny by default.
+  return await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId) ? {mode:'none'} : null;
 }
 function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
   if (!scope) return true; // Existing unconfigured accounts retain legacy behavior.
