@@ -125,7 +125,12 @@ async function ftOrgMembers(client, ctx, members) {
       for(const entry of entries) {
         if(!entry||typeof entry!=='object')continue;
         const personId=entry.personId||entry.id;
-        if(personId && (entry.unitId||entry.unit))units.set(String(personId),String(entry.unitId||entry.unit));
+        if(personId && (entry.unitId||entry.unit)) {
+          const id=String(personId), unit=String(entry.unitId||entry.unit);
+          // Conflicting records must not grant whichever unit happens to be read last.
+          if(units.has(id) && units.get(id)!==unit) units.set(id,null);
+          else if(!units.has(id)) units.set(id,unit);
+        }
       }
     }catch { /* Ignore malformed record keys rather than inferring grants. */ }
   }
@@ -401,6 +406,7 @@ async function fieldTrainingApi(client, auth, body) {
       const hours=Number(payload.hours); if(!(hours>=0.25&&hours<=24)) throw new Error("Training hours must be between 0.25 and 24.");
       const cover=ftActiveCoverage(state,e.id,ctx.userId,payload.shiftOn); const allowed=ctx.ftManage||e.supervisor_user===ctx.userId||e.trainer_user===ctx.userId||!!cover; ftAssert(allowed,"You cannot log a training shift for this file.");
       const expectedTrainer=cover?ctx.userId:e.trainer_user; if(!ctx.ftManage&&payload.trainerUser!==expectedTrainer) throw new Error("Trainer does not match the assignment for this date.");
+      if(org.scope)ftAssert(org.allowed.has(payload.trainerUser||expectedTrainer),"Training shift trainer is outside your organizational scope.");
       const sh={id:ftId("fts"),enrollment_id:e.id,shift_on:payload.shiftOn,hours,trainer_user:payload.trainerUser||expectedTrainer,notes:String(payload.notes||"").slice(0,1000),recorded_by:ctx.userId,created_at:ftIsoNow(),cancelled_at:null}; state.shifts.push(sh); result=sh;
     } else if (action === "shift_cancel") {
       const e=ftEnrollmentFor(state,payload.enrollmentId), sh=state.shifts.find(x=>x.id===payload.shiftId&&x.enrollment_id===payload.enrollmentId); if(!e||!sh) throw new Error("Training shift not found.");
