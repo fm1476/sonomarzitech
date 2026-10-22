@@ -30,7 +30,7 @@ function defaultRefDataK9(){
   };
 }
 const MONTHLY_TRAINING_HOURS_STANDARD = 16; // default; each agency may configure its own standard
-const k9ComplianceDefaults=()=>({monthlyTrainingHours:16,trainingWarningDays:0,certificationWarningDays:45,certificationValidityDays:{}});
+const k9ComplianceDefaults=()=>({monthlyTrainingHours:16,trainingAlertPercent:100,certificationWarningDays:45,certificationValidityDays:{}});
 function k9Compliance(){return STATE.k9.complianceSettings||(STATE.k9.complianceSettings=k9ComplianceDefaults());}
 function k9TrainingRequirement(){return Number(k9Compliance().monthlyTrainingHours)||MONTHLY_TRAINING_HOURS_STANDARD;}
 function k9CertificationValidity(type){return Number(k9Compliance().certificationValidityDays?.[type])||365;}
@@ -231,6 +231,7 @@ function migrateData(){
   if(!STATE.k9.refData) STATE.k9.refData = defaultRefDataK9();
   if(!STATE.k9.complianceSettings)STATE.k9.complianceSettings=k9ComplianceDefaults();
   if(!STATE.k9.complianceSettings.certificationValidityDays)STATE.k9.complianceSettings.certificationValidityDays={};
+  if(STATE.k9.complianceSettings.trainingAlertPercent===undefined)STATE.k9.complianceSettings.trainingAlertPercent=100;
   if(!STATE.k9.notifications) STATE.k9.notifications = [];
   if(!STATE.k9.notifySettings) STATE.k9.notifySettings = { certExpiringRoleId: STATE.roles[0].id, vaccineDueRoleId: STATE.roles[0].id, trainingComplianceRoleId: STATE.roles[0].id, retirementRoleId: STATE.roles[0].id };
   if(!STATE.k9.incidents) STATE.k9.incidents = [];
@@ -347,7 +348,7 @@ function recalcNotifications(){
       }
     });
     const hrs = monthlyTrainingHours(k.id, 1);
-    if(hrs < k9TrainingRequirement()){
+    if(hrs < k9TrainingRequirement()*(Number(k9Compliance().trainingAlertPercent??100)/100)){
       upcoming.push({type:"training_compliance", entityId:k.id, message:`${k.name} has logged ${hrs} of ${k9TrainingRequirement()} required maintenance-training hours in the last 30 days.`, recipientRoleId: STATE.k9.notifySettings.trainingComplianceRoleId});
     }
   });
@@ -1977,6 +1978,7 @@ function renderK9ComplianceSettings(body){
           <div class="form-row"><label for="k9MonthlyStandard">Required maintenance-training hours (rolling 30 days)</label><input type="number" id="k9MonthlyStandard" min="1" max="744" step="0.5" value="${policy.monthlyTrainingHours}"></div>
           <div class="form-row"><label for="k9CertWarning">Certification expiration warning (days ahead)</label><input type="number" id="k9CertWarning" min="0" max="365" step="1" value="${policy.certificationWarningDays??45}"></div>
         </div>
+        <div class="form-row"><label for="k9TrainingAlert">Training compliance alert threshold (% of monthly standard)</label><input type="number" id="k9TrainingAlert" min="1" max="100" step="1" value="${policy.trainingAlertPercent??100}"><p class="hint">Default 100%: generate a training shortfall alert whenever the rolling 30-day total falls below the required hours.</p></div>
         <h3 style="margin:22px 0 8px;font-size:16px;">Certification validity by type</h3>
         <p class="hint">New passed certifications receive a suggested expiration using these intervals. The recording user may override it.</p>
         <div class="k9-compliance-types">${types.map((type,index)=>`<div class="form-row"><label for="k9Validity_${index}">${escapeHtml(type)} (days)</label><input id="k9Validity_${index}" data-cert-validity="${index}" type="number" min="1" max="3650" step="1" value="${k9CertificationValidity(type)}"></div>`).join('')}</div>
@@ -1986,8 +1988,10 @@ function renderK9ComplianceSettings(body){
   body.querySelector('#saveK9Compliance').onclick=()=>{
     const hours=Number(body.querySelector('#k9MonthlyStandard').value);
     const days=Number(body.querySelector('#k9CertWarning').value);
+    const trainingAlert=Number(body.querySelector('#k9TrainingAlert').value);
     if(!Number.isFinite(hours)||hours<1||hours>744||Math.round(hours*2)!==hours*2){toast('Training hours must be between 1 and 744, in half-hour increments.',true);return;}
     if(!Number.isSafeInteger(days)||days<0||days>365){toast('Warning days must be between 0 and 365.',true);return;}
+    if(!Number.isSafeInteger(trainingAlert)||trainingAlert<1||trainingAlert>100){toast('Training alert threshold must be 1 to 100%.',true);return;}
     const validity={};
     for(const input of body.querySelectorAll('[data-cert-validity]')){
       const amount=Number(input.value);
@@ -1995,6 +1999,7 @@ function renderK9ComplianceSettings(body){
       validity[types[Number(input.dataset.certValidity)]]=amount;
     }
     policy.monthlyTrainingHours=hours;
+    policy.trainingAlertPercent=trainingAlert;
     policy.certificationWarningDays=days;
     policy.certificationValidityDays=validity;
     logActivity('Updated K9 agency compliance standards.','k9_admin');
