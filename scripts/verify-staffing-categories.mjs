@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {validateStaffingRequirements,staffingSummary,staffingPersonHasSkill} from '../lambdas/api/lib/staffing-categories.mjs';
+import {validateStaffingRequirements,staffingSummary,staffingPersonHasSkill,suggestStaffingReassignments} from '../lambdas/api/lib/staffing-categories.mjs';
 import {validateSchedulingBatch,assignmentOnDuty,schedulingSkillsProjection} from '../lambdas/api/lib/scheduling-access.mjs';
 const requirements=[{id:'law',name:'Law Dispatcher',requiredSkill:'Law Dispatch',count:2},{id:'fire',name:'Fire Dispatcher',requiredSkill:'Fire Dispatch',count:2},{id:'call',name:'Call Taker',requiredSkill:'Call Taking',count:1}];
 const skills=['Law Dispatch','Fire Dispatch','Call Taking'];
@@ -78,3 +78,18 @@ const own=schedulingSkillsProjection(persisted,'multi',false);assert.equal(own.l
 const manager=schedulingSkillsProjection(persisted,'manager',true);assert.equal(manager.length,personnel.length);
 const foreign=schedulingSkillsProjection(persisted,'outsideManager',true);assert.equal(foreign.length,0);
 console.log('Definable staffing categories: advisory qualification warnings, multi-skill matching, wrong-mix shortages, duplicate people, leave/coverage, history, browser/API category slots, and scoped HR projection passed.');
+
+// Preferred coverage never changes the minimum staffing pass/fail decision.
+const preferred=[{id:'law',name:'Law Dispatcher',requiredSkill:'Law Dispatch',count:1,preferredCount:2},{id:'fire',name:'Fire Dispatcher',requiredSkill:'Fire Dispatch',count:1,preferredCount:2}];
+assert.equal(staffingSummary(preferred,[{personId:'multi',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}],2,records).ok,true);
+assert.equal(staffingSummary(preferred,[{personId:'multi',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}],2,records).preferredNeeded,2);
+assert.throws(()=>validateStaffingRequirements([{...preferred[0],preferredCount:0}]),/Preferred staffing/);
+const surplus=[{personId:'multi',staffingCategoryId:'law'},{personId:'law2',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}];
+const proposals=suggestStaffingReassignments([{id:'law',name:'Law',requiredSkill:'Law Dispatch',count:1},{id:'call',name:'Call',requiredSkill:'Call Taking',count:1},{id:'fire',name:'Fire',requiredSkill:'Fire Dispatch',count:1}],surplus,records);
+assert.equal(proposals.length,1);
+assert.equal(proposals[0].personId,'multi');
+assert.equal(proposals[0].toCategoryId,'call');
+assert.equal(proposals[0].requiresApproval,true);
+assert.equal(surplus[0].staffingCategoryId,'law'); // Planning never mutates assignments.
+assert.equal(suggestStaffingReassignments(preferred,[{personId:'multi',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}],records).length,0);
+console.log('Preferred thresholds and non-mutating, approval-required backfill proposals passed.');
