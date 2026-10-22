@@ -111,7 +111,7 @@ async function ftLoadOrgScope(client, ctx) {
 // Never accept unit identifiers or trainee organizational assignment from clients.
 async function ftOrgMembers(client, ctx, members) {
   const scope=await ftLoadOrgScope(client,ctx);
-  if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id))};
+  if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id)),personByUser:new Map(members.map(m=>[m.user_id,String(m.person_id||'')]))};
   const records=await client.query(
     `SELECT key,value FROM suite_records
       WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
@@ -142,10 +142,12 @@ async function ftOrgMembers(client, ctx, members) {
     const unitId=units.get(personId)||'';
     return canAccessOrganizationalRecord(scope,{personId,unitId},{actorPersonId:ctx.personId});
   }).map(member=>member.user_id));
-  return {scope,allowed};
+  return {scope,allowed,personByUser:new Map(members.map(m=>[m.user_id,String(m.person_id||'')]))};
 }
 function ftOrgAllowsEnrollment(ctx,enrollment) {
-  return !ctx.orgScope || (enrollment && ctx.orgAllowed.has(enrollment.trainee_user));
+  return !ctx.orgScope || Boolean(enrollment && ctx.orgAllowed.has(enrollment.trainee_user) &&
+    ctx.orgPersonByUser?.get(enrollment.trainee_user) &&
+    String(enrollment.trainee_person||'')===ctx.orgPersonByUser.get(enrollment.trainee_user));
 }
 function ftAssertOrgEnrollment(ctx,enrollment) {
   ftAssert(ftOrgAllowsEnrollment(ctx,enrollment),"This trainee file is outside your authorized organizational scope.");
@@ -311,7 +313,7 @@ async function fieldTrainingApi(client, auth, body) {
   if (action === "list") {
     const [{state},members] = await Promise.all([ftLoadState(client,ctx,false),ftMembers(client,ctx)]);
     const org=await ftOrgMembers(client,ctx,members);
-    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;
+    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;ctx.orgPersonByUser=org.personByUser;
     const eligibleMembers = await ftEligibleMembers(client,ctx,members.filter(m=>org.allowed.has(m.user_id)));
     return response(200,{success:true,data:ftVisibleState(ctx,state,eligibleMembers)});
   }
@@ -321,7 +323,7 @@ async function fieldTrainingApi(client, auth, body) {
     const loaded = await ftLoadState(client,ctx,true);
     const state = loaded.state;
     const org=await ftOrgMembers(client,ctx,await ftMembers(client,ctx));
-    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;
+    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;ctx.orgPersonByUser=org.personByUser;
     // A division-scoped manager must never overwrite the agency-wide FTO template.
     if(org.scope && action==='save_config')ftAssert(false,'Agency-wide Field Training configuration requires System Admin access.');
     // Every enrollment mutation needs the same boundary as listing the file.
