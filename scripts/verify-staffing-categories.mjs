@@ -101,4 +101,16 @@ assert.equal(proposals[0].toCategoryId,'call');
 assert.equal(proposals[0].requiresApproval,true);
 assert.equal(surplus[0].staffingCategoryId,'law'); // Planning never mutates assignments.
 assert.equal(suggestStaffingReassignments(preferred,[{personId:'multi',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}],records).length,0);
+// Verify critical UX wiring remains present in the browser module.
+assert.match(source,/data-sched-day/);
+assert.match(source,/function openSchedulingDayDetail\(/);
+assert.match(source,/pm-calendar-detail-sheet/);
+assert.match(source,/data-sched-review-assignment/);
+assert.match(source,/canManageScheduleShift\(shift\)/);
+assert.match(source,/staffingTemplateName/);
+assert.match(source,/fShiftStaffNeedsTemplateName/);
+assert.match(source,/fShiftStartDate/);
+assert.match(source,/fShiftEndDate/);
+assert.match(source,/pmStepBack/);
+assert.match(source,/pmStepNext/);
 console.log('Preferred thresholds and non-mutating, approval-required backfill proposals passed.');
