@@ -68,3 +68,23 @@ assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await a
 console.log('Signed URL runtime organizational access checks passed.');
 
 assert.match(source,/return grants\.rows\.length \? \(grants\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Personnel scope must deny');
+
+const loadStart=source.indexOf('async function loadPersonnelScope(');
+const loadEnd=source.indexOf('function personnelScopeAllows(',loadStart);
+assert.ok(loadStart>=0&&loadEnd>loadStart);
+const loadSandbox={};vm.createContext(loadSandbox);
+vm.runInContext(source.slice(loadStart,loadEnd),loadSandbox);
+const access={tenantId:'tenant-a',agencyId:'agency-a',userId:'user-a',admin:false};
+async function resolveScope(rows, relation='suite_organizational_access') {
+  const calls=[];
+  const client={query:async(sql,args)=>{calls.push({sql,args});return sql.includes('to_regclass')?{rows:[{relation}]}:{rows};}};
+  const value=await loadSandbox.loadPersonnelScope(client,access);
+  return {value,calls};
+}
+assert.equal((await resolveScope([])).value,null,'Absent configured grants preserve legacy access');
+assert.equal((await resolveScope([{scope:null}])).value.mode,'none','Null configured grant must deny');
+assert.equal((await resolveScope([{scope:{mode:'selected',unitIds:['dispatch']}}])).value.mode,'selected');
+const bounded=await resolveScope([{scope:{mode:'none'}}]);
+assert.deepEqual(bounded.calls[1].args,['tenant-a','agency-a','user-a'],'Scope lookup must be tenant, agency, and actor bounded');
+assert.equal((await loadSandbox.loadPersonnelScope({query:async()=>{throw Error('DB unavailable');}},access).catch(e=>e.message)),'DB unavailable','Database errors must not silently permit legacy access');
+console.log('Personnel grant loading tenant isolation and fail-closed behavior passed.');
