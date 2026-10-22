@@ -4663,6 +4663,12 @@ async function authorizePersonnelSharedChange(
     const scope=await loadPersonnelScope(client,workspaceAuth);
     const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,scope);
     const allowed=value=>canonicalAllows ? canonicalAllows(value) : personnelScopeAllows(scope,value,workspaceAuth);
+    // A scoped editor cannot rebind an existing record to a different person.
+    // Otherwise an authorized record could be used to overwrite someone else's file.
+    if(scope && beforeValue && afterValue && !deleting &&
+      String(beforeValue.personId||beforeValue.id||'') !== String(afterValue.personId||afterValue.id||'')) {
+      return {allowed:false,error:'A restricted editor cannot change the record person identity.'};
+    }
     if(scope && (!allowed(afterValue||beforeValue) ||
       (beforeValue && !allowed(beforeValue)) ||
       (afterValue && !allowed(afterValue)))) {
