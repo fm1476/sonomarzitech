@@ -2990,10 +2990,15 @@ function personScheduledDuring(personId,startDate,endDate){
 function canManageOvertimeShift(shift){return !!shift&&(isGlobalScheduleAdmin()||((can('pm_schedule_manage')||can('pm_overtime_manage'))&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.active!==false&&(STATE.pm.scheduleWorkGroups||[]).find(g=>g.id===shift.workGroupId)?.managerIds?.includes(CURRENT_USER_ID)));}
 function visibleScheduleWorkGroups(){return (STATE.pm.scheduleWorkGroups||[]).filter(g=>g.active!==false&&canViewWorkGroup(g));}
 function staffingSkillOptions(selected=''){
-  return '<option value="">Select required skill</option>'+[...new Set([...(STATE.pm.refData?.skillsCatalog||[]),...(selected?[selected]:[])])].sort((a,b)=>a.localeCompare(b)).map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('');
+  const skills=[...new Set([...(STATE.pm.refData?.skillsCatalog||[]),...(selected&&!selected.startsWith('rank:')&&selected!=='any'?[selected]:[])])].sort((a,b)=>a.localeCompare(b));
+  const ranks=[...new Set([...(STATE.pm.refData?.ranks||[]),...RANKS,...STATE.pm.records.map(r=>r.rank).filter(Boolean)])].sort((a,b)=>a.localeCompare(b));
+  return '<option value="">Choose qualification or classification...</option>'+
+    '<optgroup label="Classification / Rank">'+ranks.map(rank=>`<option value="rank:${escapeHtml(rank)}" ${selected==='rank:'+rank?'selected':''}>${escapeHtml(rank)}</option>`).join('')+'</optgroup>'+
+    '<optgroup label="Training / Special Skill">'+skills.map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('')+'</optgroup>'+
+    '<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>';
 }
 function staffingNeedsRow(row={}){
-  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Required skill">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
 }
 function staffingNeedsEditor(id,record){
   const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length);
@@ -3024,14 +3029,14 @@ function wireStaffingNeedsEditor(id,totalId){
   const catalog=STATE.pm.refData?.skillsCatalog||[];
   const chooseSkill=keywords=>catalog.find(skill=>keywords.some(k=>skill.toLowerCase().includes(k)))||'';
   const presets={
-    patrol:[['Patrol Deputy',2,['patrol','law enforcement']],['Patrol Supervisor',1,['supervisor','patrol']]],
+    patrol:[['Patrol Deputy',2,['patrol','law enforcement']],['Patrol Supervisor',1,['sergeant','supervisor']]],
     dispatch:[['Fire Dispatcher',1,['fire dispatch','fire']],['Law Dispatcher',1,['law dispatch','law']],['Dispatch Supervisor',1,['supervisor','dispatch']]],
     fire:[['Company Officer',1,['company officer','fire officer']],['Driver / Engineer',1,['engineer','driver']],['Firefighter',2,['firefighter']]]
   };
   document.querySelectorAll('[data-staffing-preset]').forEach(button=>button.addEventListener('click',()=>{
     if(container.querySelector('[data-staffing-row]')&&!confirm('Replace the current staffing requirements with this example?'))return;
     const chosen=presets[button.dataset.staffingPreset]||[];
-    container.innerHTML=chosen.map(([name,count,skills])=>staffingNeedsRow({name,count,requiredSkill:chooseSkill(skills)})).join('');
+    container.innerHTML=chosen.map(([name,count,skills])=>staffingNeedsRow({name,count,requiredSkill:chooseSkill(skills)||(name.includes('Supervisor')?'rank:Sergeant': 'any')})).join('');
     refresh();
     toast('Example loaded. Review the required skills and counts before saving.');
   }));
