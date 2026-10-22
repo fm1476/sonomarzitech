@@ -1333,7 +1333,7 @@ function openEquipmentModal(id){
         <label>Photo</label>
         <div style="display:flex;align-items:center;gap:12px;">
           ${item.photoDataUrl ? `<img src="${item.photoDataUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:5px;border:1px solid var(--border);">` : `<div style="width:64px;height:64px;border-radius:5px;background:var(--lightgray);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:10px;text-align:center;">No photo</div>`}
-          <input type="file" id="fPhoto" accept="image/*" style="flex:1;">
+          <div class="qm-photo-controls"><button type="button" id="qmChoosePhoto" class="btn btn-outline qm-photo-btn">Upload Photo</button><span id="qmPhotoFilename" class="qm-photo-filename">${item.photoDataUrl ? "Current photo saved" : "No photo selected"}</span><input type="file" id="fPhoto" accept="image/png,image/jpeg,image/webp" class="qm-photo-native-input" aria-label="Select equipment photo"></div>
         </div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Stored as a small thumbnail in this prototype's data record; a production build would use object storage instead.</div>
       </div>
@@ -1450,9 +1450,12 @@ function openEquipmentModal(id){
     const dup = v && STATE.qm.equipment.some(eq => eq.id!==item.id && (eq.serialNumber||'').toLowerCase()===v);
     document.getElementById('fSerialWarning').style.display = dup ? '' : 'none';
   });
+  document.getElementById('qmChoosePhoto')?.addEventListener('click',()=>document.getElementById('fPhoto')?.click());
   document.getElementById('fPhoto').addEventListener('change', (e)=>{
     const file = e.target.files[0];
     if(!file) return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)){toast('Choose a PNG, JPG or WebP image.',true);e.target.value='';return;}
+    document.getElementById('qmPhotoFilename').textContent=file.name;
     const img = new Image();
     const reader = new FileReader();
     reader.onload = (ev)=>{
@@ -1651,7 +1654,7 @@ function openIssueStockModal(itemId, repeat=false){
  '<div class="modal-body qm-issue-body"><div class="qm-issue-balances"><div><small>AVAILABLE NOW</small><strong id="qmIssueAvailable">'+item.quantity+'</strong><span>units in stock</span></div><div><small>REMAINING AFTER ISSUE</small><strong id="qmIssueRemaining">'+(item.quantity-1)+'</strong><span id="qmIssueHealth"></span></div></div>'+
  '<section class="qm-issue-step"><h4>1. How much are you issuing?</h4><div class="qm-issue-counter"><button type="button" id="qmIssueMinus" aria-label="Decrease quantity">−</button><input id="qmIssueQty" type="number" inputmode="numeric" min="1" max="'+item.quantity+'" step="1" value="1" aria-label="Quantity to issue"><button type="button" id="qmIssuePlus" aria-label="Increase quantity">+</button></div><div class="qm-issue-shortcuts">'+[1,5,10].filter(n=>n<=item.quantity).map(n=>'<button type="button" data-qm-issue-quick="'+n+'">'+n+' units</button>').join('')+'</div></section>'+
  '<section class="qm-issue-step"><h4>2. Who is receiving the stock?</h4><div class="qm-issue-types" role="group" aria-label="Recipient type"><button type="button" data-qm-issue-type="person">Person</button><button type="button" data-qm-issue-type="unit">Unit / Team</button><button type="button" data-qm-issue-type="location">Station / Location</button></div><div class="form-row"><label for="qmIssueTarget">Recipient</label><select id="qmIssueTarget"></select></div></section>'+
- '<section class="qm-issue-step"><label for="qmIssueNotes">Purpose / notes <small>(optional)</small></label><textarea id="qmIssueNotes" maxlength="500" rows="2" placeholder="Routine resupply, training, special event..."></textarea></section>'+
+ '<section class="qm-issue-step qm-issue-notes"><label for="qmIssueNotes">3. Purpose / notes <small>(optional)</small></label><textarea id="qmIssueNotes" maxlength="500" rows="2" placeholder="Routine resupply, training, special event..."></textarea></section>'+
  '<div class="qm-issue-summary" id="qmIssueSummary" role="status" aria-live="polite"></div></div>'+
  '<div class="modal-foot qm-issue-footer"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-outline" id="qmIssueSaveRepeat">Issue & Issue Another</button><button class="btn btn-primary" id="qmIssueSave">Issue Stock</button></div>';
  openModal();
@@ -2082,9 +2085,9 @@ function openCheckoutModal(presetEquipId){
   const available = STATE.qm.equipment.filter(e=>e.status==="Available" && !e.isConsumable);
   if(available.length===0){ toast("No available equipment to check out.", true); return; }
   if(presetEquipId&&!available.some(e=>e.id===presetEquipId)){toast("This item is not available for assignment.",true);return;}
-  document.getElementById('modalBox').className = 'modal modal-wide';
+  document.getElementById('modalBox').className = 'modal qm-checkout-modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>Check Out Equipment</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-head qm-checkout-header"><div><small>QUARTERMASTER / ASSET CUSTODY</small><h3>Check Out Equipment</h3><span>Record a new equipment assignment</span></div><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Equipment</label>
         <select id="fEquip">${available.map(e=>`<option value="${e.id}" ${presetEquipId===e.id?'selected':''}>${escapeHtml(e.name)} (${e.assetId})</option>`).join('')}</select>
@@ -2118,6 +2121,56 @@ function openCheckoutModal(presetEquipId){
     </div>
   `;
   openModal();
+  const checkoutBox=document.getElementById('modalBox');
+  const checkoutBody=checkoutBox.querySelector('.modal-body');
+  const sourceRows=[...checkoutBody.children];
+  checkoutBody.classList.add('qm-checkout-body');
+  const group=(title,subtitle,items)=>{
+    const el=document.createElement('section');el.className='qm-checkout-section';
+    const heading=document.createElement('div');heading.className='qm-checkout-section-heading';
+    const h=document.createElement('h4');h.textContent=title;heading.appendChild(h);
+    if(subtitle){const p=document.createElement('p');p.textContent=subtitle;heading.appendChild(p);}
+    el.appendChild(heading);items.filter(Boolean).forEach(node=>el.appendChild(node));
+    return el;
+  };
+  // Keep all original inputs intact so checkout uses the established data path.
+  const equipmentGroup=group('1. Equipment','Select the available item to assign.',[sourceRows[0]]);
+  const recipientGroup=group('2. Assign to','Choose the custodian or destination.',[sourceRows[1],sourceRows[2]]);
+  const timingGroup=group('3. Checkout details','Record when and where this handoff occurs.',[sourceRows[3],sourceRows[4]]);
+  const notesGroup=group('4. Notes','Optional details for the assignment history.',[sourceRows[5]]);
+  const choiceBar=document.createElement('div');choiceBar.className='qm-checkout-choice-bar';
+  choiceBar.setAttribute('role','group');choiceBar.setAttribute('aria-label','Assignment recipient type');
+  const targetSelect=checkoutBox.querySelector('#fTargetType');
+  for(const [key,label] of [['person','Person'],['unit','Unit / Vehicle'],['location','Station / Location']]){
+    const btn=document.createElement('button');btn.type='button';btn.dataset.checkoutTarget=key;
+    btn.textContent=label;btn.className='qm-checkout-choice';
+    btn.onclick=()=>{targetSelect.value=key;targetSelect.dispatchEvent(new Event('change',{bubbles:true}));updateCheckout();};
+    choiceBar.appendChild(btn);
+  }
+  targetSelect.closest('.form-row').classList.add('qm-checkout-type-field');
+  recipientGroup.insertBefore(choiceBar,targetSelect.closest('.form-row'));
+  const summary=document.createElement('div');summary.id='qmCheckoutSummary';summary.className='qm-checkout-summary';
+  summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
+  checkoutBody.append(equipmentGroup,recipientGroup,timingGroup,notesGroup,summary);
+  function updateCheckout(){
+    checkoutBox.querySelectorAll('[data-checkout-target]').forEach(btn=>{
+      const active=btn.dataset.checkoutTarget===targetSelect.value;
+      btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active));
+    });
+    const eq=equipmentById(checkoutBox.querySelector('#fEquip').value);
+    const recipient=checkoutBox.querySelector('#fTarget')?.selectedOptions[0]?.textContent?.trim()||'a recipient';
+    const date=checkoutBox.querySelector('#fCoDate').value;
+    const time=checkoutBox.querySelector('#fCoTime').value;
+    const due=checkoutBox.querySelector('#fDueDate').value;
+    const location=checkoutBox.querySelector('#fCoLocation').value;
+    summary.textContent=(eq?.name||'Equipment')+' will be checked out to '+recipient+'. Checkout: '+(date||'Not set')+' '+(time||'')+'. Due: '+(due||'Not set')+'. Location: '+(location||'Not set')+'.';
+    const valid=!!eq&&!!checkoutBox.querySelector('#fTarget')?.value&&!!date&&!!due&&due>=date&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time);
+    checkoutBox.querySelector('#mSave').disabled=!valid;
+  }
+  checkoutBox.addEventListener('change',event=>{if(event.target.matches('select,input'))updateCheckout();});
+  checkoutBox.addEventListener('input',event=>{if(event.target.matches('input'))updateCheckout();});
+  checkoutBox.addEventListener('change',event=>{if(event.target.id==='fTargetType')queueMicrotask(updateCheckout);});
+  updateCheckout();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('fTargetType').addEventListener('change', (e)=>{
@@ -2140,6 +2193,11 @@ function openCheckoutModal(presetEquipId){
     const dueDate = document.getElementById('fDueDate').value;
     const checkoutLocation = document.getElementById('fCoLocation').value;
     const item = equipmentById(eqId);
+    if(!can('qm_assign_checkout')||!item||item.status!=="Available"||item.isConsumable){toast("This item is no longer available for checkout.",true);return;}
+    if(!targetId||!checkoutDate||!dueDate||dueDate<checkoutDate||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(checkoutTime)){
+      toast("Choose a recipient and valid checkout date, time and due date.",true);return;
+    }
+    if(STATE.qm.assignments.some(a=>a.equipmentId===eqId&&a.status!=="Returned")){toast("This equipment already has an active assignment.",true);return;}
     STATE.qm.assignments.push({
       id:"a"+Date.now(), equipmentId:eqId,
       assignedToType, personId: assignedToType==='person'?targetId:null, targetId,
@@ -3922,5 +3980,17 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-form-modern-style
 if(typeof document!=='undefined'&&!document.getElementById('qm-issue-modern-style')){
  const style=document.createElement('style');style.id='qm-issue-modern-style';
  style.textContent='.qm-issue-modal{max-width:740px!important;width:min(740px,calc(100vw - 28px))!important}.qm-issue-head small{font-size:10px;font-weight:800;letter-spacing:.11em;color:var(--text-dim)}.qm-issue-head h3{font-size:22px;margin:6px 0}.qm-issue-head span{font-size:12px;color:var(--text-dim)}.qm-issue-body{padding:20px 25px!important}.qm-issue-balances{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}.qm-issue-balances>div{background:rgba(110,141,187,.075);border:1px solid var(--border);border-radius:13px;padding:15px;display:flex;flex-direction:column;gap:5px}.qm-issue-balances small{font-size:10px;letter-spacing:.09em;font-weight:800;color:var(--text-dim)}.qm-issue-balances strong{font-size:30px;color:var(--heading)}.qm-issue-balances span{font-size:12px;color:var(--text-dim)}.qm-issue-balances .qm-stock-success{color:#43d59b}.qm-issue-balances .qm-stock-warning{color:#f7b44a}.qm-issue-balances .qm-stock-danger{color:#ff8585}.qm-issue-step{margin-bottom:20px}.qm-issue-step h4{font-size:14px;margin:0 0 12px}.qm-issue-step>label{font-size:13px;font-weight:700}.qm-issue-step>label small{font-weight:400;color:var(--text-dim)}.qm-issue-counter{display:flex;align-items:center;justify-content:center;gap:14px}.qm-issue-counter button{width:44px;height:44px;background:rgba(110,141,187,.1);color:var(--text);border:1px solid var(--border);border-radius:11px;font-size:24px;cursor:pointer}.qm-issue-counter input{width:125px;text-align:center;font-size:27px;font-weight:800}.qm-issue-shortcuts{display:flex;justify-content:center;gap:9px;margin-top:11px}.qm-issue-shortcuts button,.qm-issue-types button{padding:9px 14px;border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--text);cursor:pointer;font-size:12px}.qm-issue-types{display:flex;gap:9px;margin-bottom:13px;flex-wrap:wrap}.qm-issue-types button.active{background:rgba(54,118,224,.18);color:#8db8ff;border-color:#4b86d7}.qm-issue-summary{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px;border-radius:8px;font-size:13px}.qm-issue-footer{gap:9px;flex-wrap:wrap}@media(max-width:520px){.qm-issue-body{padding:14px!important}.qm-issue-balances{grid-template-columns:1fr 1fr}.qm-issue-counter input{width:90px}.qm-issue-footer .btn{flex:1}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-last-mile-polish')){
+ const style=document.createElement('style');style.id='qm-last-mile-polish';
+ style.textContent='.qm-issue-notes{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:11px!important;width:100%!important;clear:both!important}.qm-issue-notes label{display:block!important;margin:0!important;line-height:1.4!important}.qm-issue-notes textarea{display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;min-height:86px!important;resize:vertical}.qm-photo-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1}.qm-photo-native-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;overflow:hidden!important;pointer-events:none!important}.qm-photo-btn{border-radius:10px!important;padding:11px 16px!important;font-weight:700!important;min-height:42px!important}.qm-photo-filename{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere}.qm-edit-section .form-row:has(#fPhoto)>div{gap:16px!important;flex-wrap:wrap}.qm-edit-section .form-row:has(#fPhoto)>div>img,.qm-edit-section .form-row:has(#fPhoto)>div>div:first-child{flex-shrink:0}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-checkout-modern-style')){
+ const style=document.createElement('style');style.id='qm-checkout-modern-style';
+ style.textContent='.qm-checkout-modal{max-width:850px!important;width:min(850px,calc(100vw - 28px))!important}.qm-checkout-header small{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text-dim)}.qm-checkout-header h3{margin:5px 0!important;font-size:23px}.qm-checkout-header span{font-size:12px;color:var(--text-dim)}.qm-checkout-body{display:flex;flex-direction:column;gap:16px;padding:20px 24px!important}.qm-checkout-section{border:1px solid var(--border);border-radius:13px;padding:17px;background:rgba(110,141,187,.045)}.qm-checkout-section-heading{margin-bottom:13px}.qm-checkout-section-heading h4{margin:0 0 4px;font-size:14px;color:var(--heading)}.qm-checkout-section-heading p{margin:0;font-size:12px;color:var(--text-dim)}.qm-checkout-section .form-row:last-child,.qm-checkout-section .form-2col:last-child{margin-bottom:0}.qm-checkout-choice-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.qm-checkout-choice{border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);padding:11px 14px;cursor:pointer;font-size:12px;font-weight:700}.qm-checkout-choice.active{background:rgba(54,118,224,.17);border-color:#4b86d7;color:#98c2ff}.qm-checkout-choice:focus-visible{outline:2px solid #85b7ff;outline-offset:2px}.qm-checkout-type-field{display:none!important}.qm-checkout-section textarea{display:block;width:100%;min-width:0;box-sizing:border-box;min-height:78px}.qm-checkout-summary{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px 16px;border-radius:9px;font-size:13px;line-height:1.55}.qm-checkout-modal .modal-foot .btn{border-radius:10px!important;min-height:41px}@media(max-width:640px){.qm-checkout-body{padding:12px!important;gap:12px}.qm-checkout-section{padding:13px}.qm-checkout-choice{flex:1}}';
  document.head.appendChild(style);
 }
