@@ -669,7 +669,13 @@ function renderDashboard(){
   const settings=STATE.pm.personnelSettings||(STATE.pm.personnelSettings={authorizedStaffingEnabled:false,authorizedPositionsByUnit:{}});
   const unitCounts={};active.forEach(r=>{if(r.unitId)unitCounts[r.unitId]=(unitCounts[r.unitId]||0)+1;});
   const unassigned=active.filter(r=>!r.unitId||!String(r.unitId).trim()).length;
-  const expiring=STATE.pm.notifications.filter(n=>n.type==='training_expiring'||n.type==='medical_due');
+  const expiring=STATE.pm.notifications.filter(n=>n.type==='training_expiring'||(can('pm_sensitive_view')&&can('pm_medical_view')&&n.type==='medical_due'));
+  const rosterIds=new Set(STATE.personnel.map(p=>p.id));
+  const unlinkedRecords=records.filter(r=>!rosterIds.has(r.personId)).length;
+  const linkedCount=new Map();
+  records.forEach(r=>linkedCount.set(r.personId,(linkedCount.get(r.personId)||0)+1));
+  const duplicateLinks=[...linkedCount.values()].filter(n=>n>1).length;
+  const identityIssues=unlinkedRecords+duplicateLinks;
   const staffingRows=STATE.pm.refData.units.map(u=>({unit:u,assigned:unitCounts[u]||0,authorized:settings.authorizedPositionsByUnit[u]}));
   const vacancyCount=staffingRows.reduce((n,x)=>x.authorized==null||x.authorized===''?n:n+Math.max(0,Number(x.authorized)-x.assigned),0);
   const hub=[
@@ -684,8 +690,9 @@ function renderDashboard(){
   const attention=[
     [expiring.filter(n=>n.type==='training_expiring').length,'Qualifications expiring (next 30 days)','alert'],
     [unassigned,'Unassigned personnel','users'],
+    [identityIssues,'Identity records needing reconciliation','alert'],
     [STATE.pm.trainingRequests.filter(r=>r.status==='Pending').length,'Training requests awaiting decision','award'],
-    [STATE.pm.disciplinaryActions.filter(d=>d.status!=='Closed').length,'Open disciplinary actions','alert']
+    [can('pm_sensitive_view')&&can('pm_discipline_view')?STATE.pm.disciplinaryActions.filter(d=>d.status!=='Closed').length:'Restricted','Open disciplinary actions','alert']
   ];
   const recent=(STATE.pm.activity||[]).slice().reverse().slice(0,5);
   root.innerHTML=`
@@ -1266,7 +1273,7 @@ function renderRecordDetailTabContent(r){
     const list = STATE.pm.trainingRecords.filter(t=>t.personId===personId).slice().sort((a,b)=>b.date.localeCompare(a.date));
     const rows = list.map(t=>`
       <tr><td>${escapeHtml(t.description)}</td><td>${t.date}</td><td>${t.hours}</td><td>${t.passed===null?'—':(t.passed?'Passed':'Failed')}${t.score!=null?' ('+t.score+'%)':''}</td>
-      <td>${t.recertDate||'—'}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No training records on file.</td></tr>`;
+      <td>${t.recertDate?'<span class="badge '+(t.recertDate<fmt(new Date())?'badge-missing':t.recertDate<=fmt(addDays(new Date(),30))?'badge-maintenance':'badge-available')+'">'+escapeHtml(t.recertDate)+(t.recertDate<fmt(new Date())?' · expired':t.recertDate<=fmt(addDays(new Date(),30))?' · due soon':'')+'</span>':'—'}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No training records on file.</td></tr>`;
     body.innerHTML = `<table><thead><tr><th>Course</th><th>Date</th><th>Hours</th><th>Result</th><th>Recert Due</th></tr></thead><tbody>${rows}</tbody></table>`;
     if(FieldTraining.available()){const link=document.createElement('button');link.type='button';link.className='btn btn-outline btn-sm';link.style.marginBottom='12px';link.textContent='Open Field Training file';link.onclick=()=>FieldTraining.openPerson(personId);body.prepend(link);}
 
@@ -4193,7 +4200,7 @@ function previewLeaveStaffingImpact(request){
   const changes=[];
   candidate.forEach(({shift,date},i)=>{
     const earlier=before[i],later=after[i];
-    const categoryWorse=(later.categories||[]).some(row=>row.needed>(earlier.categories||[]).find(x=>x.id===row.id)?.needed||false);
+    const categoryWorse=(later.categories||[]).some(row=>row.needed>((earlier.categories||[]).find(x=>x.id===row.id)?.needed||0));
     if((earlier.ok&&!later.ok)||categoryWorse){
       changes.push({date,shift:shift.name||'Unnamed shift'});
     }
