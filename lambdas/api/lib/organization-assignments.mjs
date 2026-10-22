@@ -51,3 +51,16 @@ JOIN suite_organization_nodes n
  AND n.id=a.organization_id
 WHERE a.tenant_id=$1 AND a.agency_id=$2 AND a.person_id=$3
 `;
+
+/** Tenant/agency-bound bulk query for filtering Personnel lists without N+1 DB calls. */
+export const AGENCY_PERSON_ORGANIZATION_QUERY = `
+SELECT a.tenant_id, a.agency_id, a.person_id, a.organization_id,
+       a.active, a.effective_from, a.effective_to,
+       n.kind AS node_kind, n.active AS node_active
+FROM suite_person_organization_assignments a
+JOIN suite_organization_nodes n
+  ON n.tenant_id=a.tenant_id
+ AND n.agency_id=a.agency_id
+ AND n.id=a.organization_id
+WHERE a.tenant_id=$1 AND a.agency_id=$2
+`;
