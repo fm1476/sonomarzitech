@@ -2995,7 +2995,7 @@ function staffingSkillOptions(selected=''){
   return '<option value="">Choose qualification or classification...</option>'+
     '<optgroup label="Classification / Rank">'+ranks.map(rank=>`<option value="rank:${escapeHtml(rank)}" ${selected==='rank:'+rank?'selected':''}>${escapeHtml(rank)}</option>`).join('')+'</optgroup>'+
     '<optgroup label="Training / Special Skill">'+skills.map(skill=>`<option value="${escapeHtml(skill)}" ${skill===selected?'selected':''}>${escapeHtml(skill)}</option>`).join('')+'</optgroup>'+
-    '<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>';
+    `<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>`;
 }
 function staffingNeedsRow(row={}){
   return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
