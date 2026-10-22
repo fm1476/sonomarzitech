@@ -3001,7 +3001,8 @@ function staffingNeedsRow(row={}){
   return `<div class="staffing-need-row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:12px 0;border-bottom:1px solid var(--border)" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Minimum<input data-staffing-count aria-label="Minimum staffing" type="number" min="1" step="1" value="${row.count||1}"></label><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Preferred<input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" step="1" value="${row.preferredCount??row.count??1}"></label><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
 }
 function staffingNeedsEditor(id,record){
-  const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length);
+  const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
+  const templates=(STATE.pm.scheduleShifts||[]).filter(s=>s.staffingTemplateName&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
   return `<section class="pm-staff-builder" aria-label="Staffing requirements">
     <div class="pm-builder-heading"><div><span class="pm-builder-kicker">STEP 3 · STAFFING</span><h3>Who does this shift need?</h3><p>Start with a template, copy another shift, or build your own. Every shift pattern keeps its own requirements.</p></div><span class="pm-builder-total" id="${id}Total">0 positions</span></div>
     <div class="pm-builder-starters">
@@ -3009,6 +3010,8 @@ function staffingNeedsEditor(id,record){
       <button type="button" class="btn btn-outline" data-staffing-preset="dispatch" id="${id}Dispatch">Dispatch example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
     </div>
+    <div class="form-row pm-builder-copy"><label for="${id}Template">Apply a saved staffing template</label><select id="${id}Template"><option value="">Choose a reusable template...</option>${templates.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.staffingTemplateName)} · ${escapeHtml(p.name)}</option>`).join('')}</select></div>
+    <div class="form-row"><label for="${id}TemplateName">Save as a reusable template (optional)</label><input id="${id}TemplateName" type="text" maxlength="100" value="${escapeHtml(record?.staffingTemplateName||'')}" placeholder="Example: Standard Dispatch Coverage"><p class="hint">Saving this pattern also makes its staffing configuration available as a reusable template to authorized schedulers. Each applied copy remains independent.</p></div>
     <div class="form-row pm-builder-copy"><label for="${id}Copy">Copy requirements from another shift</label><select id="${id}Copy"><option value="">Choose an existing shift pattern...</option>${otherPatterns.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.staffingRequirements.reduce((n,r)=>n+Number(r.count||0),0)} positions)</option>`).join('')}</select></div>
     <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2,var(--surface))"></div>
     <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add operational position</button><span class="hint">Qualifications are advisory. The scheduler can still assign someone if a skill is missing.</span></div>
@@ -3040,6 +3043,12 @@ function wireStaffingNeedsEditor(id,totalId){
     refresh();
     toast('Example loaded. Review the required skills and counts before saving.');
   }));
+  document.getElementById(id+'Template').addEventListener('change',e=>{
+    const source=(STATE.pm.scheduleShifts||[]).find(p=>p.id===e.target.value&&p.staffingTemplateName&&canViewScheduleShift(p));if(!source)return;
+    if(container.querySelector('[data-staffing-row]')&&!confirm('Replace current staffing with template '+source.staffingTemplateName+'?')){e.target.value='';return;}
+    container.innerHTML=source.staffingRequirements.map(r=>staffingNeedsRow({...r,id:'cat'+Date.now()+Math.random().toString(36).slice(2,9)})).join('');
+    e.target.value='';refresh();toast('Template applied. Changes here will not modify the original.');
+  });
   document.getElementById(id+'Copy').addEventListener('change',e=>{
     const source=STATE.pm.scheduleShifts.find(p=>p.id===e.target.value);if(!source)return;
     if(container.querySelector('[data-staffing-row]')&&!confirm('Replace the current staffing requirements with those from '+source.name+'?')){e.target.value='';return;}
@@ -4775,7 +4784,7 @@ function openShiftFormModal(existing){
     const staffingRequirements=readStaffingNeeds('fShiftStaffNeeds');if(!staffingRequirements)return;
     const staffingOverrides=readStaffingOverrides('fShiftOverrides',staffingRequirements);if(!staffingOverrides)return;
     const data = {
-      name, workGroupId, staffingRequirements, staffingOverrides,
+      name, workGroupId, staffingRequirements, staffingOverrides, staffingTemplateName:document.getElementById('fShiftStaffNeedsTemplateName').value.trim(),
       patternType: selectedType,
       daysOn: Number(document.getElementById('fShiftDaysOn').value)||4,
       daysOff: Number(document.getElementById('fShiftDaysOff').value)||3,
