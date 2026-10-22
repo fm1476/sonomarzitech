@@ -1,5 +1,5 @@
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
-import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, AGENCY_PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, AGENCY_PERSON_ORGANIZATION_QUERY, canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -1670,9 +1670,7 @@ function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
 // Canonical assignments override legacy unit claims whenever both tables exist.
 async function canonicalPersonnelScope(client, auth, scope) {
   if (!scope) return null;
-  const tables=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
-    to_regclass('suite_organization_nodes') AS nodes`);
-  if(!tables.rows[0]?.assignments || !tables.rows[0]?.nodes)return null;
+  if(!await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId))return null;
   const result=await client.query(AGENCY_PERSON_ORGANIZATION_QUERY,[auth.tenantId,auth.agencyId]);
   const byPerson=new Map();
   for(const row of result.rows) {
@@ -4949,9 +4947,8 @@ async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enroll
   if(!personId)return false;
   // Historical enrollment must still belong to this membership's person identity.
   if(enrollment.trainee_person && String(enrollment.trainee_person)!==personId)return false;
-  const canonical=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
-    to_regclass('suite_organization_nodes') AS nodes`);
-  if(canonical.rows[0]?.assignments && canonical.rows[0]?.nodes) {
+  const canonicalReady=await canonicalOrganizationReady(client,workspaceAuth.tenantId,workspaceAuth.agencyId);
+  if(canonicalReady) {
     const assigned=await client.query(PERSON_ORGANIZATION_QUERY,[workspaceAuth.tenantId,workspaceAuth.agencyId,personId]);
     return authorizedPersonFromAssignments(scope,assigned.rows,{
       tenantId:workspaceAuth.tenantId,agencyId:workspaceAuth.agencyId,
