@@ -50,4 +50,16 @@ CREATE INDEX IF NOT EXISTS suite_person_assignments_organization_idx
 -- Do not force one primary assignment until date-overlap semantics are finalized.
 -- Existing personnel are intentionally NOT backfilled here.
 
+-- Explicit, reversible per-agency cutover; deploying DDL alone never enables it.
+CREATE TABLE IF NOT EXISTS suite_organization_rollout (
+ tenant_id uuid NOT NULL,
+ agency_id uuid NOT NULL,
+ enabled boolean NOT NULL DEFAULT false,
+ activated_at timestamptz,
+ activated_by uuid,
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (tenant_id, agency_id),
+ CHECK (NOT enabled OR activated_at IS NOT NULL)
+);
+
 COMMIT;
