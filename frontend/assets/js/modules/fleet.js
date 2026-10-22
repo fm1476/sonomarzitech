@@ -1313,7 +1313,19 @@ function renderVehDetailTabContent(v){
   const canEdit = can('fleet_vehicle_edit');
 
   if(VEH_DETAIL_TAB==='overview'){
+    const missingEquipment=(v.equipmentChecklist||[]).filter(e=>e.required&&e.present===false).length;
+    const openWork=STATE.fleet.maintenance.filter(m=>m.vehicleId===v.id&&['Open','Scheduled'].includes(m.status));
+    const unresolved=openWork.filter(m=>m.status==='Open').length;
+    const inspectionIssues=STATE.fleet.inspections.filter(i=>i.vehicleId===v.id).slice().sort((a,b)=>b.dateTime.localeCompare(a.dateTime))[0];
+    const issueReported=!!inspectionIssues?.bodyDamage;
+    const unhealthy=v.status==='Out of Service'||v.status==='Retired'||unresolved>0||missingEquipment>0||issueReported;
+    const alertTone=v.status==='Out of Service'||v.status==='Retired'?'danger':unhealthy?'warning':'success';
+    const readinessTitle=v.status==='Out of Service'?'Out of service':v.status==='Retired'?'Retired vehicle':unhealthy?'Attention needed':'Operational status normal';
     body.innerHTML = `
+      <div class="fleet-readiness-banner fleet-readiness-${alertTone}">
+        <div><small>OPERATIONAL READINESS</small><strong>${readinessTitle}</strong><span>${missingEquipment} missing required equipment · ${unresolved} open maintenance items${issueReported?' · Damage reported on latest inspection':''}</span></div>
+        ${openWork.length?'<span class="fleet-readiness-count">'+openWork.length+' active service items</span>':''}
+      </div>
       <div class="fleet-detail-toolbar">
         <span class="badge ${statusBadgeClass(v.status)}">${escapeHtml(v.status)}</span>
         <div class="fleet-detail-buttons">
@@ -2768,5 +2780,11 @@ if(typeof document!=='undefined'&&!document.getElementById('fleet-inspection-mai
 if(typeof document!=='undefined'&&!document.getElementById('fleet-final-polish-style')){
  const style=document.createElement('style');style.id='fleet-final-polish-style';
  style.textContent='.fleet-assign-modal{max-width:720px!important;width:min(720px,calc(100vw - 28px))!important}.fleet-assign-modal .modal-head h3{font-size:22px;margin:5px 0}.fleet-assign-modal .modal-head span{font-size:12px;color:var(--text-dim)}.fleet-assign-body{padding:22px 26px!important}.fleet-assignment-current{display:flex;flex-direction:column;gap:7px;padding:17px;margin-bottom:23px;border:1px solid var(--border);border-radius:13px;background:rgba(100,140,190,.08)}.fleet-assignment-current small{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--text-dim)}.fleet-assignment-current strong{font-size:18px}.fleet-assignment-current span{font-size:12px;color:var(--text-dim)}.fleet-assign-body h4{font-size:14px;margin:0 0 12px}.fleet-assign-choices{display:flex;gap:9px;margin-bottom:17px;flex-wrap:wrap}.fleet-assign-choices button{border-radius:10px;padding:11px 16px;border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;cursor:pointer}.fleet-assign-choices button.active{background:rgba(54,118,224,.18);border-color:#4b86d7;color:#98c2ff}.fleet-assignment-notice{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px;border-radius:8px;font-size:13px;line-height:1.55}.fleet-photo-workspace [id=fleetVehPhotoDropZone]{border-radius:14px!important;background:rgba(54,118,224,.075)!important;border-color:#5c8dc9!important;transition:background .15s ease}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:hover{background:rgba(54,118,224,.13)!important}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:focus-visible{outline:3px solid #85b7ff;outline-offset:3px}.fleet-photo-workspace .civil-photo-card{border-radius:12px;overflow:hidden}.fleet-history-intro{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;border-radius:12px;background:rgba(96,140,193,.075);padding:14px 17px;margin-bottom:14px}.fleet-history-intro strong{font-size:14px}.fleet-history-intro span{font-size:12px;color:var(--text-dim)}.fleet-history-workspace table{width:100%}@media(max-width:560px){.fleet-assign-body{padding:14px!important}.fleet-assign-choices button{flex:1}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-readiness-style')){
+ const style=document.createElement('style');style.id='fleet-readiness-style';
+ style.textContent='.fleet-readiness-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-radius:12px;padding:15px 18px;margin-bottom:17px;border-left:4px solid}.fleet-readiness-banner>div{display:flex;flex-direction:column;gap:5px}.fleet-readiness-banner small{font-size:10px;letter-spacing:.09em;font-weight:800;opacity:.82}.fleet-readiness-banner strong{font-size:16px}.fleet-readiness-banner span{font-size:12px}.fleet-readiness-success{border-color:#29b784;background:rgba(31,164,116,.1);color:#4edaaf}.fleet-readiness-warning{border-color:#e8a23e;background:rgba(232,162,62,.1);color:#edba72}.fleet-readiness-danger{border-color:#e56b65;background:rgba(225,84,80,.12);color:#ff9f99}.fleet-readiness-count{border:1px solid currentColor;border-radius:999px;padding:7px 12px;font-weight:700}@media(max-width:580px){.fleet-readiness-banner{align-items:flex-start}}';
  document.head.appendChild(style);
 }
