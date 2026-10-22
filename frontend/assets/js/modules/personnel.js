@@ -3543,10 +3543,13 @@ function otHoursSince(personId, sinceDateStr){
 // This is the standard "equalization" rule most agencies actually run callback lists by --
 // straight seniority order would let senior officers hoard overtime indefinitely.
 function rankedCallbackList(){
-  const since = fmt(addDays(new Date(), -90));
+  const policy=STATE.pm.schedulingSettings||{};
+  const since=fmt(addDays(new Date(), -Math.min(365,Math.max(1,Number(policy.callbackLookbackDays)||90))));
   return (STATE.pm.otCallbackOptIns||[]).map(personId=>({
     personId, hours: otHoursSince(personId, since), seniority: seniorityDate(personId),
-  })).sort((a,b)=> a.hours-b.hours || a.seniority.localeCompare(b.seniority));
+  })).sort((a,b)=>(STATE.pm.schedulingSettings?.callbackPriority==='seniority-first'
+    ? a.seniority.localeCompare(b.seniority)||a.hours-b.hours
+    : a.hours-b.hours||a.seniority.localeCompare(b.seniority)));
 }
 
 function renderOvertimeSub(){
@@ -4271,6 +4274,9 @@ function renderRollCallSub(){
     return {personId, beat:'', unit: shift?shift.name:'', vehicleId:'', status: ex?'excused':'present', notes: ex?`${ex.code} on file`:''};
   });
 
+  const actualPresent=rc?entries.filter(e=>['present','late'].includes(e.status)).length:null;
+  const actualAbsent=rc?entries.filter(e=>['absent','excused'].includes(e.status)).length:null;
+  const plannedCount=rosterIds.length;
   const rows = entries.map((e,i)=>`<tr>
     <td>${escapeHtml(personName(e.personId))}</td>
     <td><input type="text" data-rc-field="beat" data-rc-idx="${i}" value="${escapeHtml(e.beat||'')}" placeholder="Beat / zone" ${canManage?'':'disabled'} style="width:110px;"></td>
@@ -4281,6 +4287,12 @@ function renderRollCallSub(){
   </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No one is on the duty roster for this shift on this date.</td></tr>`;
 
   document.getElementById('schedSubBody').innerHTML = `
+    <div class="pm-rollcall-stats">
+      <div><small>Scheduled for duty</small><strong>${plannedCount}</strong><span>Planned shift roster</span></div>
+      <div><small>Confirmed present</small><strong>${actualPresent===null?'—':actualPresent}</strong><span>${rc?'Including late arrivals':'Roll call not saved yet'}</span></div>
+      <div><small>Absent / excused</small><strong>${actualAbsent===null?'—':actualAbsent}</strong><span>${rc?'Recorded roll call status':'Not yet verified'}</span></div>
+      <div><small>Difference</small><strong>${actualPresent===null?'—':plannedCount-actualPresent}</strong><span>Planned less confirmed</span></div>
+    </div>
     <div class="panel" style="margin-bottom:16px;">
       <div class="panel-head">
         <h2>Roll Call</h2>
@@ -5371,6 +5383,11 @@ function renderSchedulingSettingsTab(body){
           <input type="number" min="1" step="0.5" id="fFatigueThreshold" value="${settings.fatigueThresholdHours}">
         </div>
         <p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Extra Duty flags a signup when a person's regular on-duty hours plus extra-duty hours that day would exceed this number. It's a warning shown to whoever approves the signup, not a hard block.</p>
+        <div class="form-2col" style="margin-top:18px;">
+          <div class="form-row"><label for="fCallbackLookback">Callback ranking lookback (days)</label><input id="fCallbackLookback" type="number" min="1" max="365" step="1" value="${settings.callbackLookbackDays||90}"></div>
+          <div class="form-row"><label for="fCallbackPriority">Callback priority</label><select id="fCallbackPriority"><option value="fewest-hours" ${settings.callbackPriority!=='seniority-first'?'selected':''}>Fewest recent overtime hours, then seniority</option><option value="seniority-first" ${settings.callbackPriority==='seniority-first'?'selected':''}>Seniority first, then fewest hours</option></select></div>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Agency callback ranking preferences. These priorities guide the list; supervisors retain discretion. Labor agreements and local policy still govern decisions.</p>
         <button class="btn btn-primary btn-sm" id="btnSaveSchedulingSettings">Save</button>
       </div>
     </div>
@@ -5378,8 +5395,12 @@ function renderSchedulingSettingsTab(body){
   document.getElementById('btnSaveSchedulingSettings').addEventListener('click', ()=>{
     const val = Number(document.getElementById('fFatigueThreshold').value);
     if(!val || val<=0){ toast("Enter a positive number of hours.", true); return; }
+    const lookback=Number(document.getElementById('fCallbackLookback').value);
+    if(!Number.isSafeInteger(lookback)||lookback<1||lookback>365){toast('Enter 1 to 365 days for callback ranking.',true);return;}
     settings.fatigueThresholdHours = val;
-    logActivity(`Set the fatigue threshold to ${val} combined hours per day.`, "admin");
+    settings.callbackLookbackDays=lookback;
+    settings.callbackPriority=document.getElementById('fCallbackPriority').value;
+    logActivity('Updated scheduling fatigue and callback-ranking policy.',"admin");
     persist();
     toast("Scheduling settings saved.");
   });
@@ -5469,5 +5490,11 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-eligibility-advis
 if(typeof document!=='undefined'&&!document.getElementById('pm-readiness-brief-style')){
  const st=document.createElement('style');st.id='pm-readiness-brief-style';
  st.textContent='.pm-readiness-brief{border:1px solid var(--border);background:rgba(101,142,191,.04);border-radius:16px;padding:19px;margin-bottom:18px}.pm-readiness-title{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:17px}.pm-readiness-title small{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}.pm-readiness-title h2{font-size:21px;margin:6px 0}.pm-readiness-title p{font-size:12px;color:var(--text-dim);margin:0}.pm-readiness-title>span{font-size:11px;font-weight:700;color:var(--text-dim)}.pm-readiness-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pm-readiness-cards>div{padding:15px;background:var(--panel);border:1px solid var(--border);border-radius:12px;min-width:0}.pm-readiness-cards small{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-cards strong{display:block;font-size:27px;font-weight:800;margin:8px 0 5px}.pm-readiness-cards span{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-alert{font-size:12px;border-radius:9px;padding:12px 14px;border-left:3px solid #dca03e;background:rgba(220,160,62,.1);margin:16px 0 0}@media(max-width:760px){.pm-readiness-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.pm-readiness-cards{grid-template-columns:1fr}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-rollcall-stats-style')){
+ const st=document.createElement('style');st.id='pm-rollcall-stats-style';
+ st.textContent='.pm-rollcall-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pm-rollcall-stats>div{border:1px solid var(--border);border-radius:12px;padding:15px;background:rgba(80,131,190,.055)}.pm-rollcall-stats small,.pm-rollcall-stats span{display:block;font-size:11px;color:var(--text-dim)}.pm-rollcall-stats strong{display:block;font-size:27px;font-weight:800;margin:7px 0}@media(max-width:690px){.pm-rollcall-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}';
  document.head.append(st);
 }
