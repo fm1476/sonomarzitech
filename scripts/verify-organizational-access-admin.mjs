@@ -30,14 +30,15 @@ const executed='(async function run(){'+block+'})';
 const scope={mode:'selected',unitIds:['dispatch'],divisionIds:[],workGroupIds:[]};
 const row=(collection,id,value)=>({key:JSON.stringify([collection.split('.'),id]),value});
 const catalogs=[row('pm.records','a',{personId:'person-1',unitId:'dispatch'}),row('pm.records','b',{personId:'person-2',unitId:'patrol'}),row('pm.divisions','c',{id:'division-1'}),row('pm.scheduleWorkGroups','d',{id:'group-1',active:true})];
-async function tryGrant(selectedScope,catalogRows=catalogs,agencyFound=true,memberFound=true){
+async function tryGrant(selectedScope,catalogRows=catalogs,agencyFound=true,memberFound=true,canonicalNodes=null){
   const sqlCalls=[];
   const client={query:async(sql,args=[])=>{
     sqlCalls.push({sql,args});
     if(sql.includes('SELECT id FROM suite_agencies'))return {rows:agencyFound?[{id:'agency-id'}]:[]};
     if(sql.includes('CREATE TABLE IF NOT EXISTS'))return {rows:[]};
     if(sql.includes('SELECT 1 FROM suite_memberships'))return {rows:memberFound?[{exists:1}]:[]};
-    if(sql.includes("to_regclass('suite_organization_nodes')"))return {rows:[{nodes:null}]};
+    if(sql.includes("to_regclass('suite_organization_nodes')"))return {rows:[{nodes:canonicalNodes?'suite_organization_nodes':null}]};
+    if(sql.includes('SELECT id, kind, name FROM suite_organization_nodes'))return {rows:canonicalNodes||[]};
     if(sql.includes('SELECT key,value FROM suite_records'))return {rows:catalogRows};
     if(sql.includes('INSERT INTO suite_organizational_access'))return {rows:[]};
     throw Error('Unexpected SQL: '+sql);
@@ -70,3 +71,15 @@ assert.match(block,/canonicalCatalogAvailable=Boolean\(canonicalTable\.rows\[0\]
 assert.match(block,/catalogs:canonicalCatalogAvailable\?/);
 assert.match(block,/clean\.mode==='selected' && canonicalCatalogAvailable/);
 console.log('Pre-activation canonical catalog checks passed.');
+
+const dispatchUuid='23e74951-ea95-46cc-9d37-edfd89f5b634';
+const patrolUuid='23d94c13-d586-4dc2-9b4c-a0764c5c6412';
+const configuredNodes=[{id:dispatchUuid,kind:'unit',name:'Dispatch'},{id:patrolUuid,kind:'unit',name:'Patrol'}];
+const canonicalGrant={mode:'selected',unitIds:[dispatchUuid],divisionIds:[],workGroupIds:[]};
+const preActivation=await tryGrant(canonicalGrant,catalogs,true,true,configuredNodes);
+assert.equal(preActivation.outcome.status,200,'Canonical grants must be savable BEFORE activation');
+assert.equal(preActivation.sqlCalls.some(x=>x.sql.includes('SELECT key,value FROM suite_records')),false,'Never fall back to legacy label validation when canonical nodes exist');
+const rogueUuid=await tryGrant({...canonicalGrant,unitIds:['11111111-1111-4111-8111-111111111111']},catalogs,true,true,configuredNodes);
+assert.equal(rogueUuid.outcome.status,400,'Unknown canonical organization UUID must be rejected');
+assert.equal(rogueUuid.sqlCalls.some(x=>x.sql.includes('INSERT INTO suite_organizational_access')),false);
+console.log('Pre-activation canonical grants executable tests passed.');
