@@ -4433,6 +4433,8 @@ function pmRecordReadable(
 ) {
   const rule = PM_COLLECTION_RULES[collection];
   if (!rule) return false;
+  if (collection === "pm.disciplinaryActions" &&
+      !roleHasAbility(abilityMap, workspaceAuth.roleIds, "pm_sensitive_view")) return false;
 
   if (
     hasAnyAbility(
