@@ -4516,7 +4516,7 @@ function renderDutyCalendar(body){
     const eventShort=dayEvents.some(e=>!eventStaffingSummary(e).ok);
     const dayState=belowMinimum||eventShort?'short':belowPreferred?'preferred':'covered';
     const calendarColor=dayState==='short'?'var(--red)':dayState==='preferred'?'var(--gold)':'var(--green)';
-    const statusLabel=dayState==='short'?'Below minimum':dayState==='preferred'?'Below preferred':'Staffing met';
+    const statusLabel=!staffingChecks.length&&!dayEvents.length?'No scheduled shifts':dayState==='short'?'Below minimum':dayState==='preferred'?'Below preferred':'Staffing met';
     const visibleChecks=staffingChecks.filter(x=>x.minStaff>0||x.categories.length);
     cells += `<div class="cal-cell ${isToday?'cal-cell-today':''}" style="border-top:3px solid ${calendarColor};">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
