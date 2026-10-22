@@ -1608,7 +1608,13 @@ function openMaintenanceForm(v, isSchedule){
       const date=maintenanceBox.querySelector('#fMDate')?.value||'No date';
       const labor=Number(maintenanceBox.querySelector('#fMLabor')?.value||0);
       const parts=Number(maintenanceBox.querySelector('#fMParts')?.value||0);
-      summary.textContent=kind+' · '+date+' · Estimated recorded costs: 
+      summary.textContent=kind+' / '+date+' / Estimated recorded costs: USD '+(Math.max(0,labor)+Math.max(0,parts)).toFixed(2);
+    };
+    maintenanceBox.addEventListener('change',update);
+    maintenanceBox.addEventListener('input',update);
+    update();
+  }
+  wireMaintenanceFormCommon();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
