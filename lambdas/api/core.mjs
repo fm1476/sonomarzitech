@@ -1633,6 +1633,10 @@ const OFFICER_UNIVERSAL_READ = new Set([
 ]);
 
 // Explicit organizational scopes are opt-in until all modules have migrated.
+const PERSONNEL_SCOPED_COLLECTIONS=new Set([
+  'pm.records','personnel','pm.trainingRecords','pm.trainingRequests',
+  'pm.disciplinaryActions','pm.inquiries','pm.instructors','pm.extraDutySignups'
+]);
 async function loadPersonnelScope(client, auth) {
   if (auth.admin) return null;
   const result=await client.query(
@@ -1801,14 +1805,19 @@ async function filterOfficerWorkspaceRecords(
     }
 
     const { collection, itemId } = parsed;
-    if(personnelScope && (collection==='pm.records'||collection==='personnel')) {
+    if(personnelScope && PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
       // Collection-wide ordering and legacy aggregate arrays can reveal hidden identities.
       if(itemId==='$order')continue;
       if(itemId==='$value') {
         if(collection==='pm.records'&&!roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view'))continue;
         if(!Array.isArray(record.value))continue;
         const scoped=record.value.filter(value=>personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
-        visible.push({...record,value:collection==='personnel'?scoped.map(limitPersonnelRecord):scoped.map(value=>redactPmRecord(value,abilityMap,workspaceAuth.roleIds))});
+        // Retain the standard module permission gate for linked HR collections.
+        if(collection!=='personnel'&&collection!=='pm.records'&&
+           !pmRecordReadable(workspaceAuth,abilityMap,collection,itemId,record.value))continue;
+        const safeValue=collection==='personnel'?scoped.map(limitPersonnelRecord):
+          collection==='pm.records'?scoped.map(value=>redactPmRecord(value,abilityMap,workspaceAuth.roleIds)):scoped;
+        visible.push({...record,value:safeValue});
         continue;
       }
       if(!personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits))continue;
@@ -4609,7 +4618,7 @@ async function authorizePersonnelSharedChange(
   const deleting = change.deleted === true;
   const afterValue = change.value;
 
-  if(collection==='pm.records'||collection==='personnel') {
+  if(PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
     const scope=await loadPersonnelScope(client,workspaceAuth);
     if(scope && (!personnelScopeAllows(scope,afterValue||beforeValue,workspaceAuth) ||
       (beforeValue && !personnelScopeAllows(scope,beforeValue,workspaceAuth)) ||
