@@ -132,3 +132,7 @@ assert.equal(canonFilter({personId:'missing-person',unitId:'dispatch'}),false,'M
 assert.equal(canonFilter({unitId:'dispatch'}),false,'No person identity must deny');
 assert.match(source,/const allowed=value=>canonicalAllows \? canonicalAllows\(value\) : personnelScopeAllows\(scope,value,workspaceAuth\)/,'Both before and after writes use canonical identity checks');
 console.log('Personnel canonical source-of-truth read/write guards passed.');
+
+assert.match(source,/A restricted editor cannot change the record person identity/);
+assert.match(source,/String\(beforeValue\.personId\|\|beforeValue\.id\|\|''\) !== String\(afterValue\.personId\|\|afterValue\.id\|\|''\)/);
+console.log('Restricted Personnel person identity rebinding protection passed.');
