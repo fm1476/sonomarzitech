@@ -24,6 +24,19 @@ assert.doesNotThrow(()=>validateStaffingRequirements([{id:'sup',name:'Patrol Sup
 assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Sergeant'}],'s1',{requiredSkill:'rank:Sergeant'}),true);
 assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Deputy'}],'s1',{requiredSkill:'rank:Sergeant'}),false);
 assert.equal(staffingPersonHasSkill([],'s1',{requiredSkill:'any'}),true);
+const dispatchRule={id:'dispatch-fire',name:'Dispatcher + Fire Dispatcher',requiredRank:'Dispatcher',requiredSkill:'Fire Dispatcher',count:1,preferredCount:2};
+const dispatchPeople=[{personId:'both',rank:'Dispatcher',specialSkills:['Fire Dispatcher','Law Dispatcher']},{personId:'rankOnly',rank:'Dispatcher',specialSkills:[]},{personId:'skillOnly',rank:'Supervisor',specialSkills:['Fire Dispatcher']}];
+assert.doesNotThrow(()=>validateStaffingRequirements([dispatchRule]));
+assert.equal(staffingPersonHasSkill(dispatchPeople,'both',dispatchRule),true);
+assert.equal(staffingPersonHasSkill(dispatchPeople,'rankOnly',dispatchRule),false);
+assert.equal(staffingPersonHasSkill(dispatchPeople,'skillOnly',dispatchRule),false);
+assert.equal(staffingPersonHasSkill(dispatchPeople,'rankOnly',{...dispatchRule,requiredSkill:'any'}),true);
+assert.equal(staffingPersonHasSkill(dispatchPeople,'skillOnly',{...dispatchRule,requiredRank:''}),true);
+const dispatchRows=[{personId:'both',staffingCategoryId:'dispatch-fire'},{personId:'both',staffingCategoryId:'law'}];
+const dispatchPositions=[dispatchRule,{id:'law',name:'Law Dispatcher',requiredSkill:'Law Dispatcher',count:1}];
+assert.equal(staffingSummary(dispatchPositions,dispatchRows,2,dispatchPeople).staffed,1); // cross-trained employee cannot cover both slots
+assert.equal(staffingSummary([dispatchRule],[{personId:'rankOnly',staffingCategoryId:'dispatch-fire'}],1,dispatchPeople).advisories.length,1); // mismatch is advisory, assignment still counts
+
 const group={id:'g',managerIds:['manager'],visibility:'unit',unitNames:['Dispatch'],active:true};
 const shift={id:'s',workGroupId:'g',minStaff:5,staffingRequirements:requirements,patternType:'weekly',weekdays:[0,1,2,3,4,5,6],published:true};
 const personnel=records.map(r=>({id:r.personId,name:r.personId,unit:'Dispatch'}));
