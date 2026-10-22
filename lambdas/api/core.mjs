@@ -4916,18 +4916,22 @@ async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enroll
       AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
     [workspaceAuth.tenantId,workspaceAuth.agencyId]
   );
-  let unitId='';
+  let unitId='', conflictingUnits=false;
   for(const row of rows.rows){
     try {
       const parsed=collectionFromRecordKey(row.key);
       if(!['personnel','pm.records'].includes(parsed.collection)||parsed.itemId==='$order')continue;
       const values=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
       for(const value of values){
-        if(String(value?.personId||value?.id||'')===personId && (value?.unitId||value?.unit))
-          unitId=String(value.unitId||value.unit);
+        if(String(value?.personId||value?.id||'')===personId && (value?.unitId||value?.unit)) {
+          const candidate=String(value.unitId||value.unit);
+          if(unitId && candidate!==unitId) conflictingUnits=true;
+          else if(!unitId) unitId=candidate;
+        }
       }
     }catch {}
   }
+  if(conflictingUnits)return false; // Never mint signed download URLs on ambiguous organizational identity.
   return canAccessOrganizationalRecord(scope,{personId,unitId},{actorPersonId:workspaceAuth.personId});
 }
 
