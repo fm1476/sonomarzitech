@@ -3036,13 +3036,14 @@ function staffingNeedsEditor(id,record){
   const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
   const templates=(STATE.pm.scheduleShifts||[]).filter(s=>s.staffingTemplateName&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
   return `<section class="pm-staff-builder" aria-label="Staffing requirements">
-    <div class="pm-builder-heading"><div><span class="pm-builder-kicker">STEP 3 · STAFFING</span><h3>Who does this shift need?</h3><p>Start with a template, copy another shift, or build your own. Every shift pattern keeps its own requirements.</p></div><span class="pm-builder-total" id="${id}Total">0 positions</span></div>
+    <div class="pm-builder-heading"><div><span class="pm-builder-kicker">STEP 3 · STAFFING</span><h3>Who does this shift need?</h3><p>Choose a rank, optionally add a skill, and set minimum and preferred staffing.</p></div><span class="pm-builder-total" id="${id}Total">0 positions</span></div>
     <div class="pm-visual-rank-picker" style="border:1px solid var(--border);border-radius:16px;padding:16px;margin:14px 0;background:var(--surface);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><strong style="font-size:16px;">Build your staffing</strong><p class="hint" style="margin:5px 0 0;">Select a rank to add a requirement, or drag it into your plan. Add a Skill inside its card only when needed.</p></div><span class="hint" id="${id}GroupHint">Suggested for your Work Group</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><strong style="font-size:16px;">Build your staffing</strong><p class="hint" style="margin:5px 0 0;">Click a rank to add it to your plan. You can also drag it onto the staffing requirements.</p></div><span class="hint" id="${id}GroupHint">Suggested for your Work Group</span></div>
       <div id="${id}Ranks" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0;" aria-label="Available ranks"></div>
-      <div id="${id}Drop" tabindex="0" role="group" aria-label="Staffing plan drop area" style="margin-top:12px;padding:12px;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--text-dim);font-size:13px;">Your staffing plan appears below. Click a rank above or drop it here.</div>
     </div>
-    <div class="pm-builder-starters">
+    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:12px;border-top:1px solid var(--border)"></div>
+    <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add staffing requirement</button><span class="hint">Rank + Skill apply to the same person.</span></div>
+    <details class="pm-staffing-tools" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;" ${record?.staffingTemplateName?'open':''}><summary style="cursor:pointer;font-weight:700;">Templates & examples <span class="hint">(optional)</span></summary><div style="padding-top:12px;display:grid;gap:12px;">\n    <div class="pm-builder-starters">
       <button type="button" class="btn btn-outline" data-staffing-preset="patrol" id="${id}Patrol">Patrol example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="dispatch" id="${id}Dispatch">Dispatch example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
@@ -3050,9 +3051,7 @@ function staffingNeedsEditor(id,record){
     <div class="form-row pm-builder-copy"><label for="${id}Template">Apply a saved staffing template</label><select id="${id}Template"><option value="">Choose a reusable template...</option>${templates.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.staffingTemplateName)} · ${escapeHtml(p.name)}</option>`).join('')}</select></div>
     <div class="form-row"><label for="${id}TemplateName">Save as a reusable template (optional)</label><input id="${id}TemplateName" type="text" maxlength="100" value="${escapeHtml(record?.staffingTemplateName||'')}" placeholder="Example: Standard Dispatch Coverage"><p class="hint">Saving this pattern also makes its staffing configuration available as a reusable template to authorized schedulers. Each applied copy remains independent.</p></div>
     <div class="form-row pm-builder-copy"><label for="${id}Copy">Copy requirements from another shift</label><select id="${id}Copy"><option value="">Choose an existing shift pattern...</option>${otherPatterns.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.staffingRequirements.reduce((n,r)=>n+Number(r.count||0),0)} positions)</option>`).join('')}</select></div>
-    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2,var(--surface))"></div>
-    <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add staffing requirement</button><span class="hint">Rank and Skill requirements are checked before assigning staff.</span></div>
-  </section>`;
+    </div></details>\n  </section>`;
 }
 function readStaffingNeeds(id){
   const controls=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')];
@@ -3080,7 +3079,7 @@ function wireStaffingNeedsEditor(id,totalId){
   container.addEventListener('input',refresh);container.addEventListener('change',e=>{const row=e.target.closest('[data-staffing-row]');if(row&&(e.target.matches('[data-staffing-rank]')||e.target.matches('[data-staffing-skill]'))){row.querySelector('[data-staffing-legacy]').value='';}refresh();});
   document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();container.lastElementChild?.querySelector('[data-staffing-rank]')?.focus();};
   // Work Group suggestions use the existing Personnel rank catalog, never a separate role catalog.
-  const rankPicker=document.getElementById(id+'Ranks'),dropZone=document.getElementById(id+'Drop'),groupSelector=document.getElementById('fShiftWorkGroup');
+  const rankPicker=document.getElementById(id+'Ranks'),dropZone=container,groupSelector=document.getElementById('fShiftWorkGroup');
   const allRanks=[...new Set([...(STATE.pm.refData?.ranks||[]),...RANKS,...STATE.pm.records.map(r=>r.rank).filter(Boolean)])].filter(Boolean);
   let showAllRanks=false;
   const activeGroup=()=>{const group=STATE.pm.scheduleWorkGroups.find(g=>g.id===groupSelector?.value);return String(group?.name||'');};
@@ -3089,7 +3088,7 @@ function wireStaffingNeedsEditor(id,totalId){
     const hints=document.getElementById(id+'GroupHint');
     if(hints)hints.textContent=group?'Suggestions for '+activeGroup():'All configured ranks';
     const discipline=group.includes('dispatch')?'dispatch':group.includes('fire')?'fire':/(patrol|police|sheriff|law)/.test(group)?'law':'other';
-    const patterns={dispatch:/dispatch|telecommunicat|supervisor|sergeant/,fire:/fire|captain|chief|engineer|fighter|lieutenant/,law:/deputy|officer|sergeant|lieutenant|corporal|captain|chief/};
+    const patterns={dispatch:/dispatch|telecommunicat/,fire:/fire|captain|chief|engineer|fighter|lieutenant/,law:/deputy|officer|sergeant|lieutenant|corporal|captain|chief/};
     const pattern=patterns[discipline],suggested=pattern?allRanks.filter(rank=>pattern.test(rank.toLowerCase())):[];
     const visible=showAllRanks||!suggested.length?allRanks:suggested;
     rankPicker.innerHTML=visible.map(rank=>`<button type="button" class="btn btn-outline btn-sm" draggable="true" data-quick-rank="${escapeHtml(rank)}" style="border-radius:999px;display:inline-flex;align-items:center;gap:7px;">+ ${escapeHtml(rank)}</button>`).join('')+
@@ -3104,9 +3103,9 @@ function wireStaffingNeedsEditor(id,totalId){
   };
   rankPicker?.addEventListener('click',event=>{const toggle=event.target.closest('[data-toggle-all-ranks]');if(toggle){showAllRanks=!showAllRanks;renderRankPicker();return;}const rank=event.target.closest('[data-quick-rank]')?.dataset.quickRank;if(rank)addRank(rank);});
   rankPicker?.addEventListener('dragstart',event=>{const rank=event.target.closest('[data-quick-rank]')?.dataset.quickRank;if(rank&&event.dataTransfer){event.dataTransfer.setData('text/plain',rank);event.dataTransfer.effectAllowed='copy';}});
-  dropZone?.addEventListener('dragover',event=>{event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';dropZone.style.borderColor='var(--blue)';});
-  dropZone?.addEventListener('dragleave',()=>{dropZone.style.borderColor='var(--border)';});
-  dropZone?.addEventListener('drop',event=>{event.preventDefault();dropZone.style.borderColor='var(--border)';const rank=event.dataTransfer?.getData('text/plain');if(rank)addRank(rank);});
+  dropZone?.addEventListener('dragover',event=>{event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';dropZone.style.outline='2px dashed var(--blue)';});
+  dropZone?.addEventListener('dragleave',()=>{dropZone.style.outline='';});
+  dropZone?.addEventListener('drop',event=>{event.preventDefault();dropZone.style.outline='';const rank=event.dataTransfer?.getData('text/plain');if(rank)addRank(rank);});
   groupSelector?.addEventListener('change',()=>{showAllRanks=false;renderRankPicker();});
   renderRankPicker();
   const catalog=STATE.pm.refData?.skillsCatalog||[];
