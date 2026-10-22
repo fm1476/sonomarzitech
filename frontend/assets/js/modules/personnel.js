@@ -2821,7 +2821,30 @@ function renderScheduling(){
     return;
   }
   if(!visibleTabs.some(t=>t.key===SCHED_SUBTAB)) SCHED_SUBTAB = visibleTabs[0].key;
+  const day=fmt(new Date());
+  const coverageGaps=can('pm_schedule_view')?computeCoverageGaps(7).filter(g=>canViewScheduleShift(g.shift)):[];
+  const upcomingTraining=STATE.pm.trainingRecords.filter(t=>t.recertRequired&&t.recertDate&&t.recertDate<=fmt(addDays(new Date(),30)));
+  const settings=STATE.pm.personnelSettings||{};
+  const authorized=settings.authorizedPositionsByUnit||{};
+  const activeByUnit={};
+  STATE.pm.records.filter(r=>r.employmentStatus==='Active').forEach(r=>{if(r.unitId)activeByUnit[r.unitId]=(activeByUnit[r.unitId]||0)+1;});
+  const unfilled=Object.entries(authorized).reduce((total,[unit,n])=>total+Math.max(0,(Number(n)||0)-(activeByUnit[unit]||0)),0);
+  const pendingLeave=can('pm_leave_request_approve')?(STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'&&canManagePersonSchedule(r.personId,r,'pm_leave_request_approve')).length:null;
+  const rollcallCount=can('pm_rollcall_view')?(STATE.pm.rollCalls||[]).filter(r=>r.date===day).length:null;
+  const callbackCount=can('pm_overtime_view')?(STATE.pm.otCallbackOptIns||[]).length:null;
   document.getElementById('view-pm-scheduling').innerHTML = `
+    <section class="pm-readiness-brief">
+      <div class="pm-readiness-title"><div><small>PERSONNEL / STAFFING INTELLIGENCE</small><h2>Operational readiness</h2><p>Coverage, qualifications and work rules inform staffing decisions. They do not block authorized schedulers.</p></div><span>Next 7 days</span></div>
+      <div class="pm-readiness-cards">
+        <div><small>Coverage gaps</small><strong>${coverageGaps.length}</strong><span>Unfilled shift requirements</span></div>
+        <div><small>Authorized vacancies</small><strong>${settings.authorizedStaffingEnabled?unfilled:'—'}</strong><span>${settings.authorizedStaffingEnabled?'Positions without active assignments':'Configure in Personnel Admin'}</span></div>
+        <div><small>Qualification advisories</small><strong>${upcomingTraining.length}</strong><span>Expired or expiring credentials</span></div>
+        <div><small>Leave decisions</small><strong>${pendingLeave===null?'—':pendingLeave}</strong><span>${pendingLeave===null?'Approval permission required':'Awaiting review'}</span></div>
+        <div><small>Today's roll calls</small><strong>${rollcallCount===null?'—':rollcallCount}</strong><span>Recorded vs planned rosters</span></div>
+        <div><small>Callback volunteers</small><strong>${callbackCount===null?'—':callbackCount}</strong><span>Opted into callback opportunities</span></div>
+      </div>
+      ${coverageGaps.length?'<p class="pm-readiness-alert">'+coverageGaps.length+' staffing coverage gaps identified across upcoming shifts. Review the roster or callback lists for eligible available personnel.</p>':''}
+    </section>
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
@@ -5393,5 +5416,11 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-roster-modern-sty
 if(typeof document!=='undefined'&&!document.getElementById('pm-eligibility-advisory-style')){
  const st=document.createElement('style');st.id='pm-eligibility-advisory-style';
  st.textContent='.pm-qualification-advisory{font-size:12px;line-height:1.5;border-radius:10px;border-left:3px solid #4b86d7;background:rgba(75,134,215,.09);padding:12px 14px;margin:12px 0}.pm-qualification-warning{border-left-color:#dfa137;background:rgba(223,161,55,.13)}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-readiness-brief-style')){
+ const st=document.createElement('style');st.id='pm-readiness-brief-style';
+ st.textContent='.pm-readiness-brief{border:1px solid var(--border);background:rgba(101,142,191,.04);border-radius:16px;padding:19px;margin-bottom:18px}.pm-readiness-title{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:17px}.pm-readiness-title small{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}.pm-readiness-title h2{font-size:21px;margin:6px 0}.pm-readiness-title p{font-size:12px;color:var(--text-dim);margin:0}.pm-readiness-title>span{font-size:11px;font-weight:700;color:var(--text-dim)}.pm-readiness-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pm-readiness-cards>div{padding:15px;background:var(--panel);border:1px solid var(--border);border-radius:12px;min-width:0}.pm-readiness-cards small{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-cards strong{display:block;font-size:27px;font-weight:800;margin:8px 0 5px}.pm-readiness-cards span{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-alert{font-size:12px;border-radius:9px;padding:12px 14px;border-left:3px solid #dca03e;background:rgba(220,160,62,.1);margin:16px 0 0}@media(max-width:760px){.pm-readiness-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.pm-readiness-cards{grid-template-columns:1fr}}';
  document.head.append(st);
 }
