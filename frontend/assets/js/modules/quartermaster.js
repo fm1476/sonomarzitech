@@ -2085,9 +2085,9 @@ function openCheckoutModal(presetEquipId){
   const available = STATE.qm.equipment.filter(e=>e.status==="Available" && !e.isConsumable);
   if(available.length===0){ toast("No available equipment to check out.", true); return; }
   if(presetEquipId&&!available.some(e=>e.id===presetEquipId)){toast("This item is not available for assignment.",true);return;}
-  document.getElementById('modalBox').className = 'modal modal-wide';
+  document.getElementById('modalBox').className = 'modal qm-checkout-modal';
   document.getElementById('modalBox').innerHTML = `
-    <div class="modal-head"><h3>Check Out Equipment</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-head qm-checkout-header"><div><small>QUARTERMASTER / ASSET CUSTODY</small><h3>Check Out Equipment</h3><span>Record a new equipment assignment</span></div><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
       <div class="form-row"><label>Equipment</label>
         <select id="fEquip">${available.map(e=>`<option value="${e.id}" ${presetEquipId===e.id?'selected':''}>${escapeHtml(e.name)} (${e.assetId})</option>`).join('')}</select>
@@ -2121,6 +2121,56 @@ function openCheckoutModal(presetEquipId){
     </div>
   `;
   openModal();
+  const checkoutBox=document.getElementById('modalBox');
+  const checkoutBody=checkoutBox.querySelector('.modal-body');
+  const sourceRows=[...checkoutBody.children];
+  checkoutBody.classList.add('qm-checkout-body');
+  const group=(title,subtitle,items)=>{
+    const el=document.createElement('section');el.className='qm-checkout-section';
+    const heading=document.createElement('div');heading.className='qm-checkout-section-heading';
+    const h=document.createElement('h4');h.textContent=title;heading.appendChild(h);
+    if(subtitle){const p=document.createElement('p');p.textContent=subtitle;heading.appendChild(p);}
+    el.appendChild(heading);items.filter(Boolean).forEach(node=>el.appendChild(node));
+    return el;
+  };
+  // Keep all original inputs intact so checkout uses the established data path.
+  const equipmentGroup=group('1. Equipment','Select the available item to assign.',[sourceRows[0]]);
+  const recipientGroup=group('2. Assign to','Choose the custodian or destination.',[sourceRows[1],sourceRows[2]]);
+  const timingGroup=group('3. Checkout details','Record when and where this handoff occurs.',[sourceRows[3],sourceRows[4]]);
+  const notesGroup=group('4. Notes','Optional details for the assignment history.',[sourceRows[5]]);
+  const choiceBar=document.createElement('div');choiceBar.className='qm-checkout-choice-bar';
+  choiceBar.setAttribute('role','group');choiceBar.setAttribute('aria-label','Assignment recipient type');
+  const targetSelect=checkoutBox.querySelector('#fTargetType');
+  for(const [key,label] of [['person','Person'],['unit','Unit / Vehicle'],['location','Station / Location']]){
+    const btn=document.createElement('button');btn.type='button';btn.dataset.checkoutTarget=key;
+    btn.textContent=label;btn.className='qm-checkout-choice';
+    btn.onclick=()=>{targetSelect.value=key;targetSelect.dispatchEvent(new Event('change',{bubbles:true}));updateCheckout();};
+    choiceBar.appendChild(btn);
+  }
+  targetSelect.closest('.form-row').classList.add('qm-checkout-type-field');
+  recipientGroup.insertBefore(choiceBar,targetSelect.closest('.form-row'));
+  const summary=document.createElement('div');summary.id='qmCheckoutSummary';summary.className='qm-checkout-summary';
+  summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
+  checkoutBody.append(equipmentGroup,recipientGroup,timingGroup,notesGroup,summary);
+  function updateCheckout(){
+    checkoutBox.querySelectorAll('[data-checkout-target]').forEach(btn=>{
+      const active=btn.dataset.checkoutTarget===targetSelect.value;
+      btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active));
+    });
+    const eq=equipmentById(checkoutBox.querySelector('#fEquip').value);
+    const recipient=checkoutBox.querySelector('#fTarget')?.selectedOptions[0]?.textContent?.trim()||'a recipient';
+    const date=checkoutBox.querySelector('#fCoDate').value;
+    const time=checkoutBox.querySelector('#fCoTime').value;
+    const due=checkoutBox.querySelector('#fDueDate').value;
+    const location=checkoutBox.querySelector('#fCoLocation').value;
+    summary.textContent=(eq?.name||'Equipment')+' will be checked out to '+recipient+'. Checkout: '+(date||'Not set')+' '+(time||'')+'. Due: '+(due||'Not set')+'. Location: '+(location||'Not set')+'.';
+    const valid=!!eq&&!!checkoutBox.querySelector('#fTarget')?.value&&!!date&&!!due&&due>=date&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time);
+    checkoutBox.querySelector('#mSave').disabled=!valid;
+  }
+  checkoutBox.addEventListener('change',event=>{if(event.target.matches('select,input'))updateCheckout();});
+  checkoutBox.addEventListener('input',event=>{if(event.target.matches('input'))updateCheckout();});
+  checkoutBox.addEventListener('change',event=>{if(event.target.id==='fTargetType')queueMicrotask(updateCheckout);});
+  updateCheckout();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('fTargetType').addEventListener('change', (e)=>{
@@ -2143,6 +2193,11 @@ function openCheckoutModal(presetEquipId){
     const dueDate = document.getElementById('fDueDate').value;
     const checkoutLocation = document.getElementById('fCoLocation').value;
     const item = equipmentById(eqId);
+    if(!can('qm_assign_checkout')||!item||item.status!=="Available"||item.isConsumable){toast("This item is no longer available for checkout.",true);return;}
+    if(!targetId||!checkoutDate||!dueDate||dueDate<checkoutDate||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(checkoutTime)){
+      toast("Choose a recipient and valid checkout date, time and due date.",true);return;
+    }
+    if(STATE.qm.assignments.some(a=>a.equipmentId===eqId&&a.status!=="Returned")){toast("This equipment already has an active assignment.",true);return;}
     STATE.qm.assignments.push({
       id:"a"+Date.now(), equipmentId:eqId,
       assignedToType, personId: assignedToType==='person'?targetId:null, targetId,
@@ -3931,5 +3986,11 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-issue-modern-styl
 if(typeof document!=='undefined'&&!document.getElementById('qm-last-mile-polish')){
  const style=document.createElement('style');style.id='qm-last-mile-polish';
  style.textContent='.qm-issue-notes{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:11px!important;width:100%!important;clear:both!important}.qm-issue-notes label{display:block!important;margin:0!important;line-height:1.4!important}.qm-issue-notes textarea{display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;min-height:86px!important;resize:vertical}.qm-photo-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1}.qm-photo-native-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;overflow:hidden!important;pointer-events:none!important}.qm-photo-btn{border-radius:10px!important;padding:11px 16px!important;font-weight:700!important;min-height:42px!important}.qm-photo-filename{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere}.qm-edit-section .form-row:has(#fPhoto)>div{gap:16px!important;flex-wrap:wrap}.qm-edit-section .form-row:has(#fPhoto)>div>img,.qm-edit-section .form-row:has(#fPhoto)>div>div:first-child{flex-shrink:0}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-checkout-modern-style')){
+ const style=document.createElement('style');style.id='qm-checkout-modern-style';
+ style.textContent='.qm-checkout-modal{max-width:850px!important;width:min(850px,calc(100vw - 28px))!important}.qm-checkout-header small{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text-dim)}.qm-checkout-header h3{margin:5px 0!important;font-size:23px}.qm-checkout-header span{font-size:12px;color:var(--text-dim)}.qm-checkout-body{display:flex;flex-direction:column;gap:16px;padding:20px 24px!important}.qm-checkout-section{border:1px solid var(--border);border-radius:13px;padding:17px;background:rgba(110,141,187,.045)}.qm-checkout-section-heading{margin-bottom:13px}.qm-checkout-section-heading h4{margin:0 0 4px;font-size:14px;color:var(--heading)}.qm-checkout-section-heading p{margin:0;font-size:12px;color:var(--text-dim)}.qm-checkout-section .form-row:last-child,.qm-checkout-section .form-2col:last-child{margin-bottom:0}.qm-checkout-choice-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.qm-checkout-choice{border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);padding:11px 14px;cursor:pointer;font-size:12px;font-weight:700}.qm-checkout-choice.active{background:rgba(54,118,224,.17);border-color:#4b86d7;color:#98c2ff}.qm-checkout-choice:focus-visible{outline:2px solid #85b7ff;outline-offset:2px}.qm-checkout-type-field{display:none!important}.qm-checkout-section textarea{display:block;width:100%;min-width:0;box-sizing:border-box;min-height:78px}.qm-checkout-summary{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px 16px;border-radius:9px;font-size:13px;line-height:1.55}.qm-checkout-modal .modal-foot .btn{border-radius:10px!important;min-height:41px}@media(max-width:640px){.qm-checkout-body{padding:12px!important;gap:12px}.qm-checkout-section{padding:13px}.qm-checkout-choice{flex:1}}';
  document.head.appendChild(style);
 }
