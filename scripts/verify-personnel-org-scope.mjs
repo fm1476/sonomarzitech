@@ -9,7 +9,7 @@ for(const fragment of [
  "PERSONNEL_SCOPED_COLLECTIONS.has(collection)",
  'personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits)',
  "collection==='pm.records'&&!roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view')",
- "scope && (!personnelScopeAllows(scope,afterValue||beforeValue,workspaceAuth)"
+ "const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,scope)"
 ]) assert.ok(source.includes(fragment),fragment);
 assert.match(source,/The record is outside your authorized organizational scope/);
 console.log('Personnel organizational authorization integration checks passed.');
