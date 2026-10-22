@@ -1785,7 +1785,7 @@ function renderTrainingRecordsSub(body, lockedPersonId){
     <tr>
       ${lockedPersonId ? '' : `<td>${recordLink(t.personId)}</td>`}
       <td>${escapeHtml(t.description)}</td><td>${t.date}</td><td>${t.hours}</td><td>${money(t.cost)}</td>
-      <td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.attendedStatus)}</td>
+      <td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.credentialNumber||'—')}${t.verificationStatus==='Verified'?'<span class="badge badge-available" style="margin-left:6px;">Verified</span>':''}</td><td>${escapeHtml(t.attendedStatus)}</td>
       <td>${t.score!=null?t.score+'%':(t.passed===null?'—':(t.passed?'Passed':'Failed'))}</td>
       <td>${t.recertDate||'—'}</td>
       ${canManage && !lockedPersonId ? `<td><button class="btn btn-sm btn-outline" data-edit-training="${t.id}">${ICONS.edit}</button></td>` : '<td></td>'}
@@ -1795,7 +1795,7 @@ function renderTrainingRecordsSub(body, lockedPersonId){
     ${canManage ? `<button class="btn btn-primary btn-sm" style="margin-bottom:12px;" id="btnAddTraining">${ICONS.plus} Log Training Record</button>` : ''}
     <table><thead><tr>
       ${lockedPersonId ? '' : '<th>Employee</th>'}
-      <th>Course</th><th>Date</th><th>Hours</th><th>Cost</th><th>Provider</th><th>Attendance</th><th>Result</th><th>Recert Due</th><th></th>
+      <th>Course</th><th>Date</th><th>Hours</th><th>Cost</th><th>Provider</th><th>Credential</th><th>Attendance</th><th>Result</th><th>Recert Due</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table>
   `;
   const addBtn = document.getElementById('btnAddTraining');
@@ -1838,7 +1838,15 @@ function openTrainingRecordFormModal(existingId){
       <div class="form-row">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="fTrRecertRequired" ${t.recertRequired?'checked':''} style="width:auto;">Recertification required</label>
       </div>
-      <div class="form-row" id="fTrRecertDateWrap" style="${t.recertRequired?'':'display:none;'}"><label>Date of Recertification</label><input type="date" id="fTrRecertDate" value="${t.recertDate||''}"></div>
+      <div class="form-row" id="fTrRecertDateWrap" style="${t.recertRequired?'':'display:none;'}"><label>Recertification due date</label><input type="date" id="fTrRecertDate" value="${t.recertDate||''}"></div>
+      <div class="pm-credential-group"><h4>Credential / Certification (optional)</h4>
+        <div class="form-2col">
+          <div class="form-row"><label for="fTrCredential">Certificate or License Number</label><input type="text" id="fTrCredential" maxlength="120" value="${escapeHtml(t.credentialNumber||'')}" placeholder="Certificate identifier"></div>
+          <div class="form-row"><label for="fTrIssuer">Issuing Authority</label><input type="text" id="fTrIssuer" maxlength="120" value="${escapeHtml(t.issuingAuthority||'')}" placeholder="POST, State Fire Marshal, agency..."></div>
+        </div>
+        <div class="form-row"><label for="fTrVerified">Verification status</label><select id="fTrVerified"><option value="Unverified" ${t.verificationStatus!=='Verified'?'selected':''}>Not yet verified</option><option value="Verified" ${t.verificationStatus==='Verified'?'selected':''}>Verified by training administrator</option></select></div>
+        <p class="hint">Credentials inform assignment readiness. Missing, expired or unverified credentials never automatically block a scheduler.</p>
+      </div>
       <div class="form-row"><label>Narrative / Comments</label><textarea id="fTrNarrative" rows="2">${escapeHtml(t.narrative||'')}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save':'Log Record'}</button></div>
@@ -1860,6 +1868,11 @@ function openTrainingRecordFormModal(existingId){
       passed: passedVal==='' ? null : passedVal==='true',
       recertRequired: document.getElementById('fTrRecertRequired').checked,
       recertDate: document.getElementById('fTrRecertRequired').checked ? document.getElementById('fTrRecertDate').value : null,
+      credentialNumber: document.getElementById('fTrCredential').value.trim(),
+      issuingAuthority: document.getElementById('fTrIssuer').value.trim(),
+      verificationStatus: document.getElementById('fTrVerified').value,
+      verifiedBy: document.getElementById('fTrVerified').value==='Verified'?CURRENT_USER_ID:null,
+      verifiedAt: document.getElementById('fTrVerified').value==='Verified'?new Date().toISOString():null,
       narrative: document.getElementById('fTrNarrative').value.trim(),
     };
     if(editing){ Object.assign(t, data); logActivity(`Updated training record (${course.name}) for ${personName(data.personId)}.`, "training", t.id); }
@@ -5504,4 +5517,8 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-rollcall-stats-st
  const st=document.createElement('style');st.id='pm-rollcall-stats-style';
  st.textContent='.pm-rollcall-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pm-rollcall-stats>div{border:1px solid var(--border);border-radius:12px;padding:15px;background:rgba(80,131,190,.055)}.pm-rollcall-stats small,.pm-rollcall-stats span{display:block;font-size:11px;color:var(--text-dim)}.pm-rollcall-stats strong{display:block;font-size:27px;font-weight:800;margin:7px 0}@media(max-width:690px){.pm-rollcall-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}';
  document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-credential-form-style')){
+ const st=document.createElement('style');st.id='pm-credential-form-style';st.textContent='.pm-credential-group{margin:18px 0;border:1px solid var(--border);border-radius:12px;background:rgba(70,125,205,.065);padding:16px}.pm-credential-group h4{font-size:14px;font-weight:800;margin:0 0 12px}.pm-credential-group .hint{font-size:12px;color:var(--text-dim);margin-bottom:0}';document.head.append(st);
 }
