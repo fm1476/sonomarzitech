@@ -3068,7 +3068,10 @@ function staffingBreakdownHtml(summary){
 function shiftStaffingSummary(shift,date){
   const assigned=STATE.pm.scheduleAssignments.filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
   const coverage=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
-  return staffingSummary(shift.staffingRequirements,[...assigned,...coverage],shift.minStaff,STATE.pm.records);
+  const requirements=effectiveStaffingRequirements(shift,date);
+  const hasOverride=(shift.staffingOverrides||[]).some(r=>r.type==='date'&&r.value===date||r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
+  const minimum=hasOverride?requirements.reduce((n,r)=>n+r.count,0):shift.minStaff;
+  return staffingSummary(requirements,[...assigned,...coverage],minimum,STATE.pm.records);
 }
 function eventStaffingSummary(event){return staffingSummary(event.staffingRequirements,(event.requests||[]).filter(r=>r.status==='awarded'),event.staffNeeded,STATE.pm.records);}
 function openEventStaffingNeedsModal(event){
@@ -4568,6 +4571,44 @@ function openCoverageDetailModal(coverage){
   document.getElementById('mCancel').onclick=closeModal;
 }
 
+function effectiveStaffingRequirements(shift,date){
+  const base=shift.staffingRequirements||[];
+  const rule=(shift.staffingOverrides||[]).find(r=>r.type==='date'&&r.value===date)||
+    (shift.staffingOverrides||[]).find(r=>r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
+  if(!rule)return base;
+  return base.map(r=>({...r,count:Object.prototype.hasOwnProperty.call(rule.counts||{},r.id)?Number(rule.counts[r.id]):r.count})).filter(r=>r.count>0);
+}
+function staffingOverrideCard(rule={},base=[]){
+  const id=rule.id||'rule'+Date.now()+Math.random().toString(36).slice(2,8);
+  return `<div class="pm-staff-override-card" data-staff-override data-id="${escapeHtml(id)}">
+    <div class="pm-staff-override-top">
+      <select aria-label="Override type" data-override-type><option value="weekday" ${rule.type!=='date'?'selected':''}>Day of week</option><option value="date" ${rule.type==='date'?'selected':''}>Specific date</option></select>
+      <select aria-label="Day of week" data-override-weekday style="${rule.type==='date'?'display:none':''}">${WEEKDAY_LABELS.map((day,n)=>`<option value="${n}" ${String(rule.value)===String(n)?'selected':''}>${day}</option>`).join('')}</select>
+      <input aria-label="Specific date" data-override-date type="date" value="${rule.type==='date'?escapeHtml(rule.value||''):''}" style="${rule.type==='date'?'':'display:none'}">
+      <button class="btn btn-sm btn-outline" type="button" data-remove-override>Remove</button>
+    </div>
+    <div class="pm-staff-override-counts">${base.map(req=>`<label>${escapeHtml(req.name)}<input type="number" min="0" max="5000" step="1" data-override-category="${escapeHtml(req.id)}" value="${Object.prototype.hasOwnProperty.call(rule.counts||{},req.id)?Number(rule.counts[req.id]):req.count}"></label>`).join('')}</div>
+    <p class="hint">Use 0 if this position isn't required on that day. Does not alter the underlying shift pattern.</p>
+  </div>`;
+}
+function readStaffingOverrides(id,base){
+  const rules=[];
+  for(const element of document.querySelectorAll('#'+id+' [data-staff-override]')){
+    const type=element.querySelector('[data-override-type]').value;
+    const value=type==='date'?element.querySelector('[data-override-date]').value:element.querySelector('[data-override-weekday]').value;
+    if(!value){toast('Choose a date for each staffing override.',true);return null;}
+    const counts={};
+    for(const input of element.querySelectorAll('[data-override-category]')){
+      const n=Number(input.value);
+      if(!Number.isSafeInteger(n)||n<0||n>5000){toast('Override staffing counts must be whole numbers between 0 and 5000.',true);return null;}
+      if(base.some(r=>r.id===input.dataset.overrideCategory))counts[input.dataset.overrideCategory]=n;
+    }
+    if(!Object.values(counts).some(n=>n>0)){toast('Each override needs at least one staffed position.',true);return null;}
+    if(rules.some(r=>r.type===type&&r.value===value)){toast('That staffing override already exists.',true);return null;}
+    rules.push({id:element.dataset.id,type,value,counts});
+  }
+  return rules;
+}
 function openShiftFormModal(existing){
   const groups=manageableScheduleWorkGroups();
   if(!groups.length){toast(isGlobalScheduleAdmin()?'Create or activate a Work Group Calendar before adding a shift pattern.':'An administrator must give you access to an active Work Group Calendar before you can add a shift pattern.',true);return;}
@@ -4613,6 +4654,12 @@ function openShiftFormModal(existing){
       </div>
       <div class="form-row"><label>Minimum Staff Required</label><input type="number" min="0" id="fShiftMinStaff" value="${editing?(existing.minStaff||0):1}"></div>
       ${staffingNeedsEditor('fShiftStaffNeeds',existing)}
+      <details class="pm-staff-advanced" ${(existing?.staffingOverrides||[]).length?'open':''}>
+        <summary><strong>Advanced staffing</strong> · Adjust requirements for a weekday or special date</summary>
+        <p class="hint">Optional. For example, Friday may need more dispatchers. Specific-date rules take precedence over weekday rules.</p>
+        <div id="fShiftOverrides">${(existing?.staffingOverrides||[]).map(rule=>staffingOverrideCard(rule,existing?.staffingRequirements||[])).join('')}</div>
+        <button type="button" class="btn btn-outline" id="fShiftAddOverride">+ Add different staffing for a day</button>
+      </details>
       <div class="form-row"><label>Effective Dates <span style="font-weight:400;color:var(--text-dim);">(when this rotation itself is in effect \u2014 not when a specific person is assigned to it)</span></label>
         <div class="form-2col">
           <input type="date" id="fShiftStartDate" value="${editing?(existing.startDate||''):fmt(new Date())}">
@@ -4625,6 +4672,33 @@ function openShiftFormModal(existing){
   `;
   openModal();
   wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
+  const overrideRoot=document.getElementById('fShiftOverrides');
+  const syncOverrideCounts=()=>{
+    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({
+      id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',
+      count:Number(row.querySelector('[data-staffing-count]').value)||1
+    }));
+    overrideRoot.querySelectorAll('[data-staff-override]').forEach(card=>{
+      const existingCounts=Object.fromEntries([...card.querySelectorAll('[data-override-category]')].map(input=>[input.dataset.overrideCategory,Number(input.value)]));
+      const current={id:card.dataset.id,type:card.querySelector('[data-override-type]').value,value:card.querySelector('[data-override-type]').value==='date'?card.querySelector('[data-override-date]').value:card.querySelector('[data-override-weekday]').value,counts:existingCounts};
+      const next=document.createElement('div');next.innerHTML=staffingOverrideCard(current,base);
+      card.replaceWith(next.firstElementChild);
+    });
+  };
+  document.getElementById('fShiftAddOverride').onclick=()=>{
+    syncOverrideCounts();
+    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',count:Number(row.querySelector('[data-staffing-count]').value)||1}));
+    if(!base.length){toast('Add operational positions first.',true);return;}
+    overrideRoot.insertAdjacentHTML('beforeend',staffingOverrideCard({type:'weekday',value:'5'},base));
+  };
+  overrideRoot.addEventListener('change',e=>{
+    if(e.target.matches('[data-override-type]')){
+      const card=e.target.closest('[data-staff-override]');
+      card.querySelector('[data-override-weekday]').style.display=e.target.value==='weekday'?'':'none';
+      card.querySelector('[data-override-date]').style.display=e.target.value==='date'?'':'none';
+    }
+  });
+  overrideRoot.addEventListener('click',e=>{if(e.target.closest('[data-remove-override]'))e.target.closest('[data-staff-override]').remove();});
   document.getElementById('modalBox').querySelector('.modal-body')?.classList.add('pm-shift-builder-body');
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -4649,8 +4723,9 @@ function openShiftFormModal(existing){
     const workGroupId=document.getElementById('fShiftWorkGroup').value;
     if(!groups.some(g=>g.id===workGroupId)||(editing&&!canManageScheduleShift(existing)))return;
     const staffingRequirements=readStaffingNeeds('fShiftStaffNeeds');if(!staffingRequirements)return;
+    const staffingOverrides=readStaffingOverrides('fShiftOverrides',staffingRequirements);if(!staffingOverrides)return;
     const data = {
-      name, workGroupId, staffingRequirements,
+      name, workGroupId, staffingRequirements, staffingOverrides,
       patternType: selectedType,
       daysOn: Number(document.getElementById('fShiftDaysOn').value)||4,
       daysOff: Number(document.getElementById('fShiftDaysOff').value)||3,
@@ -5570,3 +5645,5 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-friendly-shift-st
  st.textContent='.pm-shift-builder-modal{max-width:930px!important;width:min(930px,calc(100vw - 28px))!important;display:flex;flex-direction:column;overflow:hidden!important;max-height:calc(100dvh - 32px)!important}.pm-shift-builder-modal>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:22px 26px!important}.pm-shift-builder-modal .modal-head p{margin:5px 0 0}.pm-builder-kicker{font-size:10px;letter-spacing:.1em;font-weight:800;color:var(--text-dim)}.pm-builder-step{display:flex;align-items:center;gap:13px;border-top:1px solid var(--border);padding:19px 0 13px;margin-top:20px}.pm-builder-step:first-child{margin-top:0;border:0;padding-top:0}.pm-builder-step span{font-size:10px;font-weight:800;background:rgba(67,126,223,.17);color:#8dbbfc;padding:7px 10px;border-radius:8px;white-space:nowrap}.pm-builder-step h4{font-size:15px;margin:0;font-weight:800}.pm-staff-builder{border:1px solid var(--border);border-radius:15px;padding:18px 20px;background:rgba(82,130,199,.045);margin-top:18px}.pm-builder-heading{display:flex;justify-content:space-between;gap:14px;align-items:start;margin-bottom:17px}.pm-builder-heading h3{font-size:18px;margin:5px 0}.pm-builder-heading p{font-size:12px;color:var(--text-dim);margin:0;max-width:530px}.pm-builder-total{background:rgba(48,158,113,.12);border:1px solid rgba(48,158,113,.24);border-radius:9px;font-size:12px;font-weight:800;padding:8px 12px;white-space:nowrap}.pm-builder-starters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}.pm-builder-starters .btn,.pm-builder-foot .btn{border-radius:9px}.pm-builder-copy{margin-bottom:16px!important}.pm-builder-rows{display:flex;flex-direction:column;gap:10px}.pm-builder-rows .staffing-need-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) 90px auto;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:11px}.pm-builder-rows .staffing-need-row input,.pm-builder-rows .staffing-need-row select{min-width:0;width:100%}.pm-builder-foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-top:15px}.pm-builder-foot .hint{font-size:11px;max-width:380px}@media(max-width:690px){.pm-builder-rows .staffing-need-row{grid-template-columns:1fr 1fr}.pm-shift-builder-modal>.modal-body{padding:13px!important}.pm-builder-heading{flex-wrap:wrap}}@media(max-width:420px){.pm-builder-rows .staffing-need-row{grid-template-columns:1fr}}';
  document.head.append(st);
 }
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-staff-override-style')){const st=document.createElement('style');st.id='pm-staff-override-style';st.textContent='.pm-staff-advanced{border:1px solid var(--border);border-radius:13px;padding:16px 18px;margin:16px 0}.pm-staff-advanced summary{cursor:pointer;font-size:13px}.pm-staff-advanced>.hint{margin:12px 0}.pm-staff-override-card{border-radius:11px;background:rgba(101,142,191,.055);border:1px solid var(--border);padding:14px;margin:12px 0}.pm-staff-override-top{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.pm-staff-override-top select,.pm-staff-override-top input{flex:1;min-width:120px}.pm-staff-override-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:13px 0}.pm-staff-override-counts label{font-size:11px;color:var(--text-dim)}.pm-staff-override-counts input{width:100%;display:block;margin-top:5px}@media(max-width:620px){.pm-staff-override-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}';document.head.append(st);}
