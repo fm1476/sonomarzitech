@@ -3043,7 +3043,8 @@ function staffingNeedsEditor(id,record){
     </div>
     <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:12px;border-top:1px solid var(--border)"></div>
     <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add staffing requirement</button><span class="hint">Rank + Skill apply to the same person.</span></div>
-    <details class="pm-staffing-tools" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;" ${record?.staffingTemplateName?'open':''}><summary style="cursor:pointer;font-weight:700;">Templates & examples <span class="hint">(optional)</span></summary><div style="padding-top:12px;display:grid;gap:12px;">\n    <div class="pm-builder-starters">
+    <details class="pm-staffing-tools" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;" ${record?.staffingTemplateName?'open':''}><summary style="cursor:pointer;font-weight:700;">Templates & examples <span class="hint">(optional)</span></summary><div style="padding-top:12px;display:grid;gap:12px;">
+    <div class="pm-builder-starters">
       <button type="button" class="btn btn-outline" data-staffing-preset="patrol" id="${id}Patrol">Patrol example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="dispatch" id="${id}Dispatch">Dispatch example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
