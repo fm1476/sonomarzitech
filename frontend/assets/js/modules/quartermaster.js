@@ -1638,43 +1638,89 @@ function qmStockLevel(item){
  return n<=0?["Out of stock","danger"]:t!=null&&t>0&&n<=Math.floor(t/2)?["Critical stock","danger"]:
  t!=null&&n<=t?["Low stock","warning"]:["Stock available","success"];
 }
-function openIssueStockModal(itemId){
+function openIssueStockModal(itemId, repeat=false){
  const item=equipmentById(itemId);
  if(!can('qm_assign_checkout')||!item?.isConsumable||item.quantity<1){toast("This stock cannot be issued.",true);return;}
  const choices={person:STATE.personnel.map(p=>[p.id,p.name]),
- unit:STATE.qm.refData.units.map(u=>[u.id,u.name]),location:STATE.qm.refData.locations.map(l=>[l,l])};
- const opts=t=>choices[t].map(([id,n])=>'<option value="'+escapeHtml(id)+'">'+escapeHtml(n)+'</option>').join('');
- const box=document.getElementById('modalBox');box.className='modal modal-wide';
- box.innerHTML='<div class="modal-head"><h3>Issue Stock: '+escapeHtml(item.name)+'</h3><button class="modal-close" id="mClose">&times;</button></div>'+
- '<div class="modal-body"><p><strong>'+item.quantity+' units available</strong>. Record who received the stock.</p>'+
- '<div class="form-2col"><div class="form-row"><label>Quantity</label><input type="number" id="qmIssueQty" min="1" max="'+item.quantity+'" step="1" value="1"></div>'+
- '<div class="form-row"><label>Recipient type</label><select id="qmIssueType"><option value="person">Person</option><option value="unit">Unit / Patrol</option><option value="location">Location / Station</option></select></div></div>'+
- '<div class="form-row"><label>Issued to</label><select id="qmIssueTarget">'+opts('person')+'</select></div>'+
- '<div class="form-row"><label>Purpose / notes</label><textarea id="qmIssueNotes" maxlength="500" placeholder="Optional: patrol resupply, station issue..."></textarea></div></div>'+
- '<div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="qmIssueSave">Issue Stock</button></div>';
+  unit:STATE.qm.refData.units.map(u=>[u.id,u.name]),
+  location:STATE.qm.refData.locations.map(l=>[l,l])};
+ const opts=type=>(choices[type]||[]).map(([id,name])=>'<option value="'+escapeHtml(id)+'">'+escapeHtml(name)+'</option>').join('');
+ const box=document.getElementById('modalBox');
+ box.className='modal qm-issue-modal';
+ box.innerHTML='<div class="modal-head qm-issue-head"><div><small>QUARTERMASTER / STOCK DISTRIBUTION</small><h3>Issue '+escapeHtml(item.name)+'</h3><span>'+escapeHtml(item.assetId)+' · '+escapeHtml(item.category)+'</span></div><button class="modal-close" id="mClose" aria-label="Close">&times;</button></div>'+
+ '<div class="modal-body qm-issue-body"><div class="qm-issue-balances"><div><small>AVAILABLE NOW</small><strong id="qmIssueAvailable">'+item.quantity+'</strong><span>units in stock</span></div><div><small>REMAINING AFTER ISSUE</small><strong id="qmIssueRemaining">'+(item.quantity-1)+'</strong><span id="qmIssueHealth"></span></div></div>'+
+ '<section class="qm-issue-step"><h4>1. How much are you issuing?</h4><div class="qm-issue-counter"><button type="button" id="qmIssueMinus" aria-label="Decrease quantity">−</button><input id="qmIssueQty" type="number" inputmode="numeric" min="1" max="'+item.quantity+'" step="1" value="1" aria-label="Quantity to issue"><button type="button" id="qmIssuePlus" aria-label="Increase quantity">+</button></div><div class="qm-issue-shortcuts">'+[1,5,10].filter(n=>n<=item.quantity).map(n=>'<button type="button" data-qm-issue-quick="'+n+'">'+n+' units</button>').join('')+'</div></section>'+
+ '<section class="qm-issue-step"><h4>2. Who is receiving the stock?</h4><div class="qm-issue-types" role="group" aria-label="Recipient type"><button type="button" data-qm-issue-type="person">Person</button><button type="button" data-qm-issue-type="unit">Unit / Team</button><button type="button" data-qm-issue-type="location">Station / Location</button></div><div class="form-row"><label for="qmIssueTarget">Recipient</label><select id="qmIssueTarget"></select></div></section>'+
+ '<section class="qm-issue-step"><label for="qmIssueNotes">Purpose / notes <small>(optional)</small></label><textarea id="qmIssueNotes" maxlength="500" rows="2" placeholder="Routine resupply, training, special event..."></textarea></section>'+
+ '<div class="qm-issue-summary" id="qmIssueSummary" role="status" aria-live="polite"></div></div>'+
+ '<div class="modal-foot qm-issue-footer"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-outline" id="qmIssueSaveRepeat">Issue & Issue Another</button><button class="btn btn-primary" id="qmIssueSave">Issue Stock</button></div>';
  openModal();
- document.getElementById('mClose').onclick=closeModal;
- document.getElementById('mCancel').onclick=closeModal;
- document.getElementById('qmIssueType').onchange=e=>document.getElementById('qmIssueTarget').innerHTML=opts(e.target.value);
- document.getElementById('qmIssueSave').onclick=()=>{
-  const current=equipmentById(itemId);
-  const n=Number(document.getElementById('qmIssueQty').value);
-  const type=document.getElementById('qmIssueType').value,target=document.getElementById('qmIssueTarget').value;
-  const note=document.getElementById('qmIssueNotes').value.trim();
-  if(!can('qm_assign_checkout')||!current?.isConsumable||!Number.isSafeInteger(n)||n<1||n>current.quantity){toast("Enter a valid whole quantity within available stock.",true);return;}
-  if(!choices[type]?.some(([id])=>id===target)){toast("Choose a valid recipient.",true);return;}
-  const recipient=targetName(type,target),before=current.quantity;
-  current.quantity-=n;
-  STATE.qm.consumptionLog.push({id:"cl"+Date.now(),equipmentId:itemId,date:fmt(new Date()),qtyChange:-n,
-   reason:note||"Issued stock",roleId:primaryRoleId(),recipientType:type,recipientId:target,recipientName:recipient,
-   transactionType:"Issue",quantityBefore:before,quantityAfter:current.quantity});
-  logActivity(n+" units of "+current.name+" issued to "+recipient+(note?" ("+note+")":"")+". "+current.quantity+" remaining.","consumption",itemId);
-  persist();closeModal();toast("Stock issued to "+recipient+".");
-  renderEquipmentDetailModal(itemId);
-  if(ACTIVE_VIEW==='qm-inventory')renderInventory();
-  if(ACTIVE_VIEW==='qm-dashboard')renderDashboard();
+ const qtyInput=box.querySelector('#qmIssueQty'),recipientSelect=box.querySelector('#qmIssueTarget');
+ const initialType=window.__qmLastStockRecipientType||'person';
+ let currentType=choices[initialType]?.length?initialType:Object.keys(choices).find(t=>choices[t].length)||'person';
+ const setType=type=>{
+   if(!choices[type])return;
+   currentType=type;
+   window.__qmLastStockRecipientType=type;
+   recipientSelect.innerHTML=opts(type);
+   box.querySelectorAll('[data-qm-issue-type]').forEach(b=>{
+     const active=b.dataset.qmIssueType===type;
+     b.classList.toggle('active',active);
+     b.setAttribute('aria-pressed',String(active));
+   });
+   refresh();
  };
+ const refresh=()=>{
+   const current=equipmentById(itemId);
+   const available=Math.max(0,Number(current?.quantity)||0);
+   const amount=Number(qtyInput.value);
+   const valid=Number.isSafeInteger(amount)&&amount>0&&amount<=available;
+   const remaining=valid?available-amount:available;
+   const level=qmStockLevel({...current,quantity:remaining});
+   box.querySelector('#qmIssueAvailable').textContent=String(available);
+   box.querySelector('#qmIssueRemaining').textContent=valid?String(remaining):'—';
+   const health=box.querySelector('#qmIssueHealth');
+   health.textContent=valid?level[0]:'Enter a valid quantity';
+   health.className='qm-issue-health '+(valid?'qm-stock-'+level[1]:'qm-stock-danger');
+   const receiver=recipientSelect.selectedOptions[0]?.textContent||'a recipient';
+   const summary=box.querySelector('#qmIssueSummary');
+   summary.textContent=valid?'Issue '+amount+' '+(amount===1?'unit':'units')+' of '+item.name+' to '+receiver+'. '+remaining+' units will remain.':'Choose a whole quantity within available stock.';
+   box.querySelector('#qmIssueSave').disabled=!valid||!recipientSelect.value;
+   box.querySelector('#qmIssueSaveRepeat').disabled=!valid||!recipientSelect.value;
+ };
+ box.querySelector('#mClose').onclick=closeModal;
+ box.querySelector('#mCancel').onclick=closeModal;
+ qtyInput.addEventListener('input',refresh);
+ recipientSelect.addEventListener('change',refresh);
+ box.querySelector('#qmIssueMinus').onclick=()=>{qtyInput.value=String(Math.max(1,(Number(qtyInput.value)||1)-1));refresh();};
+ box.querySelector('#qmIssuePlus').onclick=()=>{qtyInput.value=String(Math.min(Number(equipmentById(itemId)?.quantity)||1,(Number(qtyInput.value)||0)+1));refresh();};
+ box.querySelectorAll('[data-qm-issue-quick]').forEach(b=>b.onclick=()=>{qtyInput.value=b.dataset.qmIssueQuick;refresh();});
+ box.querySelectorAll('[data-qm-issue-type]').forEach(b=>b.onclick=()=>setType(b.dataset.qmIssueType));
+ const issue=again=>{
+   const current=equipmentById(itemId);
+   const amount=Number(qtyInput.value),type=currentType,target=recipientSelect.value;
+   const note=box.querySelector('#qmIssueNotes').value.trim();
+   if(!can('qm_assign_checkout')||!current?.isConsumable||!Number.isSafeInteger(amount)||amount<1||amount>current.quantity){toast("Choose a whole quantity within available stock.",true);refresh();return;}
+   if(!choices[type]?.some(([id])=>id===target)){toast("Select a valid recipient.",true);return;}
+   const recipient=targetName(type,target),before=current.quantity;
+   current.quantity-=amount;
+   STATE.qm.consumptionLog.push({id:"cl"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
+    equipmentId:itemId,date:fmt(new Date()),qtyChange:-amount,reason:note||"Issued stock",
+    roleId:primaryRoleId(),recipientType:type,recipientId:target,recipientName:recipient,
+    transactionType:"Issue",quantityBefore:before,quantityAfter:current.quantity});
+   logActivity(amount+" units of "+current.name+" issued to "+recipient+(note?" ("+note+")":"")+". "+current.quantity+" remaining.","consumption",itemId);
+   persist();toast("Issued "+amount+" to "+recipient+".");
+   if(ACTIVE_VIEW==='qm-inventory')renderInventory();
+   if(ACTIVE_VIEW==='qm-dashboard')renderDashboard();
+   closeModal();
+   if(again&&current.quantity>0)openIssueStockModal(itemId,true);
+   else renderEquipmentDetailModal(itemId);
+ };
+ box.querySelector('#qmIssueSave').onclick=()=>issue(false);
+ box.querySelector('#qmIssueSaveRepeat').onclick=()=>issue(true);
+ setType(currentType);
 }
+
 function renderEqDetailTabContent(item){
   const body = document.getElementById('eqDetailBody');
   const canOOS = can('qm_maint_outofservice');
@@ -3871,4 +3917,10 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-form-modern-style
  const style=document.createElement('style');style.id='qm-form-modern-style';
  style.textContent='.qm-edit-workspace{max-width:1120px;margin:0 auto;padding:20px 24px!important;display:grid;gap:18px}.qm-edit-section{padding:20px;border:1px solid var(--border);border-radius:14px;background:rgba(112,140,180,.045);min-width:0}.qm-edit-section h4{font-weight:800;font-size:15px;margin:0 0 5px;color:var(--heading)}.qm-edit-section>p{font-size:12px;color:var(--text-dim);margin:0 0 18px}.qm-edit-tracking-hint{background:rgba(56,120,220,.09);border-left:3px solid #4f8fea;padding:11px 14px;margin:6px 0 16px;border-radius:5px;font-size:12px;color:var(--text)}.qm-edit-tracking-hint[data-mode=consumable]{border-left-color:#2fbf95;background:rgba(35,177,125,.1)}.qm-edit-field-hint{display:block;color:var(--text-dim);font-size:11px;margin:2px 0 10px}.qm-edit-section>.form-row:last-child,.qm-edit-section>.form-2col:last-child{margin-bottom:0}@media(max-width:650px){.qm-edit-workspace{padding:12px!important;gap:12px}.qm-edit-section{padding:14px}}';
  document.head.append(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-issue-modern-style')){
+ const style=document.createElement('style');style.id='qm-issue-modern-style';
+ style.textContent='.qm-issue-modal{max-width:740px!important;width:min(740px,calc(100vw - 28px))!important}.qm-issue-head small{font-size:10px;font-weight:800;letter-spacing:.11em;color:var(--text-dim)}.qm-issue-head h3{font-size:22px;margin:6px 0}.qm-issue-head span{font-size:12px;color:var(--text-dim)}.qm-issue-body{padding:20px 25px!important}.qm-issue-balances{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}.qm-issue-balances>div{background:rgba(110,141,187,.075);border:1px solid var(--border);border-radius:13px;padding:15px;display:flex;flex-direction:column;gap:5px}.qm-issue-balances small{font-size:10px;letter-spacing:.09em;font-weight:800;color:var(--text-dim)}.qm-issue-balances strong{font-size:30px;color:var(--heading)}.qm-issue-balances span{font-size:12px;color:var(--text-dim)}.qm-issue-balances .qm-stock-success{color:#43d59b}.qm-issue-balances .qm-stock-warning{color:#f7b44a}.qm-issue-balances .qm-stock-danger{color:#ff8585}.qm-issue-step{margin-bottom:20px}.qm-issue-step h4{font-size:14px;margin:0 0 12px}.qm-issue-step>label{font-size:13px;font-weight:700}.qm-issue-step>label small{font-weight:400;color:var(--text-dim)}.qm-issue-counter{display:flex;align-items:center;justify-content:center;gap:14px}.qm-issue-counter button{width:44px;height:44px;background:rgba(110,141,187,.1);color:var(--text);border:1px solid var(--border);border-radius:11px;font-size:24px;cursor:pointer}.qm-issue-counter input{width:125px;text-align:center;font-size:27px;font-weight:800}.qm-issue-shortcuts{display:flex;justify-content:center;gap:9px;margin-top:11px}.qm-issue-shortcuts button,.qm-issue-types button{padding:9px 14px;border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--text);cursor:pointer;font-size:12px}.qm-issue-types{display:flex;gap:9px;margin-bottom:13px;flex-wrap:wrap}.qm-issue-types button.active{background:rgba(54,118,224,.18);color:#8db8ff;border-color:#4b86d7}.qm-issue-summary{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px;border-radius:8px;font-size:13px}.qm-issue-footer{gap:9px;flex-wrap:wrap}@media(max-width:520px){.qm-issue-body{padding:14px!important}.qm-issue-balances{grid-template-columns:1fr 1fr}.qm-issue-counter input{width:90px}.qm-issue-footer .btn{flex:1}}';
+ document.head.appendChild(style);
 }
