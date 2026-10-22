@@ -1,3 +1,4 @@
+import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
 import {
   response,
   resolveWorkspaceMembership,
@@ -92,6 +93,55 @@ async function ftContext(client, auth, tenantId, agencyId) {
   };
 }
 
+async function ftLoadOrgScope(client, ctx) {
+  if(ctx.admin) return null;
+  const table=await client.query("SELECT to_regclass('suite_organizational_access') AS relation");
+  if(!table.rows[0]?.relation) return null;
+  const result=await client.query(
+    "SELECT scope FROM suite_organizational_access WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3",
+    [ctx.tenantId,ctx.agencyId,ctx.userId]
+  );
+  return result.rows.length ? result.rows[0].scope : null;
+}
+
+// Resolve authoritative personnel-to-unit membership from agency-stored records.
+// Never accept unit identifiers or trainee organizational assignment from clients.
+async function ftOrgMembers(client, ctx, members) {
+  const scope=await ftLoadOrgScope(client,ctx);
+  if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id))};
+  const records=await client.query(
+    `SELECT key,value FROM suite_records
+      WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+        AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
+    [ctx.tenantId,ctx.agencyId]
+  );
+  const units=new Map();
+  for(const row of records.rows) {
+    try {
+      const decoded=JSON.parse(row.key);
+      const collection=Array.isArray(decoded?.[0])?decoded[0].join('.'):'';
+      if(!['pm.records','personnel'].includes(collection))continue;
+      const entries=decoded[1]==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+      for(const entry of entries) {
+        if(!entry||typeof entry!=='object')continue;
+        const personId=entry.personId||entry.id;
+        if(personId && (entry.unitId||entry.unit))units.set(String(personId),String(entry.unitId||entry.unit));
+      }
+    }catch { /* Ignore malformed record keys rather than inferring grants. */ }
+  }
+  const allowed=new Set(members.filter(member=>{
+    const personId=String(member.person_id||'');
+    const unitId=units.get(personId)||'';
+    return canAccessOrganizationalRecord(scope,{personId,unitId},{actorPersonId:ctx.personId});
+  }).map(member=>member.user_id));
+  return {scope,allowed};
+}
+function ftOrgAllowsEnrollment(ctx,enrollment) {
+  return !ctx.orgScope || (enrollment && ctx.orgAllowed.has(enrollment.trainee_user));
+}
+function ftAssertOrgEnrollment(ctx,enrollment) {
+  ftAssert(ftOrgAllowsEnrollment(ctx,enrollment),"This trainee file is outside your authorized organizational scope.");
+}
 async function ftMembers(client, workspaceAuth) {
   const result = await client.query(
     `SELECT m.user_id, m.person_id, m.role_ids, COALESCE(u.display_name,u.email,m.person_id::text) AS display_name
@@ -130,6 +180,7 @@ function ftActiveCoverage(state, enrollmentId, userId, day) {
   return state.coverage.find(c => c.enrollment_id === enrollmentId && c.cover_user === userId && !c.cancelled_at && c.start_on <= day && c.end_on >= day);
 }
 function ftCanSeeEnrollment(ctx, state, e) {
+  if(!ftOrgAllowsEnrollment(ctx,e))return false;
   if (ctx.ftManage) return true;
   if ([e.trainee_user,e.trainer_user,e.supervisor_user].includes(ctx.userId)) return true;
   return state.coverage.some(c => c.enrollment_id===e.id && c.cover_user===ctx.userId && !c.cancelled_at);
@@ -251,7 +302,9 @@ async function fieldTrainingApi(client, auth, body) {
 
   if (action === "list") {
     const [{state},members] = await Promise.all([ftLoadState(client,ctx,false),ftMembers(client,ctx)]);
-    const eligibleMembers = await ftEligibleMembers(client,ctx,members);
+    const org=await ftOrgMembers(client,ctx,members);
+    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;
+    const eligibleMembers = await ftEligibleMembers(client,ctx,members.filter(m=>org.allowed.has(m.user_id)));
     return response(200,{success:true,data:ftVisibleState(ctx,state,eligibleMembers)});
   }
 
@@ -259,6 +312,14 @@ async function fieldTrainingApi(client, auth, body) {
   try {
     const loaded = await ftLoadState(client,ctx,true);
     const state = loaded.state;
+    const org=await ftOrgMembers(client,ctx,await ftMembers(client,ctx));
+    ctx.orgScope=org.scope;ctx.orgAllowed=org.allowed;
+    // A division-scoped manager must never overwrite the agency-wide FTO template.
+    if(org.scope && action==='save_config')ftAssert(false,'Agency-wide Field Training configuration requires System Admin access.');
+    // Every enrollment mutation needs the same boundary as listing the file.
+    const enrollmentId=payload.enrollmentId ||
+      (payload.reportId ? ftReportFor(state,payload.reportId)?.enrollment_id : null);
+    if(enrollmentId)ftAssertOrgEnrollment(ctx,ftEnrollmentFor(state,enrollmentId));
     let result = {ok:true};
 
     if (action === "save_config") {
@@ -273,6 +334,8 @@ async function fieldTrainingApi(client, auth, body) {
       ftAssert(ctx.ftManage,"Field Training management permission required.");
       if(!state.config) throw new Error("Configure the Field Training program first.");
       const members=await ftEligibleMembers(client,ctx,await ftMembers(client,ctx));
+      if(org.scope)ftAssert([payload.traineeUser,payload.trainerUser,payload.supervisorUser].every(id=>org.allowed.has(id)),
+        'All selected Field Training participants must be within your organizational scope.');
       const byUser=ftValidateParticipants(members,payload.traineeUser,payload.trainerUser,payload.supervisorUser);
       if(!ftDateOk(payload.startedOn)) throw new Error("A valid start date is required.");
       if(state.enrollments.some(e=>e.trainee_user===payload.traineeUser && ["active","extended"].includes(e.status))) throw new Error("That trainee already has an active Field Training file.");
@@ -282,12 +345,15 @@ async function fieldTrainingApi(client, auth, body) {
     } else if (action === "reassign") {
       ftAssert(ctx.ftManage,"Field Training management permission required.");
       const e=ftEnrollmentFor(state,payload.enrollmentId); if(!e) throw new Error("Trainee file not found."); ftVersion(e.version,payload.version,"trainee file");
+      if(org.scope)ftAssert([e.trainee_user,payload.trainerUser,payload.supervisorUser].every(id=>org.allowed.has(id)),
+        'The reassigned Field Training participants must be within your organizational scope.');
       ftValidateParticipants(await ftEligibleMembers(client,ctx,await ftMembers(client,ctx)),e.trainee_user,payload.trainerUser,payload.supervisorUser);
       e.trainer_user=payload.trainerUser; e.supervisor_user=payload.supervisorUser; e.version++; e.updated_at=ftIsoNow(); result=e;
     } else if (action === "coverage_add") {
       const e=ftEnrollmentFor(state,payload.enrollmentId); if(!e) throw new Error("Trainee file not found.");
       ftAssert(ctx.ftManage || (ctx.ftAssignCover && e.supervisor_user===ctx.userId),"Coverage assignment permission required.");
       if(!ftDateOk(payload.startOn)||!ftDateOk(payload.endOn)||payload.endOn<payload.startOn||ftDaysInclusive(payload.startOn,payload.endOn)>14) throw new Error("Coverage must be between 1 and 14 consecutive days.");
+      if(org.scope)ftAssert(org.allowed.has(payload.coverUser),'Covering trainer is outside your organizational scope.');
       if(!payload.coverUser || [e.trainee_user,e.trainer_user,e.supervisor_user].includes(payload.coverUser)) throw new Error("Choose a different eligible covering trainer.");
       const c={id:ftId("ftc"),enrollment_id:e.id,cover_user:payload.coverUser,start_on:payload.startOn,end_on:payload.endOn,reason:String(payload.reason||"").slice(0,500),created_at:ftIsoNow(),created_by:ctx.userId,cancelled_at:null}; state.coverage.push(c); result=c;
     } else if (action === "coverage_cancel") {
