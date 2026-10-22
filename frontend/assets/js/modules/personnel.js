@@ -4418,7 +4418,7 @@ function renderRollCallSub(){
 }
 
 function openSchedulingDayDetail(date,shifts){
-  const allowed=shifts.filter(shift=>canViewScheduleShift(shift)&&(!shift.startDate||shift.startDate<=date)&&(!shift.endDate||shift.endDate>=date));
+  const allowed=shifts.filter(shift=>canViewScheduleShift(shift)&&scheduleShiftRunsOnDate(shift,date));
   if(!allowed.length)return;
   const dayLabel=new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   const cards=allowed.map(shift=>{
@@ -4452,6 +4452,27 @@ function openSchedulingDayDetail(date,shifts){
   document.getElementById('mCancel').onclick=closeModal;
   document.getElementById('mClose').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
   document.getElementById('mCancel').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
+}
+// Whether a shift is operationally scheduled on a date, independent of headcount.
+function scheduleShiftRunsOnDate(shift,date){
+  if(!shift||shift.startDate&&shift.startDate>date||shift.endDate&&shift.endDate<date)return false;
+  if(shift.patternType==='weekly'){
+    const weekday=new Date(date+'T12:00:00').getDay();
+    if((shift.weekdays||[]).includes(weekday))return true;
+    if((shift.altWeekdays||[]).includes(weekday)&&shift.altAnchorDate){
+      const weeks=Math.floor(daysBetween(shift.altAnchorDate,date)/7);
+      return ((weeks%2)+2)%2===0;
+    }
+    return false;
+  }
+  const on=Number(shift.daysOn),off=Number(shift.daysOff);
+  if(!Number.isInteger(on)||on<1||!Number.isInteger(off)||off<0)return false;
+  const anchors=(STATE.pm.scheduleAssignments||[]).filter(a=>a.shiftId===shift.id&&a.startDate&&a.startDate<=date&&(!a.endDate||a.endDate>date)).map(a=>a.startDate);
+  const anchor=shift.startDate||anchors.sort()[0];
+  if(!anchor)return false;
+  const cycle=on+off;
+  const offset=((daysBetween(anchor,date)%cycle)+cycle)%cycle;
+  return offset<on;
 }
 function renderDutyCalendar(body){
   const allGroups=visibleScheduleWorkGroups();
@@ -4488,7 +4509,7 @@ function renderDutyCalendar(body){
     const dayCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && displayedShiftIds.has(c.shiftId) && (SCHED_CAL_SHIFT==='all' || c.shiftId===SCHED_CAL_SHIFT));
     const isToday = dateStr === fmt(new Date());
     const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
-    const staffingChecks=displayedShifts.filter(shift=>(!shift.startDate||shift.startDate<=dateStr)&&(!shift.endDate||shift.endDate>=dateStr)).map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
+    const staffingChecks=displayedShifts.filter(shift=>scheduleShiftRunsOnDate(shift,dateStr)).map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
     const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&(e.endDate||e.startDate)>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
     const belowMinimum=staffingChecks.some(x=>!x.ok);
     const belowPreferred=staffingChecks.some(x=>x.preferredNeeded>0);
@@ -4700,10 +4721,15 @@ function openShiftFormModal(existing){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Create'}</button></div>
   `;
   openModal();
+  // Wire dismissal immediately, before any optional editor setup can fail.
+  const shiftModal=document.getElementById('modalBox');
+  const dismissShiftEditor=()=>{shiftModal.style.cssText='';closeModal();};
+  shiftModal.querySelector('#mClose').onclick=dismissShiftEditor;
+  shiftModal.querySelector('#mCancel').onclick=dismissShiftEditor;
   wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
   // Reveal one step at a time without reparenting inputs or disturbing existing handlers.
   const builderBody=document.querySelector('#modalBox .modal-body');
-  const headings=[...builderBody.querySelectorAll('.pm-builder-step')];
+  const headings=[...builderBody.children].filter(child=>child.classList.contains('pm-builder-step'));
   const staffingHeading=builderBody.querySelector('.pm-staff-builder');
   const stepSections=[[],[],[]];let currentSection=0;
   for(const child of [...builderBody.children]){
@@ -4728,6 +4754,9 @@ function openShiftFormModal(existing){
     showStep(activeStep+1);
   };
   showStep(0);
+  // Re-apply after the modal has been inserted into its final overlay.
+  // Native hidden attributes alone are not sufficient against legacy .form-row styles.
+  builderBody.dataset.activeStep='1';
 
   const overrideRoot=document.getElementById('fShiftOverrides');
   const syncOverrideCounts=()=>{
@@ -4757,8 +4786,8 @@ function openShiftFormModal(existing){
   });
   overrideRoot.addEventListener('click',e=>{if(e.target.closest('[data-remove-override]'))e.target.closest('[data-staff-override]').remove();});
   document.getElementById('modalBox').querySelector('.modal-body')?.classList.add('pm-shift-builder-body');
-  document.getElementById('mClose').onclick = closeModal;
-  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mClose').onclick = dismissShiftEditor;
+  document.getElementById('mCancel').onclick = dismissShiftEditor;
   document.getElementById('fShiftPatternType').addEventListener('change', (e)=>{
     const isWeekly = e.target.value==='weekly';
     document.getElementById('fShiftRotationFields').style.display = isWeekly ? 'none' : 'block';
