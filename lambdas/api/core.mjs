@@ -1,3 +1,4 @@
+import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -1631,6 +1632,29 @@ const OFFICER_UNIVERSAL_READ = new Set([
   "pm.trainingCourses"
 ]);
 
+// Explicit organizational scopes are opt-in until all modules have migrated.
+async function loadPersonnelScope(client, auth) {
+  if (auth.admin) return null;
+  const result=await client.query(
+    `SELECT to_regclass('suite_organizational_access') AS relation`
+  );
+  if (!result.rows[0]?.relation) return null;
+  const grants=await client.query(
+    `SELECT scope FROM suite_organizational_access
+      WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3`,
+    [auth.tenantId,auth.agencyId,auth.userId]
+  );
+  return grants.rows.length ? grants.rows[0].scope : null;
+}
+function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
+  if (!scope) return true; // Existing unconfigured accounts retain legacy behavior.
+  if (scope.mode==='agency') return false; // Only authenticated administrators may have agency scope.
+  if (!value || typeof value!=='object') return false;
+  const personId=value.personId||value.id;
+  const unitId=String(value.unitId || value.unit || unitsByPerson.get(personId) || '');
+  return canAccessOrganizationalRecord(scope,{personId,unitId,divisionId:value.divisionId||''},{actorPersonId:auth.personId});
+}
+
 async function filterOfficerWorkspaceRecords(
   client,
   workspaceAuth,
@@ -1750,6 +1774,21 @@ async function filterOfficerWorkspaceRecords(
     } catch { /* Malformed keys are excluded by the reader. */ }
   }
 
+  const personnelScope=await loadPersonnelScope(client,workspaceAuth);
+  const personnelUnits=new Map();
+  for (const row of records) {
+    try {
+      const parsed=collectionFromRecordKey(row.key);
+      if(parsed.collection==='personnel' && parsed.itemId!=='$order') {
+        const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+        for(const entry of entries)if(entry?.id)personnelUnits.set(entry.id,String(entry.unitId||entry.unit||''));
+      }
+      if(parsed.collection==='pm.records' && parsed.itemId!=='$order') {
+        const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+        for(const entry of entries)if(entry?.personId&&entry?.unitId)personnelUnits.set(entry.personId,String(entry.unitId));
+      }
+    } catch {}
+  }
   const visible = [];
 
   for (const record of records) {
@@ -1762,6 +1801,18 @@ async function filterOfficerWorkspaceRecords(
     }
 
     const { collection, itemId } = parsed;
+    if(personnelScope && (collection==='pm.records'||collection==='personnel')) {
+      // Collection-wide ordering and legacy aggregate arrays can reveal hidden identities.
+      if(itemId==='$order')continue;
+      if(itemId==='$value') {
+        if(!Array.isArray(record.value))continue;
+        const scoped=record.value.filter(value=>personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
+        visible.push({...record,value:collection==='personnel'?scoped.map(limitPersonnelRecord):scoped.map(value=>redactPmRecord(value,abilityMap,workspaceAuth.roleIds))});
+        continue;
+      }
+      if(!personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits))continue;
+    }
+
 
     if (!moduleLicensed(workspaceAuth.enabledModules, collection)) {
       continue;
@@ -4556,6 +4607,15 @@ async function authorizePersonnelSharedChange(
   const creating = !existingRow || existingRow.deleted === true;
   const deleting = change.deleted === true;
   const afterValue = change.value;
+
+  if(collection==='pm.records'||collection==='personnel') {
+    const scope=await loadPersonnelScope(client,workspaceAuth);
+    if(scope && (!personnelScopeAllows(scope,afterValue||beforeValue,workspaceAuth) ||
+      (beforeValue && !personnelScopeAllows(scope,beforeValue,workspaceAuth)) ||
+      (afterValue && !personnelScopeAllows(scope,afterValue,workspaceAuth)))) {
+      return {allowed:false,error:'The record is outside your authorized organizational scope.'};
+    }
+  }
 
   // An ordinary personnel editor may submit a redacted record. Restore the
   // authoritative protected fields, never applying values from that editor.
