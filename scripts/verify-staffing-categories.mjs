@@ -18,7 +18,12 @@ const wrongMix=[...rows.slice(0,4),{personId:'wrong',staffingCategoryId:'law'}];
 const short=staffingSummary(requirements,wrongMix,5,records);assert.equal(short.staffed,5);assert.equal(short.ok,false);assert.equal(short.categories[2].needed,1);
 assert.equal(staffingSummary(requirements,[...rows,{personId:'multi',staffingCategoryId:'call'}],5,records).staffed,5); // Multi-skilled does not count twice.
 const revoked=records.map(r=>r.personId==='fire1'?{...r,specialSkills:[]}:r);
-assert.equal(staffingSummary(requirements,rows,5,revoked).categories[1].needed,1);
+assert.equal(staffingSummary(requirements,rows,5,revoked).categories[1].needed,0);
+assert.equal(staffingSummary(requirements,rows,5,revoked).advisories.length,1);
+assert.doesNotThrow(()=>validateStaffingRequirements([{id:'sup',name:'Patrol Supervisor',requiredSkill:'rank:Sergeant',count:1}]));
+assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Sergeant'}],'s1',{requiredSkill:'rank:Sergeant'}),true);
+assert.equal(staffingPersonHasSkill([{personId:'s1',rank:'Deputy'}],'s1',{requiredSkill:'rank:Sergeant'}),false);
+assert.equal(staffingPersonHasSkill([],'s1',{requiredSkill:'any'}),true);
 const group={id:'g',managerIds:['manager'],visibility:'unit',unitNames:['Dispatch'],active:true};
 const shift={id:'s',workGroupId:'g',minStaff:5,staffingRequirements:requirements,patternType:'weekly',weekdays:[0,1,2,3,4,5,6],published:true};
 const personnel=records.map(r=>({id:r.personId,name:r.personId,unit:'Dispatch'}));
