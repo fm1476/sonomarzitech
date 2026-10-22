@@ -4416,7 +4416,9 @@ function openSchedulingDayDetail(date,shifts){
     const summary=shiftStaffingSummary(shift,date);
     const assignments=(STATE.pm.scheduleAssignments||[]).filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
     const coverages=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
-    const people=[...new Set([...assignments,...coverages].map(a=>a.personId))];
+    const occupancy=[...assignments,...coverages];
+    const people=[...new Set(occupancy.map(a=>a.personId))];
+    const proposals=typeof suggestStaffingReassignments==='function'?suggestStaffingReassignments(effectiveStaffingRequirements(shift,date),occupancy,STATE.pm.records):[];
     const status=!summary.ok?'Below minimum':summary.preferredNeeded>0?'Below preferred':'Preferred staffing met';
     const color=!summary.ok?'var(--red)':summary.preferredNeeded>0?'var(--gold)':'var(--green)';
     return `<section style="padding:16px;margin-bottom:12px;border:1px solid var(--border);border-radius:14px;">
@@ -4428,6 +4430,7 @@ function openSchedulingDayDetail(date,shifts){
       ${summary.categories.map(c=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(c.name)}</span><strong style="color:${c.needed?'var(--red)':c.preferredNeeded?'var(--gold)':'var(--green)'};">${c.staffed}/${c.count} min${c.preferredCount>c.count?' · '+c.preferredCount+' preferred':''}</strong></div>`).join('')}
       <details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:600;">Assigned personnel (${people.length})</summary>${people.map(id=>`<div style="padding:5px 0;">${escapeHtml(personName(id))}</div>`).join('')||'<p class="hint">No assigned personnel.</p>'}</details>
       ${summary.advisories.length?'<p class="hint" style="color:var(--gold);">Qualification advisories: '+summary.advisories.length+'</p>':''}
+      ${proposals.length?'<div style="margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:10px;"><strong>Coverage suggestions · review only</strong>'+proposals.map(p=>'<p class="hint">'+escapeHtml(personName(p.personId))+' could move from '+escapeHtml(staffingCategoryName(shift,p.fromCategoryId))+' to '+escapeHtml(staffingCategoryName(shift,p.toCategoryId))+' with scheduler approval.</p>').join('')+'</div>':''}
       ${summary.needed||summary.preferredNeeded?'<p class="hint">Coverage opportunity: '+(summary.needed?summary.needed+' minimum position(s) unfilled. ':summary.preferredNeeded+' additional preferred position(s).')+' Scheduler review required for any changes.</p>':''}
     </section>`;
   }).join('');
