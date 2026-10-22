@@ -770,6 +770,25 @@ function openK9FormModal(existingId){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save':'Add K9'}</button></div>
   `;
   openModal();
+  const editor=document.getElementById('modalBox');
+  editor.classList.add('k9-modern-editor');
+  const editorBody=editor.querySelector('.modal-body');
+  if(editorBody){
+    const sections=[
+      ['fK9Name','01 · Identity','Name, registration, breed and age'],
+      ['fK9Handler','02 · Assignment','Primary and secondary handlers'],
+      ['fK9Status','03 · Operational status','Duty status and disciplines'],
+      ['fK9Vendor','04 · Administration','Source, identification and notes']
+    ];
+    for(const [id,title,description] of sections){
+      const row=editorBody.querySelector('#'+id)?.closest('.form-row,.form-2col');
+      if(!row)continue;
+      const section=document.createElement('div');section.className='k9-edit-section';
+      const heading=document.createElement('h4');heading.textContent=title;
+      const hint=document.createElement('p');hint.textContent=description;
+      section.append(heading,hint);row.before(section);
+    }
+  }
   wirePhotoDropZone('fK9', (dataUrl)=>{ pendingPhoto = dataUrl; });
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1094,6 +1113,8 @@ function openK9PhotoUploadModal(k){
   document.getElementById('k9ChoosePhoto').onclick=()=>document.getElementById('fK9PhotoFile').click();
   document.getElementById('fK9PhotoFile').addEventListener('change', (e)=>{
     const file = e.target.files[0]; if(!file) return;
+    if(!file.type.startsWith('image/')){toast('Choose an image file.',true);return;}
+    document.getElementById('k9PhotoFilename').textContent=file.name;
     const img = new Image(); const reader = new FileReader();
     reader.onload = (ev)=>{ img.onload = ()=>{
       const canvas = document.createElement('canvas'); const size = 160;
@@ -1970,4 +1991,10 @@ if(typeof document!=='undefined'&&!document.getElementById('k9-modern-record-sty
  const style=document.createElement('style');style.id='k9-modern-record-style';
  style.textContent='.k9-modern-detail{display:flex!important;flex-direction:column!important;overflow:hidden!important;max-height:calc(100dvh - 36px)!important}.k9-modern-detail>.modal-head,.k9-modern-detail>.modal-foot{flex-shrink:0}.k9-modern-detail>.modal-body{min-height:0!important;flex:1 1 auto;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:24px!important}.k9-modern-tabs{display:flex;gap:7px;padding:12px 20px 0;border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;max-width:100%}.k9-modern-tabs button{white-space:nowrap;flex-shrink:0;border-radius:8px 8px 0 0!important}.k9-record-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:17px}.k9-record-hero small{font-size:10px;letter-spacing:.11em;font-weight:800;color:var(--text-dim)}.k9-record-hero h2{font-size:24px;font-weight:800;margin:5px 0}.k9-record-hero p{font-size:12px;color:var(--text-dim);margin:0}.k9-record-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:16px}.k9-record-metrics>div{border:1px solid var(--border);border-radius:13px;background:rgba(96,146,199,.055);padding:17px;min-width:0}.k9-record-metrics small{display:block;font-size:10px;font-weight:800;color:var(--text-dim)}.k9-record-metrics strong{display:block;font-size:19px;margin:10px 0 4px;overflow-wrap:anywhere}.k9-record-metrics strong em{font-size:12px;font-style:normal;color:var(--text-dim)}.k9-record-metrics span{font-size:11px;color:var(--text-dim)}.k9-readiness{border-left:4px solid #2ab782;border-radius:10px;background:rgba(42,183,130,.09);padding:14px 17px;display:flex;gap:8px;flex-direction:column;margin-bottom:22px}.k9-readiness strong{font-size:14px}.k9-readiness span{font-size:12px}.k9-readiness-warning{border-color:#e4a748;background:rgba(228,167,72,.1)}.k9-readiness-neutral{border-color:#8aa0b9;background:rgba(138,160,185,.1)}.k9-section-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}.k9-section-heading h3{font-size:17px;font-weight:800;margin:0}.k9-section-heading p{font-size:12px;color:var(--text-dim);margin:0}.k9-profile-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important}.k9-profile-details>div{border:1px solid var(--border);border-radius:11px;padding:14px 15px;min-width:0;background:rgba(99,139,190,.035)}.k9-profile-details .k{font-size:10px!important;letter-spacing:.05em;font-weight:800!important;color:var(--text-dim)!important}.k9-profile-details .v{font-size:13px!important;font-weight:650;overflow-wrap:anywhere}.k9-compliance-panel{border-radius:13px!important;overflow:visible!important}.k9-table-scroll{max-width:100%;overflow-x:auto;overflow-y:visible;border:1px solid var(--border);border-radius:11px}.k9-table-scroll table{min-width:600px;width:100%}.k9-modern-detail .modal-body .panel-body{overflow-y:visible;max-height:none}.k9-photo-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.k9-photo-actions span{font-size:12px;color:var(--text-dim)}.k9-native-photo-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important}@media(max-width:950px){.k9-record-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.k9-profile-details{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:540px){.k9-record-metrics,.k9-profile-details{grid-template-columns:1fr!important}.k9-modern-detail>.modal-body{padding:14px!important}}';
  document.head.append(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('k9-modern-editor-style')){
+ const st=document.createElement('style');st.id='k9-modern-editor-style';
+ st.textContent='.k9-modern-editor{max-width:960px!important;overflow:hidden!important}.k9-modern-editor>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:24px!important}.k9-edit-section{border-top:1px solid var(--border);padding-top:18px;margin:22px 0 14px}.k9-edit-section:first-of-type{border-top:0;margin-top:6px}.k9-edit-section h4{font-size:15px;font-weight:800;margin:0 0 5px}.k9-edit-section p{font-size:12px;color:var(--text-dim);margin:0}.k9-modern-editor textarea{display:block;min-height:82px;width:100%;box-sizing:border-box}@media(max-width:540px){.k9-modern-editor>.modal-body{padding:13px!important}}';
+ document.head.append(st);
 }
