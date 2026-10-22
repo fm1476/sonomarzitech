@@ -789,7 +789,11 @@ async function tenantAdminDbApi(client, auth, body) {
       PRIMARY KEY(tenant_id,agency_id,user_id)
     )`);
     const canonicalReady=await canonicalOrganizationReady(client,tenantId,agencyId);
-    const canonicalNodes=canonicalReady ? await client.query(
+    // Canonical grants MUST be configurable before agency rollout activation.
+    // A populated agency-local node catalog is independent of enforcement state.
+    const canonicalTable=await client.query("SELECT to_regclass('suite_organization_nodes') AS nodes");
+    const canonicalCatalogAvailable=Boolean(canonicalTable.rows[0]?.nodes);
+    const canonicalNodes=canonicalCatalogAvailable ? await client.query(
       `SELECT id, kind, name FROM suite_organization_nodes
         WHERE tenant_id=$1 AND agency_id=$2 AND active=true
         ORDER BY kind,name`, [tenantId,agencyId]
@@ -804,7 +808,8 @@ async function tenantAdminDbApi(client, auth, body) {
         [tenantId,agencyId]
       );
       return response(200,{success:true,data:{assignments:rows.rows,canonicalActive:canonicalReady,
-        catalogs:canonicalReady?{
+        canonicalCatalogAvailable,
+        catalogs:canonicalCatalogAvailable?{
           unitIds:canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>({id:n.id,name:n.name})),
           divisionIds:canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>({id:n.id,name:n.name})),
           workGroupIds:canonicalNodes.rows.filter(n=>n.kind==='work_group').map(n=>({id:n.id,name:n.name}))
@@ -830,7 +835,7 @@ async function tenantAdminDbApi(client, auth, body) {
       divisionIds:[...new Set(scope.divisionIds||[])],workGroupIds:[...new Set(scope.workGroupIds||[])]};
     // Validate every selected identifier against catalogs from this exact agency.
     // Do not accept arbitrary strings or identifiers supplied by the caller as authority.
-    if (clean.mode==='selected' && canonicalReady) {
+    if (clean.mode==='selected' && canonicalCatalogAvailable && canonicalNodes.rows.length > 0) {
       const known={
         unitIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>String(n.id))),
         divisionIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>String(n.id))),
