@@ -50,6 +50,7 @@ node scripts/verify-organizational-access.mjs
 node scripts/verify-organization-assignments.mjs
 node scripts/verify-organizational-access-admin.mjs
 node scripts/verify-organizational-access-ui.mjs
+node scripts/verify-workspace-template.mjs
 node scripts/verify-personnel-org-scope.mjs
 node scripts/verify-field-training-org-scope.mjs
 node scripts/verify-scheduling-api.mjs
