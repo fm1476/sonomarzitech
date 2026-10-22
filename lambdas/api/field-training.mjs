@@ -1,5 +1,5 @@
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
-import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import {
   response,
   resolveWorkspaceMembership,
@@ -114,9 +114,8 @@ async function ftOrgMembers(client, ctx, members) {
   const scope=await ftLoadOrgScope(client,ctx);
   if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id)),personByUser:new Map(members.map(m=>[m.user_id,String(m.person_id||'')]))};
   // Prefer validated multi-assignments when the canonical schema is installed.
-  const canonical=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
-    to_regclass('suite_organization_nodes') AS nodes`);
-  if(canonical.rows[0]?.assignments && canonical.rows[0]?.nodes) {
+  const canonicalReady=await canonicalOrganizationReady(client,ctx.tenantId,ctx.agencyId);
+  if(canonicalReady) {
     const personByUser=new Map(members.map(m=>[m.user_id,String(m.person_id||'')]));
     const allowed=new Set();
     for(const member of members) {
