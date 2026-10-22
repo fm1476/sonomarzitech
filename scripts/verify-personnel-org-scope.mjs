@@ -73,12 +73,12 @@ assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await a
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,{trainee_user:'trainee-user',trainee_person:'person-dispatch'}),true);
 console.log('Signed URL runtime organizational access checks passed.');
 
-assert.match(source,/return grants\.rows\.length \? \(grants\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Personnel scope must deny');
+assert.match(source,/if \(grants\.rows\.length\) return grants\.rows\[0\]\.scope \?\? \{mode:'none'\};/,'Configured null Personnel scope must deny');
 
 const loadStart=source.indexOf('async function loadPersonnelScope(');
 const loadEnd=source.indexOf('function personnelScopeAllows(',loadStart);
 assert.ok(loadStart>=0&&loadEnd>loadStart);
-const loadSandbox={};vm.createContext(loadSandbox);
+const loadSandbox={canonicalOrganizationReady:async()=>false};vm.createContext(loadSandbox);
 vm.runInContext(source.slice(loadStart,loadEnd),loadSandbox);
 const access={tenantId:'tenant-a',agencyId:'agency-a',userId:'user-a',admin:false};
 async function resolveScope(rows, relation='suite_organizational_access') {
