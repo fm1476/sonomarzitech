@@ -53,4 +53,14 @@ assert.equal(conflict.allowed.has('dispatcher'),false,'Conflicting unit records 
 assert.equal(conflict.allowed.has('patrol'),false,'Patrol remains excluded');
 console.log('Conflicting personnel organizational assignment denied.');
 
-assert.match(source,/return result\.rows\.length \? \(result\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Field Training scope must deny');
+assert.match(source,/const scope=result\.rows\[0\]\.scope \?\? \{mode:'none'\}/,'Configured null Field Training scope must deny');
+assert.match(source,/scope\?\.mode==='agency' \? \{mode:'none'\} : scope/,'Nonadmins must not receive agency-wide grants');
+const loadStart=source.indexOf('async function ftLoadOrgScope(');
+const loadEnd=source.indexOf('async function ftOrgMembers(',loadStart);
+const loaderContext={}; vm.createContext(loaderContext);vm.runInContext(source.slice(loadStart,loadEnd),loaderContext);
+const mockScope=async scope=>({query:async sql=>sql.includes('to_regclass')?{rows:[{relation:'suite_organizational_access'}]}:{rows:[{scope}]}});
+const loadCtx={tenantId:'t',agencyId:'a',userId:'u',admin:false};
+assert.equal((await loaderContext.ftLoadOrgScope(await mockScope(null),loadCtx)).mode,'none');
+assert.equal((await loaderContext.ftLoadOrgScope(await mockScope({mode:'agency'}),loadCtx)).mode,'none');
+assert.equal((await loaderContext.ftLoadOrgScope(await mockScope({mode:'selected',unitIds:['dispatch']}),loadCtx)).mode,'selected');
+console.log('Field Training configured-grant fail-closed behavior passed.');
