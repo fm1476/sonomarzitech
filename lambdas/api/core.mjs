@@ -1785,11 +1785,19 @@ async function filterOfficerWorkspaceRecords(
       const parsed=collectionFromRecordKey(row.key);
       if(parsed.collection==='personnel' && parsed.itemId!=='$order') {
         const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
-        for(const entry of entries)if(entry?.id)personnelUnits.set(entry.id,String(entry.unitId||entry.unit||''));
+        for(const entry of entries)if(entry?.id) {
+          const id=String(entry.id), unit=String(entry.unitId||entry.unit||'');
+          if(personnelUnits.has(id) && personnelUnits.get(id)!==unit) personnelUnits.set(id,null);
+          else if(!personnelUnits.has(id)) personnelUnits.set(id,unit);
+        }
       }
       if(parsed.collection==='pm.records' && parsed.itemId!=='$order') {
         const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
-        for(const entry of entries)if(entry?.personId&&entry?.unitId)personnelUnits.set(entry.personId,String(entry.unitId));
+        for(const entry of entries)if(entry?.personId&&entry?.unitId) {
+          const id=String(entry.personId), unit=String(entry.unitId);
+          if(personnelUnits.has(id) && personnelUnits.get(id)!==unit) personnelUnits.set(id,null);
+          else if(!personnelUnits.has(id)) personnelUnits.set(id,unit);
+        }
       }
     } catch {}
   }
