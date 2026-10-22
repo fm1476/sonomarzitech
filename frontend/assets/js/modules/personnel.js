@@ -771,7 +771,16 @@ function renderRecords(){
 
   document.getElementById('view-pm-records').innerHTML = `
     ${!canEdit ? lockedNote("You're viewing personnel records in read-only mode.") : ""}
-    <div class="toolbar">
+    <div class="pm-roster-intro">
+      <div><small>PERSONNEL / SERVICE RECORDS</small><h2>Personnel directory</h2><p>Find people, review assignments, and manage the records that drive staffing and readiness.</p></div>
+      <div class="pm-roster-counter"><strong>${rows.length}</strong><span>matching records</span></div>
+    </div>
+    <div class="pm-roster-metrics">
+      <div><small>Total records</small><strong>${STATE.pm.records.length}</strong></div>
+      <div><small>Active employment</small><strong>${STATE.pm.records.filter(r=>/active|full.time|probation/i.test(r.employmentStatus||'')).length}</strong></div>
+      <div><small>Units represented</small><strong>${new Set(STATE.pm.records.map(r=>r.unitId).filter(Boolean)).size}</strong></div>
+    </div>
+    <div class="toolbar pm-roster-toolbar">
       <div class="filters">
         <input type="text" id="recSearch" title="Filters the roster below as you type, matching name, badge number, or employee ID" placeholder="Search name, badge, employee ID..." style="width:230px;" value="${escapeHtml(f.q)}">
         <select id="recRank" title="Filter personnel records to a single rank"><option ${f.rank==='All'?'selected':''}>All</option>${STATE.pm.refData.ranks.map(r=>`<option ${f.rank===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
@@ -5343,5 +5352,11 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-record-modern-sty
 if(typeof document!=='undefined'&&!document.getElementById('pm-full-modernization-style')){
  const st=document.createElement('style');st.id='pm-full-modernization-style';
  st.textContent='.pm-modern-editor{max-width:1130px!important}.pm-modern-editor-body{padding:22px 26px!important;max-width:1070px;margin:0 auto;width:100%;box-sizing:border-box}.pm-editor-intro{background:rgba(55,125,218,.085);border-left:4px solid #4b86d7;border-radius:9px;padding:16px;font-size:13px;font-weight:700;margin-bottom:20px}.pm-modern-section{border:1px solid var(--border)!important;border-radius:14px!important;overflow:visible!important;margin-bottom:17px!important;background:rgba(104,140,185,.04)!important}.pm-modern-section>.panel-head{border-radius:13px 13px 0 0!important;padding:14px 18px!important;background:rgba(75,134,215,.09)!important}.pm-modern-section>.panel-head h2{font-size:15px!important;font-weight:800!important}.pm-modern-section>.panel-body{padding:18px!important;max-height:none!important;overflow:visible!important}.pm-record-tab-intro{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;border-radius:12px;background:rgba(100,140,195,.085);padding:17px 19px;margin-bottom:17px}.pm-record-tab-intro h3{font-size:16px;font-weight:800;margin:0}.pm-record-tab-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-record-table-scroll{max-width:100%;overflow-x:auto;overflow-y:visible;border:1px solid var(--border);border-radius:11px}.pm-record-table-scroll table{width:100%;min-width:580px;border-collapse:collapse}.pm-record-tab-workspace .btn{border-radius:9px}.pm-record-tab-workspace .panel{border-radius:12px;overflow:visible}.pm-photo-upload-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.pm-photo-file-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important}.pm-photo-upload-actions #pmChoosePhoto{border-radius:10px;font-weight:700;padding:11px 16px}.pm-photo-upload-actions #pmPhotoSelected{font-size:12px;color:var(--text-dim)}@media(max-width:650px){.pm-modern-editor-body{padding:13px!important}.pm-record-tab-intro{padding:13px}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-roster-modern-style')){
+ const st=document.createElement('style');st.id='pm-roster-modern-style';
+ st.textContent='.pm-roster-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:15px}.pm-roster-intro small{font-size:10px;letter-spacing:.11em;color:var(--text-dim);font-weight:800}.pm-roster-intro h2{font-size:23px;margin:4px 0}.pm-roster-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-roster-counter{background:rgba(59,134,215,.1);border-radius:13px;padding:14px 20px;display:flex;flex-direction:column;min-width:130px}.pm-roster-counter strong{font-size:24px}.pm-roster-counter span{font-size:11px;color:var(--text-dim)}.pm-roster-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}.pm-roster-metrics>div{background:rgba(100,140,190,.05);border:1px solid var(--border);border-radius:12px;padding:14px 17px}.pm-roster-metrics small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-roster-metrics strong{font-size:20px}.pm-roster-toolbar{border:1px solid var(--border);background:rgba(85,126,173,.04);border-radius:12px;padding:12px!important}.pm-roster-toolbar .btn{border-radius:9px}@media(max-width:600px){.pm-roster-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.pm-roster-metrics>div{padding:11px}.pm-roster-intro h2{font-size:19px}}';
  document.head.append(st);
 }
