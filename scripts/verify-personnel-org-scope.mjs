@@ -66,3 +66,5 @@ assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await a
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow,patrolRow]),member,enrollment),false,'Conflicting unit rows must block signed URL access');
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([{...dispatchRow,value:{personId:'person-dispatch',unitId:'patrol'}}]),member,enrollment),false);
 console.log('Signed URL runtime organizational access checks passed.');
+
+assert.match(source,/return grants\.rows\.length \? \(grants\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Personnel scope must deny');
