@@ -52,3 +52,5 @@ const conflict=await context.ftOrgMembers(conflictingClient,{tenantId:'tenant',a
 assert.equal(conflict.allowed.has('dispatcher'),false,'Conflicting unit records cannot grant a dispatcher access');
 assert.equal(conflict.allowed.has('patrol'),false,'Patrol remains excluded');
 console.log('Conflicting personnel organizational assignment denied.');
+
+assert.match(source,/return result\.rows\.length \? \(result\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Field Training scope must deny');
