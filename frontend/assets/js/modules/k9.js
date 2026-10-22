@@ -859,7 +859,7 @@ function renderK9DetailModal(){
     ['deployments','Deployments'], ['incidents','Incidents'], ['gps','GPS'], ['history','Change History'],
   ];
   const box = document.getElementById('modalBox');
-  box.className = 'modal modal-xl';
+  box.className = 'modal modal-xl k9-modern-detail';
   const hrs = monthlyTrainingHours(k.id,1);
   box.innerHTML = `
     <div class="modal-head">
@@ -872,7 +872,7 @@ function renderK9DetailModal(){
       </div>
       <button class="modal-close" id="mClose">&times;</button>
     </div>
-    <div style="display:flex;gap:6px;padding:12px 20px 0 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+    <div class="k9-modern-tabs" role="tablist" aria-label="K9 record sections">
       ${tabs.map(([tid,label])=>`<button class="btn btn-sm ${K9_DETAIL_TAB===tid?'btn-primary':'btn-outline'}" data-k9-tab="${tid}" style="border-radius:5px 5px 0 0;border-bottom:none;">${label}</button>`).join('')}
     </div>
     <div class="modal-body" id="k9DetailBody"></div>
@@ -896,9 +896,24 @@ function renderK9DetailTabContent(k){
 
   if(K9_DETAIL_TAB==='overview'){
     const age = k.dob ? Math.floor(daysBetween(k.dob, fmt(new Date()))/365) : null;
+    const hours=monthlyTrainingHours(k.id,1);
+    const percent=MONTHLY_TRAINING_HOURS_STANDARD>0?Math.round(hours/MONTHLY_TRAINING_HOURS_STANDARD*100):100;
+    const certs=STATE.k9.certifications.filter(c=>c.k9Id===k.id);
+    const nearing=certs.filter(c=>{const d=c.expirationDate||c.expiryDate||c.expires;return d&&d<=fmt(addDays(new Date(),30));});
+    const review=percent<100||nearing.length>0;
     body.innerHTML = `
+      <div class="k9-record-hero"><div><small>K9 / OPERATIONAL PROFILE</small><h2>${escapeHtml(k.name)}</h2><p>${escapeHtml(k.breed||'Breed unrecorded')} · ${escapeHtml(k.tagId||'Unit unrecorded')} · Handler: ${escapeHtml(personName(k.handlerId))}</p></div><span class="badge ${statusBadgeClassK9(k.status)}">${escapeHtml(k.status)}</span></div>
+      <div class="k9-record-metrics">
+        <div><small>PRIMARY HANDLER</small><strong>${escapeHtml(personName(k.handlerId))}</strong><span>${escapeHtml(k.unit||'Unit unrecorded')}</span></div>
+        <div><small>MONTHLY TRAINING</small><strong>${hours.toFixed(1)} <em>/ ${MONTHLY_TRAINING_HOURS_STANDARD} hrs</em></strong><span>${percent>=100?'Training standard met':'Below monthly standard'}</span></div>
+        <div><small>CERTIFICATION ADVISORIES</small><strong>${nearing.length}</strong><span>Expired or expiring soon</span></div>
+        <div><small>SKILLS / DISCIPLINES</small><strong>${(k.skills||[]).length}</strong><span>Recorded specialties</span></div>
+      </div>
+      <div class="k9-readiness ${k.status!=='Active'?'k9-readiness-neutral':review?'k9-readiness-warning':'k9-readiness-good'}"><strong>${k.status!=='Active'?'Current status: '+escapeHtml(k.status):review?'Readiness review recommended':'Readiness indicators normal'}</strong><span>${percent<100?'Training below standard. ':''}${nearing.length?'Review certification expirations. ':''}Informational indicators for supervisors and handlers.</span></div>
+      <div class="k9-section-heading"><h3>Profile and assignment</h3><p>Identity, handlers and operational specialties</p></div>
+
       ${canEdit ? `<div style="margin-bottom:14px;display:flex;gap:8px;"><button class="btn btn-sm btn-primary" id="btnEditK9FromDetail">${ICONS.edit} Edit K9</button><button class="btn btn-sm btn-outline" id="btnUploadK9Photo">${ICONS.camera} ${k.photoDataUrl?'Change':'Attach'} Photo</button></div>` : ''}
-      <div class="detail-grid">
+      <div class="detail-grid k9-profile-details">
         <div><div class="k">Breed</div><div class="v">${escapeHtml(k.breed)}</div></div>
         <div><div class="k">Sex</div><div class="v">${escapeHtml(k.sex)}</div></div>
         <div><div class="k">Date of Birth</div><div class="v">${k.dob||'—'}${age!=null?' ('+age+' yrs)':''}</div></div>
@@ -916,7 +931,7 @@ function renderK9DetailTabContent(k){
         ${k.status==='Retired' ? `<div><div class="k">Retirement Date</div><div class="v">${k.retirementDate||'—'}</div></div><div><div class="k">Disposition</div><div class="v">${(k.retirementDisposition?escapeHtml(k.retirementDisposition):'—')}</div></div>` : ''}
         <div><div class="k">Notes</div><div class="v">${(k.notes?escapeHtml(k.notes):'—')}</div></div>
       </div>
-      <div class="panel" style="box-shadow:none;margin-top:14px;"><div class="panel-head"><h2>Maintenance-Training Compliance</h2></div>
+      <div class="panel k9-compliance-panel" style="box-shadow:none;margin-top:18px;"><div class="panel-head"><h2>Maintenance-Training Compliance</h2></div>
         <div class="panel-body">
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="flex:1;height:10px;background:var(--border);border-radius:5px;overflow:hidden;max-width:260px;"><div style="width:${Math.min(100,Math.round((monthlyTrainingHours(k.id,1)/MONTHLY_TRAINING_HOURS_STANDARD)*100))}%;height:100%;background:${monthlyTrainingHours(k.id,1)>=MONTHLY_TRAINING_HOURS_STANDARD?'var(--green)':'var(--red)'};"></div></div>
@@ -1044,6 +1059,19 @@ function renderK9DetailTabContent(k){
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">K9 profile changes, training sessions, certifications and deployments are tracked here. The Platform Audit Log also records actions without exposing restricted values.</div>
       <table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
+  if(K9_DETAIL_TAB!=='overview'){
+    const labels={medical:['Medical & veterinary','Vaccinations, visits and care'],training:['Training history','Hours, attendance and proficiency'],certifications:['Certifications','Credentials and renewals'],deployments:['Deployments','Operational assignments and activity'],incidents:['Incident records','Events and outcomes'],gps:['GPS & tracking','Collar and location information'],history:['Change history','Documented profile changes']};
+    const [name,hint]=labels[K9_DETAIL_TAB]||['K9 information','Record details'];
+    const intro=document.createElement('div');intro.className='k9-section-heading';
+    const h=document.createElement('h3');h.textContent=name;
+    const p=document.createElement('p');p.textContent=hint;intro.append(h,p);body.prepend(intro);
+    body.querySelectorAll('table').forEach(table=>{
+      if(table.closest('.k9-table-scroll'))return;
+      const wrap=document.createElement('div');wrap.className='k9-table-scroll';
+      table.before(wrap);wrap.append(table);
+    });
+  }
+
 }
 
 function openK9PhotoUploadModal(k){
@@ -1053,7 +1081,7 @@ function openK9PhotoUploadModal(k){
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         ${k.photoDataUrl ? `<img src="${k.photoDataUrl}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">` : `<div style="width:64px;height:64px;border-radius:50%;background:var(--lightgray);"></div>`}
-        <input type="file" id="fK9PhotoFile" accept="image/*">
+        <div class="k9-photo-actions"><button type="button" class="btn btn-outline" id="k9ChoosePhoto">Upload Photo</button><span id="k9PhotoFilename">No new photo selected</span><input type="file" id="fK9PhotoFile" accept="image/*" class="k9-native-photo-input"></div>
       </div>
       <div style="font-size:11px;color:var(--text-dim);">Stored as a small resized thumbnail in this prototype's data record.</div>
     </div>
@@ -1063,6 +1091,7 @@ function openK9PhotoUploadModal(k){
   let pending = k.photoDataUrl;
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('k9ChoosePhoto').onclick=()=>document.getElementById('fK9PhotoFile').click();
   document.getElementById('fK9PhotoFile').addEventListener('change', (e)=>{
     const file = e.target.files[0]; if(!file) return;
     const img = new Image(); const reader = new FileReader();
@@ -1936,3 +1965,9 @@ window.K9 = { start: startK9Module, buildData, migrateData, recalcNotifications,
 
 })();
 
+
+if(typeof document!=='undefined'&&!document.getElementById('k9-modern-record-style')){
+ const style=document.createElement('style');style.id='k9-modern-record-style';
+ style.textContent='.k9-modern-detail{display:flex!important;flex-direction:column!important;overflow:hidden!important;max-height:calc(100dvh - 36px)!important}.k9-modern-detail>.modal-head,.k9-modern-detail>.modal-foot{flex-shrink:0}.k9-modern-detail>.modal-body{min-height:0!important;flex:1 1 auto;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:24px!important}.k9-modern-tabs{display:flex;gap:7px;padding:12px 20px 0;border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;max-width:100%}.k9-modern-tabs button{white-space:nowrap;flex-shrink:0;border-radius:8px 8px 0 0!important}.k9-record-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:17px}.k9-record-hero small{font-size:10px;letter-spacing:.11em;font-weight:800;color:var(--text-dim)}.k9-record-hero h2{font-size:24px;font-weight:800;margin:5px 0}.k9-record-hero p{font-size:12px;color:var(--text-dim);margin:0}.k9-record-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:16px}.k9-record-metrics>div{border:1px solid var(--border);border-radius:13px;background:rgba(96,146,199,.055);padding:17px;min-width:0}.k9-record-metrics small{display:block;font-size:10px;font-weight:800;color:var(--text-dim)}.k9-record-metrics strong{display:block;font-size:19px;margin:10px 0 4px;overflow-wrap:anywhere}.k9-record-metrics strong em{font-size:12px;font-style:normal;color:var(--text-dim)}.k9-record-metrics span{font-size:11px;color:var(--text-dim)}.k9-readiness{border-left:4px solid #2ab782;border-radius:10px;background:rgba(42,183,130,.09);padding:14px 17px;display:flex;gap:8px;flex-direction:column;margin-bottom:22px}.k9-readiness strong{font-size:14px}.k9-readiness span{font-size:12px}.k9-readiness-warning{border-color:#e4a748;background:rgba(228,167,72,.1)}.k9-readiness-neutral{border-color:#8aa0b9;background:rgba(138,160,185,.1)}.k9-section-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}.k9-section-heading h3{font-size:17px;font-weight:800;margin:0}.k9-section-heading p{font-size:12px;color:var(--text-dim);margin:0}.k9-profile-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important}.k9-profile-details>div{border:1px solid var(--border);border-radius:11px;padding:14px 15px;min-width:0;background:rgba(99,139,190,.035)}.k9-profile-details .k{font-size:10px!important;letter-spacing:.05em;font-weight:800!important;color:var(--text-dim)!important}.k9-profile-details .v{font-size:13px!important;font-weight:650;overflow-wrap:anywhere}.k9-compliance-panel{border-radius:13px!important;overflow:visible!important}.k9-table-scroll{max-width:100%;overflow-x:auto;overflow-y:visible;border:1px solid var(--border);border-radius:11px}.k9-table-scroll table{min-width:600px;width:100%}.k9-modern-detail .modal-body .panel-body{overflow-y:visible;max-height:none}.k9-photo-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.k9-photo-actions span{font-size:12px;color:var(--text-dim)}.k9-native-photo-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important}@media(max-width:950px){.k9-record-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.k9-profile-details{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:540px){.k9-record-metrics,.k9-profile-details{grid-template-columns:1fr!important}.k9-modern-detail>.modal-body{padding:14px!important}}';
+ document.head.append(style);
+}
