@@ -41,8 +41,9 @@ vm.runInContext(source.slice(begin,end),context);
 const client={query:async()=>({rows})};
 const result=await context.ftOrgMembers(client,{tenantId:'tenant',agencyId:'agency',personId:'person-1',userId:'dispatch-manager'},members);
 assert.deepEqual([...result.allowed].sort(),['dispatch-manager','dispatcher']);
-assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed},{trainee_user:'dispatcher'}),true);
-assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed},{trainee_user:'patrol'}),false);
+assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed,orgPersonByUser:result.personByUser},{trainee_user:'dispatcher',trainee_person:'person-2'}),true);
+assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed,orgPersonByUser:result.personByUser},{trainee_user:'patrol',trainee_person:'person-3'}),false);
+assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed,orgPersonByUser:result.personByUser},{trainee_user:'dispatcher',trainee_person:'person-3'}),false,'Membership remapping must not reveal a stale trainee file');
 console.log('Field Training cross-division behavior checks passed.');
 
 // Conflicting source records for the same person must fail closed.
@@ -64,3 +65,5 @@ assert.equal((await loaderContext.ftLoadOrgScope(await mockScope(null),loadCtx))
 assert.equal((await loaderContext.ftLoadOrgScope(await mockScope({mode:'agency'}),loadCtx)).mode,'none');
 assert.equal((await loaderContext.ftLoadOrgScope(await mockScope({mode:'selected',unitIds:['dispatch']}),loadCtx)).mode,'selected');
 console.log('Field Training configured-grant fail-closed behavior passed.');
+
+assert.match(source,/ctx\.orgPersonByUser=org\.personByUser/,'Both Field Training routes must retain membership-to-person binding');
