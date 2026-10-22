@@ -143,3 +143,46 @@ assert.match(source,/function scheduleShiftRunsOnDate\(/);
 assert.match(source,/displayedShifts\.filter\(shift=>scheduleShiftRunsOnDate\(shift,dateStr\)\)/);
 assert.match(source,/shifts\.filter\(shift=>canViewScheduleShift\(shift\)&&scheduleShiftRunsOnDate\(shift,date\)\)/);
 console.log('Preferred thresholds and non-mutating, approval-required backfill proposals passed.');
+
+// Focused Scheduling QA matrix: rank-only, rank+skill, single occupancy, overrides, rotations.
+const qaPeople=[
+ {personId:'dispatchDual',rank:'Dispatcher',specialSkills:['Fire Dispatcher','Law Dispatcher']},
+ {personId:'dispatchFire',rank:'Dispatcher',specialSkills:['Fire Dispatcher']},
+ {personId:'dispatchLaw',rank:'Dispatcher',specialSkills:['Law Dispatcher']},
+ {personId:'dispatchUntrained',rank:'Dispatcher',specialSkills:[]},
+ {personId:'sergeant',rank:'Sergeant',specialSkills:[]}
+];
+const qaSlots=[
+ {id:'fireSlot',name:'Dispatcher + Fire Dispatcher',requiredRank:'Dispatcher',requiredSkill:'Fire Dispatcher',count:1,preferredCount:2},
+ {id:'lawSlot',name:'Dispatcher + Law Dispatcher',requiredRank:'Dispatcher',requiredSkill:'Law Dispatcher',count:1,preferredCount:1},
+ {id:'supervisor',name:'Sergeant',requiredRank:'Sergeant',requiredSkill:'any',count:1,preferredCount:1}
+];
+assert.doesNotThrow(()=>validateStaffingRequirements(qaSlots));
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchDual',qaSlots[0]),true);
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchDual',qaSlots[1]),true);
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchLaw',qaSlots[0]),false);
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchFire',qaSlots[1]),false);
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchUntrained',qaSlots[0]),false);
+assert.equal(staffingPersonHasSkill(qaPeople,'sergeant',qaSlots[2]),true);
+assert.equal(staffingPersonHasSkill(qaPeople,'dispatchDual',qaSlots[2]),false);
+const qaStaffed=[{personId:'dispatchDual',staffingCategoryId:'fireSlot'},{personId:'dispatchLaw',staffingCategoryId:'lawSlot'},{personId:'sergeant',staffingCategoryId:'supervisor'}];
+const qaSummary=staffingSummary(qaSlots,qaStaffed,3,qaPeople);
+assert.equal(qaSummary.ok,true);
+assert.equal(qaSummary.preferredNeeded,1);
+assert.equal(qaSummary.advisories.length,0);
+const duplicateCrossTrained=staffingSummary(qaSlots,[...qaStaffed,{personId:'dispatchDual',staffingCategoryId:'lawSlot'}],3,qaPeople);
+assert.equal(duplicateCrossTrained.staffed,3);
+assert.equal(duplicateCrossTrained.categories[1].staffed,1);
+const qaMismatch=staffingSummary(qaSlots,[{personId:'dispatchUntrained',staffingCategoryId:'fireSlot'}],3,qaPeople);
+assert.equal(qaMismatch.advisories.length,1);
+assert.equal(qaMismatch.categories[0].staffed,1); // Advisory model remains separate from headcount.
+assert.equal(qaMismatch.ok,false);
+const qaRotation={patternType:'rotation',daysOn:4,daysOff:4,startDate:'2099-02-01',endDate:'2099-02-28'};
+const qaRotationAssignment={startDate:'2099-02-01',endDate:null};
+assert.deepEqual([1,2,3,4,5,6,7,8,9].map(day=>assignmentOnDuty(qaRotationAssignment,qaRotation,'2099-02-'+String(day).padStart(2,'0'))),[true,true,true,true,false,false,false,false,true]);
+const qaWeekly={patternType:'weekly',weekdays:[1,2,3,4,5],startDate:'2099-01-01',endDate:'2099-12-31'};
+assert.equal(assignmentOnDuty({startDate:'2099-01-01'},qaWeekly,'2099-01-03'),false); // Saturday
+assert.equal(assignmentOnDuty({startDate:'2099-01-01'},qaWeekly,'2099-01-05'),true); // Monday
+assert.match(assignmentSection,/saveButton\.disabled=issue/);
+assert.match(assignmentSection,/required\.join\(' AND '\)/);
+console.log('Scheduling QA matrix: rank/skill eligibility, cross-trained single occupancy, exception advisories, preferred coverage, rotations and weekly duties passed.');
