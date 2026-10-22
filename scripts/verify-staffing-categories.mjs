@@ -55,6 +55,13 @@ vm.runInContext(source.slice(source.indexOf('function activeExceptionFor('),sour
 vm.runInContext(source.slice(source.indexOf('function currentPerson()'),source.indexOf('function visibleScheduleWorkGroups()')),context);
 vm.runInContext(source.slice(source.indexOf('function staffingSkillOptions('),source.indexOf('function calendarUnitOptions(')),context);
 vm.runInContext(source.slice(source.indexOf('function onDutyRoster('),source.indexOf('// Overtime hours a person',source.indexOf('function onDutyRoster('))),context);
+const flexibleShift={...shift,staffingOverrides:[
+  {id:'fri',type:'weekday',value:'5',counts:{law:1,fire:1,call:1}},
+  {id:'special',type:'date',value:'2099-01-02',counts:{law:2,fire:1,call:0}}
+]};
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').find(r=>r.id==='call'),undefined);
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').reduce((n,r)=>n+r.count,0),3);
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-03').reduce((n,r)=>n+r.count,0),3);
 assert.equal(context.shiftStaffingSummary(shift,'2099-01-01').ok,true);assert.equal(context.onDutyRoster(shift,'2099-01-01').length,5);assert.equal(context.onDutyRoster(shift,'2999-01-01').length,0);
 context.STATE.pm.scheduleExceptions=[{id:'off',personId:'fire1',startDate:context.fmt(new Date()),endDate:context.fmt(new Date()),code:'VDO'}];
 const gaps=context.computeCoverageGaps(1);assert.equal(gaps.length,1);assert.equal(gaps[0].staffingCategoryId,'fire');assert.equal(gaps[0].needed,1);
