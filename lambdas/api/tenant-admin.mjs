@@ -770,6 +770,14 @@ async function tenantAdminDbApi(client, auth, body) {
       [agencyId,tenantId]
     );
     if (!agency.rows.length) return response(404,{success:false,error:'Agency not found in tenant.'});
+    if (!auth.platformAdmin) {
+      const agencyAdmin=await client.query(
+        `SELECT 1 FROM suite_memberships WHERE tenant_id=$1 AND agency_id=$2
+           AND user_id=$3 AND status='active' AND 'role_admin'=ANY(role_ids)`,
+        [tenantId,agencyId,auth.userId]
+      );
+      if (!agencyAdmin.rows.length) return response(403,{success:false,error:'System Admin access in this agency is required.'});
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS suite_organizational_access (
       tenant_id UUID NOT NULL,
       agency_id UUID NOT NULL,
