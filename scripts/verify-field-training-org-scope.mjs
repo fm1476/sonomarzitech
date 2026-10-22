@@ -14,7 +14,9 @@ for(const expected of [
   "action==='save_config'",
   "[payload.traineeUser,payload.trainerUser,payload.supervisorUser].every",
   "[e.trainee_user,payload.trainerUser,payload.supervisorUser].every",
-  "org.allowed.has(payload.coverUser)"
+  "org.allowed.has(payload.coverUser)",
+  "org.allowed.has(payload.trainerUser||expectedTrainer)",
+  "if(units.has(id) && units.get(id)!==unit) units.set(id,null)"
 ])assert.ok(source.includes(expected),expected);
 assert.match(source,/This trainee file is outside your authorized organizational scope/);
 console.log('Field Training organizational scope route checks passed.');
@@ -42,3 +44,11 @@ assert.deepEqual([...result.allowed].sort(),['dispatch-manager','dispatcher']);
 assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed},{trainee_user:'dispatcher'}),true);
 assert.equal(context.ftOrgAllowsEnrollment({orgScope:scope,orgAllowed:result.allowed},{trainee_user:'patrol'}),false);
 console.log('Field Training cross-division behavior checks passed.');
+
+// Conflicting source records for the same person must fail closed.
+const conflictingRows=[...rows,{key:JSON.stringify([['personnel'],'duplicate']),value:{id:'person-2',unitId:'patrol'}}];
+const conflictingClient={query:async()=>({rows:conflictingRows})};
+const conflict=await context.ftOrgMembers(conflictingClient,{tenantId:'tenant',agencyId:'agency',personId:'person-1',userId:'dispatch-manager'},members);
+assert.equal(conflict.allowed.has('dispatcher'),false,'Conflicting unit records cannot grant a dispatcher access');
+assert.equal(conflict.allowed.has('patrol'),false,'Patrol remains excluded');
+console.log('Conflicting personnel organizational assignment denied.');
