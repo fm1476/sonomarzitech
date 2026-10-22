@@ -1093,7 +1093,43 @@ function renderRecordDetailTabContent(r){
 
   if(RECORD_DETAIL_TAB==='overview'){
     body.innerHTML = `
+      <div class="pm-record-identity">
+        <div class="pm-record-identity-copy">
+          <small>PERSONNEL / SERVICE RECORD</small>
+          <h3>${escapeHtml(personName(personId))}</h3>
+          <span>${escapeHtml(r.rank||'Rank not recorded')} · ${escapeHtml(r.unitId||'Unit not recorded')}</span>
+        </div>
+        <span class="badge ${statusBadgeClass(r.employmentStatus)}">${escapeHtml(r.employmentStatus||'Unknown')}</span>
+      </div>
+      <div class="pm-record-stats">
+        <div class="pm-record-stat"><small>Badge</small><strong>${escapeHtml(r.badgeNumber||'Not recorded')}</strong><span>Public safety identifier</span></div>
+        <div class="pm-record-stat"><small>Rank</small><strong>${escapeHtml(r.rank||'Not recorded')}</strong><span>Current classification</span></div>
+        <div class="pm-record-stat"><small>Assignment</small><strong>${escapeHtml(r.assignment||'Unassigned')}</strong><span>${escapeHtml(r.unitId||'Unit not recorded')}</span></div>
+        <div class="pm-record-stat"><small>Hire date</small><strong>${escapeHtml(r.hireDate||'Not recorded')}</strong><span>Employment timeline</span></div>
+      </div>
+      <div class="pm-record-panels">
+        <section class="pm-record-card">
+          <h4>Current assignment</h4>
+          <div class="pm-record-facts">
+            <div><small>Agency</small><strong>${escapeHtml(r.agency||'Not recorded')}</strong></div>
+            <div><small>Unit</small><strong>${escapeHtml(r.unitId||'Not recorded')}</strong></div>
+            <div><small>Assignment</small><strong>${escapeHtml(r.assignment||'Not recorded')}</strong></div>
+            <div><small>Supervisors</small><strong>${(r.supervisorIds||[]).length?r.supervisorIds.map(sid=>escapeHtml(personName(sid))).join(', '):'Not recorded'}</strong></div>
+          </div>
+        </section>
+        <section class="pm-record-card">
+          <h4>Service milestones</h4>
+          <div class="pm-record-facts">
+            <div><small>Employee ID</small><strong>${escapeHtml(r.employeeId||'Not recorded')}</strong></div>
+            <div><small>Hire date</small><strong>${escapeHtml(r.hireDate||'Not recorded')}</strong></div>
+            <div><small>Sworn date</small><strong>${escapeHtml(r.swornDate||'Not recorded')}</strong></div>
+            <div><small>Termination date</small><strong>${escapeHtml(r.terminationDate||'Not applicable')}</strong></div>
+          </div>
+        </section>
+      </div>
+
       ${(canEdit || canDocs) ? `<div style="margin-bottom:14px;display:flex;gap:8px;">${canEdit?`<button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Record</button>`:''}${canDocs?`<button class="btn btn-sm btn-outline" id="btnUploadPhoto">${ICONS.camera} ${r.photoDataUrl?'Change':'Attach'} Photo</button>`:''}</div>` : ''}
+      <details class="pm-record-extra"><summary>Additional personnel information</summary>
       <div class="detail-grid">
         <div><div class="k">Agency</div><div class="v">${escapeHtml(r.agency)}</div></div>
         <div><div class="k">Employee ID</div><div class="v">${(r.employeeId?escapeHtml(r.employeeId):'—')}</div></div>
@@ -1114,6 +1150,7 @@ function renderRecordDetailTabContent(r){
         <div><div class="k">Special Skills</div><div class="v">${r.specialSkills.length?r.specialSkills.map(escapeHtml).join(', '):'—'}</div></div>
         <div><div class="k">Education</div><div class="v">${r.education.length?r.education.map(e=>`${escapeHtml(e.degree)}, ${escapeHtml(e.institution)} (${e.year})`).join('; '):'—'}</div></div>
       </div>
+      </details>
     `;
     const editBtn = document.getElementById('btnEditFromDetail');
     if(editBtn) editBtn.addEventListener('click', ()=>openRecordEditModal(personId));
@@ -5257,3 +5294,9 @@ window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications,
 
 })();
 
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-record-modern-style')){
+ const st=document.createElement('style');st.id='pm-record-modern-style';
+ st.textContent='.pm-record-identity{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}.pm-record-identity-copy small{display:block;font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}.pm-record-identity-copy h3{margin:5px 0;font-size:22px}.pm-record-identity-copy span{font-size:12px;color:var(--text-dim)}.pm-record-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pm-record-stat,.pm-record-card{border-radius:13px;border:1px solid var(--border);padding:16px;background:rgba(105,143,187,.055);min-width:0}.pm-record-stat small,.pm-record-facts small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-record-stat strong{font-size:17px;display:block;overflow-wrap:anywhere}.pm-record-stat span{display:block;font-size:11px;color:var(--text-dim);margin-top:5px}.pm-record-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pm-record-card h4{font-size:14px;font-weight:800;margin:0 0 14px}.pm-record-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pm-record-facts strong{font-size:13px;overflow-wrap:anywhere}.pm-record-extra{margin-top:17px;border:1px solid var(--border);border-radius:12px;padding:14px}.pm-record-extra summary{font-weight:750;cursor:pointer}.pm-record-extra .detail-grid{margin-top:17px}.modal:has(#recDetailBody){overflow:hidden!important}.modal:has(#recDetailBody)>.modal-body{overflow-y:auto!important;overscroll-behavior-y:auto!important;flex:1 1 auto;min-height:0}@media(max-width:820px){.pm-record-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.pm-record-stats,.pm-record-panels{grid-template-columns:1fr}}';
+ document.head.append(st);
+}
