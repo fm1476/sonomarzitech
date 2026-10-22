@@ -4726,7 +4726,6 @@ function openShiftFormModal(existing){
   const dismissShiftEditor=()=>{shiftModal.style.cssText='';closeModal();};
   shiftModal.querySelector('#mClose').onclick=dismissShiftEditor;
   shiftModal.querySelector('#mCancel').onclick=dismissShiftEditor;
-  wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
   // Reveal one step at a time without reparenting inputs or disturbing existing handlers.
   const builderBody=document.querySelector('#modalBox .modal-body');
   const headings=[...builderBody.children].filter(child=>child.classList.contains('pm-builder-step'));
@@ -4757,6 +4756,7 @@ function openShiftFormModal(existing){
   // Re-apply after the modal has been inserted into its final overlay.
   // Native hidden attributes alone are not sufficient against legacy .form-row styles.
   builderBody.dataset.activeStep='1';
+  wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
 
   const overrideRoot=document.getElementById('fShiftOverrides');
   const syncOverrideCounts=()=>{
