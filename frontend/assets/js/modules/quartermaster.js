@@ -1520,10 +1520,12 @@ function renderEquipmentDetailModal(id){
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-wide';
   box.innerHTML = `
-    <div class="modal-head">
-      <div>
-        <h3 style="margin-bottom:2px;">${escapeHtml(item.name)}</h3>
-        <div class="mono" style="font-size:11.5px;color:var(--text-dim);">${item.assetId}${item.serialNumber ? ' &bull; SN '+escapeHtml(item.serialNumber) : ''}</div>
+    <div class="modal-head qm-detail-header">
+      <div class="qm-identity">
+        <div class="qm-identity-icon" aria-hidden="true">${ICONS.box||"▣"}</div>
+        <div><div class="qm-detail-eyebrow">QUARTERMASTER / EQUIPMENT RECORD</div>
+        <h3>${escapeHtml(item.name)}</h3>
+        <div class="mono qm-detail-id">${escapeHtml(item.assetId)}${item.serialNumber ? ' &bull; SN '+escapeHtml(item.serialNumber) : ''}</div></div>
       </div>
       <button class="modal-close" id="mClose">&times;</button>
     </div>
@@ -1548,25 +1550,44 @@ function renderEqDetailTabContent(item){
   if(EQ_DETAIL_TAB==='overview'){
     const replDays = item.replacementDate ? daysBetween(fmt(new Date()), item.replacementDate) : null;
     body.innerHTML = `
-      ${canEdit ? `<div style="margin-bottom:14px;"><button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Equipment</button></div>` : ''}
-      <div class="eq-detail-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;">
-        <div class="detail-grid" style="flex:1;">
-          <div><div class="k">Category</div><div class="v">${escapeHtml(item.category)}</div></div>
-          <div><div class="k">Equipment Type</div><div class="v">${(item.equipmentType?escapeHtml(item.equipmentType):'—')}</div></div>
-          <div><div class="k">Status</div><div class="v"><span class="badge ${statusBadgeClass(item.status)}">${item.status}</span></div></div>
-          <div><div class="k">Condition</div><div class="v">${escapeHtml(item.condition)}</div></div>
-          <div><div class="k">Location</div><div class="v">${escapeHtml(item.location)}</div></div>
-          <div><div class="k">Agency</div><div class="v">${(item.agency?escapeHtml(item.agency):'—')}</div></div>
-          <div><div class="k">Assigned To</div><div class="v">${item.assignedTo?escapeHtml(targetName(item.assignedToType, item.assignedTo)):'—'}</div></div>
-          <div><div class="k">Vendor</div><div class="v">${item.vendorId?escapeHtml(vendorName(item.vendorId)):'—'}</div></div>
-          <div><div class="k">Value</div><div class="v">${money(item.value)}${item.isConsumable?' / unit':''}</div></div>
-          <div><div class="k">Purchase Date</div><div class="v">${item.purchaseDate||'—'}</div></div>
-          <div><div class="k">In-Service Date</div><div class="v">${item.inServiceDate||'—'}</div></div>
-          <div><div class="k">Replacement Date</div><div class="v" style="${replDays!=null && replDays<=60 ? 'color:var(--red);':''}">${item.replacementDate||'—'}${replDays!=null && replDays<=60 ? (replDays<0?' (past due)':' ('+replDays+'d)'):''}</div></div>
-          <div><div class="k">Tracking Type</div><div class="v">${item.isConsumable ? 'Consumable (quantity)' : 'Serialized asset'}</div></div>
+      <div class="qm-detail-actions">
+        <div class="qm-detail-status"><span class="badge ${statusBadgeClass(item.status)}">${escapeHtml(item.status)}</span><span class="qm-detail-context">${escapeHtml(item.agency||'Agency not recorded')}</span></div>
+        <div class="qm-detail-actions-right">
+          ${can('qm_assign_checkout') && item.status==="Available" && !item.isConsumable ? `<button class="btn btn-sm btn-primary" id="btnAssignFromDetail">${ICONS.arrowOut} Assign Item</button>` : ''}
+          ${can('qm_assign_checkin') && item.status==="Assigned" && STATE.qm.assignments.some(a=>a.equipmentId===item.id&&a.status!=="Returned") ? `<button class="btn btn-sm btn-outline" id="btnReturnFromDetail">${ICONS.arrowIn} Check In</button>` : ''}
+          ${canEdit ? `<button class="btn btn-sm btn-outline" id="btnEditFromDetail">${ICONS.edit} Edit Equipment</button>` : ''}
         </div>
-        ${item.serialNumber ? `<div style="text-align:center;">${fakeBarcodeSvg(item.serialNumber)}<div class="mono" style="font-size:11px;margin-top:4px;color:var(--text-dim);">${escapeHtml(item.serialNumber)}</div></div>` : ''}
       </div>
+      <div class="qm-detail-metrics">
+        <div class="qm-metric"><div class="qm-metric-label">Condition</div><div class="qm-metric-value">${escapeHtml(item.condition||'Not recorded')}</div><div class="qm-metric-sub">Equipment readiness</div></div>
+        <div class="qm-metric"><div class="qm-metric-label">Assigned to</div><div class="qm-metric-value">${item.assignedTo?escapeHtml(targetName(item.assignedToType,item.assignedTo)):'Unassigned'}</div><div class="qm-metric-sub">${item.status==="Assigned"&&!item.assignedTo?'Review assignment discrepancy':'Current custodian'}</div></div>
+        <div class="qm-metric"><div class="qm-metric-label">Location</div><div class="qm-metric-value">${escapeHtml(item.location||'Not recorded')}</div><div class="qm-metric-sub">Last recorded location</div></div>
+        <div class="qm-metric"><div class="qm-metric-label">Lifecycle</div><div class="qm-metric-value">${escapeHtml(item.inServiceDate||'Not recorded')}</div><div class="qm-metric-sub">In-service date</div></div>
+      </div>
+      <div class="qm-detail-layout">
+        <section class="qm-detail-card">
+          <div class="qm-detail-card-title">Asset information</div>
+          <div class="qm-detail-facts">
+            <div><span>Category</span><strong>${escapeHtml(item.category||'Not recorded')}</strong></div>
+            <div><span>Equipment type</span><strong>${escapeHtml(item.equipmentType||'Not recorded')}</strong></div>
+            <div><span>Tracking</span><strong>${item.isConsumable?'Consumable':'Serialized asset'}</strong></div>
+            <div><span>Vendor</span><strong>${item.vendorId?escapeHtml(vendorName(item.vendorId)):'Not recorded'}</strong></div>
+            <div><span>Value</span><strong>${money(item.value)}${item.isConsumable?' / unit':''}</strong></div>
+          </div>
+        </section>
+        <section class="qm-detail-card">
+          <div class="qm-detail-card-title">Lifecycle and accountability</div>
+          <div class="qm-detail-facts">
+            <div><span>Purchase date</span><strong>${escapeHtml(item.purchaseDate||'Not recorded')}</strong></div>
+            <div><span>In-service date</span><strong>${escapeHtml(item.inServiceDate||'Not recorded')}</strong></div>
+            <div><span>Replacement</span><strong style="${replDays!=null && replDays<=60?'color:var(--red);':''}">${escapeHtml(item.replacementDate||'Not scheduled')}${replDays!=null && replDays<=60?' ('+(replDays<0?'past due':replDays+' days')+')':''}</strong></div>
+            <div><span>Agency</span><strong>${escapeHtml(item.agency||'Not recorded')}</strong></div>
+            <div><span>Asset ID</span><strong class="mono">${escapeHtml(item.assetId)}</strong></div>
+          </div>
+        </section>
+      </div>
+      ${item.serialNumber ? `<div class="qm-detail-barcode"><div><strong>Asset identification</strong><div class="mono">${escapeHtml(item.serialNumber)}</div></div>${fakeBarcodeSvg(item.serialNumber)}<button type="button" class="btn btn-sm btn-outline" id="btnCopySerial">Copy serial</button></div>` : ''}
+      ${item.status==="Assigned"&&!item.assignedTo?'<div class="qm-detail-notice">This asset is marked assigned, but no current custodian is recorded. Review Assignment History before changing custody.</div>':''}
       ${item.disposal ? `
         <div class="panel" style="box-shadow:none;border-color:var(--callout-red-border);">
           <div class="panel-head" style="background:var(--callout-red-bg);"><h2 style="color:var(--red);">Disposal Record</h2></div>
@@ -1617,6 +1638,15 @@ function renderEqDetailTabContent(item){
       toast('Item marked out of service.');
       renderEquipmentDetailModal(item.id);
       if(ACTIVE_VIEW==='qm-inventory') renderInventory();
+    });
+    document.getElementById('btnAssignFromDetail')?.addEventListener('click',()=>openCheckoutModal(item.id));
+    document.getElementById('btnReturnFromDetail')?.addEventListener('click',()=>{
+      const current=STATE.qm.assignments.find(a=>a.equipmentId===item.id&&a.status!=="Returned");
+      if(current)checkInAssignment(current.id);
+    });
+    document.getElementById('btnCopySerial')?.addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(item.serialNumber);toast('Serial number copied.');}
+      catch{toast('Unable to copy serial number.',true);}
     });
     const editFromDetailBtn = document.getElementById('btnEditFromDetail');
     if(editFromDetailBtn) editFromDetailBtn.addEventListener('click', ()=> openEquipmentModal(item.id));
@@ -1869,6 +1899,8 @@ function permissionBlockedView(msg){
 function openCheckoutModal(presetEquipId){
   const available = STATE.qm.equipment.filter(e=>e.status==="Available" && !e.isConsumable);
   if(available.length===0){ toast("No available equipment to check out.", true); return; }
+  if(presetEquipId&&!available.some(e=>e.id===presetEquipId)){toast("This item is not available for assignment.",true);return;}
+  document.getElementById('modalBox').className = 'modal modal-wide';
   document.getElementById('modalBox').innerHTML = `
     <div class="modal-head"><h3>Check Out Equipment</h3><button class="modal-close" id="mClose">&times;</button></div>
     <div class="modal-body">
@@ -3687,3 +3719,6 @@ window.QM = { start: startQmModule, buildData: buildQmData, migrateData: migrate
 
 })();
 
+
+/* Quartermaster equipment detail: compact, readable, responsive workspace. */
+.qm-detail-header{padding:20px 24px!important}.qm-identity{display:flex;align-items:center;gap:15px}.qm-identity-icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft,rgba(50,115,215,.14));color:var(--accent,#4d8cf3);flex:none}.qm-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim)}.qm-identity h3{font-size:24px;margin:3px 0}.qm-detail-id{font-size:12px;color:var(--text-dim)}.qm-detail-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}.qm-detail-status,.qm-detail-actions-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.qm-detail-context{font-size:12px;color:var(--text-dim)}.qm-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px}.qm-metric,.qm-detail-card{padding:17px;border:1px solid var(--border);border-radius:13px;background:var(--surface,rgba(130,145,170,.04));min-width:0}.qm-metric-label,.qm-detail-facts span{display:block;color:var(--text-dim);font-size:11px;font-weight:650;margin-bottom:7px}.qm-metric-value{font-size:17px;font-weight:750;overflow-wrap:anywhere}.qm-metric-sub{font-size:11px;color:var(--text-dim);margin-top:7px}.qm-detail-layout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.qm-detail-card-title{font-weight:800;font-size:14px;margin-bottom:15px}.qm-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.qm-detail-facts strong{font-size:13px;font-weight:650;overflow-wrap:anywhere}.qm-detail-barcode{margin:14px 0 18px;border:1px solid var(--border);border-radius:12px;padding:13px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.qm-detail-barcode svg{flex:0 1 200px}.qm-detail-barcode strong{font-size:12px}.qm-detail-barcode .mono{font-size:12px;color:var(--text-dim);margin-top:5px}.qm-detail-notice{border:1px solid var(--border);padding:12px 15px;border-radius:10px;margin-bottom:15px;font-size:12px;color:var(--text-dim)}@media(max-width:850px){.qm-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:570px){.qm-detail-metrics,.qm-detail-layout{grid-template-columns:1fr}.qm-detail-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.qm-detail-header{padding:14px!important}.qm-identity h3{font-size:20px}}
