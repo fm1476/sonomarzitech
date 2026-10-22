@@ -1211,6 +1211,60 @@ function deleteVehicle(id){
   renderVehicles();
 }
 
+function openFleetAssignmentModal(vehicleId){
+ const v=vehicleById(vehicleId);
+ if(!v||!can('fleet_vehicle_edit')||!canSeeVehicle(v)){toast('You cannot change this vehicle assignment.',true);return;}
+ const people=STATE.personnel.map(p=>({id:p.id,label:p.name}));
+ const units=(STATE.pm?.refData?.units||[]).map(u=>({id:u,label:u}));
+ const box=document.getElementById('modalBox');box.className='modal fleet-assign-modal';
+ box.innerHTML='<div class="modal-head"><div><small class="fleet-detail-eyebrow">FLEET / CUSTODY</small><h3>Assign '+escapeHtml(v.unitNumber)+'</h3><span>Manage the current vehicle custodian</span></div><button class="modal-close" id="mClose" aria-label="Close">&times;</button></div>'+
+ '<div class="modal-body fleet-assign-body"><div class="fleet-assignment-current"><small>CURRENT ASSIGNMENT</small><strong>'+escapeHtml(v.assignedToType?assignmentLabel(v):'Unassigned')+'</strong><span>'+escapeHtml(v.status)+'</span></div>'+
+ '<h4>Assign this vehicle to</h4><div class="fleet-assign-choices" role="group" aria-label="Recipient type">'+
+ '<button type="button" data-fleet-assign="person">Person</button><button type="button" data-fleet-assign="unit">Unit / Team</button><button type="button" data-fleet-assign="none">Unassigned</button></div>'+
+ '<div class="form-row"><label for="fleetAssignTarget">Recipient</label><select id="fleetAssignTarget"></select></div>'+
+ '<p class="fleet-assignment-notice" id="fleetAssignSummary" role="status" aria-live="polite"></p></div>'+
+ '<div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="fleetSaveAssignment">Save Assignment</button></div>';
+ openModal();
+ let type=v.assignedToType==='person'||v.assignedToType==='unit'?v.assignedToType:'none';
+ const select=box.querySelector('#fleetAssignTarget'),recipientRow=select.closest('.form-row');
+ const choose=(next)=>{
+   type=next;
+   const options=type==='person'?people:type==='unit'?units:[];
+   select.innerHTML=options.map(o=>'<option value="'+escapeHtml(o.id)+'">'+escapeHtml(o.label)+'</option>').join('');
+   if(options.some(o=>o.id===v.assignedTo))select.value=v.assignedTo;
+   recipientRow.hidden=type==='none';
+   box.querySelectorAll('[data-fleet-assign]').forEach(b=>{const on=b.dataset.fleetAssign===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
+   refresh();
+ };
+ const refresh=()=>{
+   const options=type==='person'?people:type==='unit'?units:[];
+   const recipient=options.find(o=>o.id===select.value);
+   const valid=type==='none'||!!recipient;
+   box.querySelector('#fleetAssignSummary').textContent=type==='none'?
+     'This vehicle will be marked unassigned. Existing history is retained.':
+     valid?'Assign '+v.unitNumber+' to '+recipient.label+'. The change will appear in the activity log.':
+     'No recipients available for this assignment type.';
+   box.querySelector('#fleetSaveAssignment').disabled=!valid;
+ };
+ box.querySelectorAll('[data-fleet-assign]').forEach(b=>b.onclick=()=>choose(b.dataset.fleetAssign));
+ select.onchange=refresh;
+ box.querySelector('#mClose').onclick=closeModal;
+ box.querySelector('#mCancel').onclick=closeModal;
+ box.querySelector('#fleetSaveAssignment').onclick=()=>{
+   const options=type==='person'?people:type==='unit'?units:[];
+   const target=type==='none'?null:select.value;
+   if(!can('fleet_vehicle_edit')||!canSeeVehicle(v)||type!=='none'&&!options.some(o=>o.id===target)){toast('Choose a valid vehicle assignment.',true);return;}
+   const before=assignmentLabel(v);
+   v.assignedToType=type==='none'?null:type;
+   v.assignedTo=target;
+   const after=assignmentLabel(v);
+   logActivity(v.unitNumber+' assignment changed from '+before+' to '+after+'.','vehicle',v.id);
+   persist();toast('Vehicle assignment updated.');renderVehicleDetailModal(v.id);
+   if(ACTIVE_VIEW==='fleet-vehicles')renderVehicles();
+ };
+ choose(type);
+}
+
 /* ---------- Vehicle detail: overview / inspections / maintenance / equipment / activity ---------- */
 let VEH_DETAIL_TAB = 'overview';
 
@@ -1321,12 +1375,7 @@ function renderVehDetailTabContent(v){
       if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
     });
     document.getElementById('fleetStartInspection')?.addEventListener('click',()=>openNewInspectionModal(v.id));
-    document.getElementById('fleetAssignFromDetail')?.addEventListener('click',()=>{
-      openVehicleModal(v.id);
-      const picker=document.getElementById('fAssignType');
-      picker?.focus();
-      picker?.scrollIntoView({block:'center'});
-    });
+    document.getElementById('fleetAssignFromDetail')?.addEventListener('click',()=>openFleetAssignmentModal(v.id));
     document.getElementById('fleetGoInspections')?.addEventListener('click',()=>{VEH_DETAIL_TAB='inspections';renderVehicleDetailModal(v.id);});
     document.getElementById('fleetGoMaintenance')?.addEventListener('click',()=>{VEH_DETAIL_TAB='maintenance';renderVehicleDetailModal(v.id);});
     const editFromDetailBtn = document.getElementById('btnEditFromDetail');
@@ -1345,7 +1394,8 @@ function renderVehDetailTabContent(v){
         <td>${i.bodyDamage ? `<span class="badge badge-overdue">Damage noted</span>` : `<span class="badge badge-available">Clean</span>`}</td>
         <td><button class="btn btn-sm btn-outline" data-view-insp="${i.id}">View</button></td>
       </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No inspections recorded for this vehicle yet.</td></tr>`;
-    body.innerHTML = `<table><thead><tr><th>Date/Time</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    body.classList.add('fleet-history-workspace');
+    body.innerHTML = `<div class="fleet-history-intro"><strong>Inspection history</strong><span>${list.length} recorded inspection${list.length===1?'':'s'}</span></div><table><thead><tr><th>Date/Time</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
     document.querySelectorAll('[data-view-insp]').forEach(b=>b.addEventListener('click', ()=>viewInspectionDetail(b.dataset.viewInsp)));
 
   } else if(VEH_DETAIL_TAB==='maintenance'){
@@ -1366,6 +1416,7 @@ function renderVehDetailTabContent(v){
         ${canLog ? `<button class="btn btn-sm btn-primary" id="btnLogMaint">${ICONS.plus} Log Maintenance</button>` : ''}
         ${canSchedule ? `<button class="btn btn-sm btn-outline" id="btnScheduleMaint">${ICONS.plus} Schedule Maintenance</button>` : ''}
       </div>
+      <div class="fleet-history-intro"><strong>Maintenance history</strong><span>${list.length} recorded service item${list.length===1?'':'s'}</span></div>
       <table><thead><tr><th>Type</th><th>Date</th><th>Vendor</th><th>Cost</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
     `;
     const logBtn = document.getElementById('btnLogMaint');
@@ -1398,6 +1449,17 @@ function renderVehDetailTabContent(v){
     if(!v.photos) v.photos = [];
     const canManage = can('fleet_vehicle_edit');
     body.innerHTML = photoManagerHtml(v.photos, 'fleetVeh', canManage);
+    body.classList.add('fleet-photo-workspace');
+    const uploadZone=body.querySelector('#fleetVehPhotoDropZone');
+    if(uploadZone){
+      uploadZone.setAttribute('role','button');uploadZone.setAttribute('tabindex','0');
+      uploadZone.setAttribute('aria-label','Upload vehicle photos');
+      const title=uploadZone.querySelector('div');
+      if(title)title.textContent='Add vehicle photos';
+      uploadZone.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){event.preventDefault();uploadZone.click();}
+      });
+    }
     wirePhotoManager('vehDetailBody', v.photos, 'fleetVeh', canManage, (action)=>{
       logActivity(`${action==='add'?'Added a photo to':action==='remove'?'Removed a photo from':'Updated a photo description on'} ${v.unitNumber}.`, "vehicle", v.id);
       persist();
@@ -2700,5 +2762,11 @@ if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')
 if(typeof document!=='undefined'&&!document.getElementById('fleet-inspection-maintenance-polish')){
  const style=document.createElement('style');style.id='fleet-inspection-maintenance-polish';
  style.textContent='.fleet-inspection-workspace{max-width:890px!important;width:min(890px,calc(100vw - 28px))!important}.fleet-inspection-workspace .fleet-inspection-body{max-width:730px!important;padding:20px!important;box-sizing:border-box}.fleet-inspection-heading{border-top:1px solid var(--border);padding-top:19px;margin:21px 0 13px}.fleet-inspection-heading:first-child{border:0;padding-top:0;margin-top:0}.fleet-inspection-heading h4,.fleet-maintenance-heading h4{font-weight:800;font-size:15px;margin:0 0 5px}.fleet-inspection-heading p,.fleet-maintenance-heading p{margin:0;color:var(--text-dim);font-size:12px}.fleet-inspection-checklist{border-radius:13px;overflow:hidden}.fleet-inspection-summary,.fleet-maintenance-summary{margin:18px 0 8px;border-left:3px solid #4b86d7;border-radius:9px;background:rgba(54,118,224,.1);padding:14px 16px;font-size:13px;line-height:1.5}.fleet-inspection-alert{border-left-color:#f0a144;background:rgba(240,161,68,.13)}.fleet-maintenance-workspace{max-width:760px!important;width:min(760px,calc(100vw - 28px))!important}.fleet-maintenance-workspace .fleet-maintenance-body{padding:20px 24px!important}.fleet-maintenance-heading{margin-bottom:18px}.fleet-maintenance-workspace .form-row textarea,.fleet-inspection-workspace .form-row textarea{display:block;min-height:84px;width:100%;box-sizing:border-box}@media(max-width:580px){.fleet-inspection-workspace .fleet-inspection-body,.fleet-maintenance-workspace .fleet-maintenance-body{padding:13px!important}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-final-polish-style')){
+ const style=document.createElement('style');style.id='fleet-final-polish-style';
+ style.textContent='.fleet-assign-modal{max-width:720px!important;width:min(720px,calc(100vw - 28px))!important}.fleet-assign-modal .modal-head h3{font-size:22px;margin:5px 0}.fleet-assign-modal .modal-head span{font-size:12px;color:var(--text-dim)}.fleet-assign-body{padding:22px 26px!important}.fleet-assignment-current{display:flex;flex-direction:column;gap:7px;padding:17px;margin-bottom:23px;border:1px solid var(--border);border-radius:13px;background:rgba(100,140,190,.08)}.fleet-assignment-current small{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--text-dim)}.fleet-assignment-current strong{font-size:18px}.fleet-assignment-current span{font-size:12px;color:var(--text-dim)}.fleet-assign-body h4{font-size:14px;margin:0 0 12px}.fleet-assign-choices{display:flex;gap:9px;margin-bottom:17px;flex-wrap:wrap}.fleet-assign-choices button{border-radius:10px;padding:11px 16px;border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;cursor:pointer}.fleet-assign-choices button.active{background:rgba(54,118,224,.18);border-color:#4b86d7;color:#98c2ff}.fleet-assignment-notice{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px;border-radius:8px;font-size:13px;line-height:1.55}.fleet-photo-workspace [id=fleetVehPhotoDropZone]{border-radius:14px!important;background:rgba(54,118,224,.075)!important;border-color:#5c8dc9!important;transition:background .15s ease}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:hover{background:rgba(54,118,224,.13)!important}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:focus-visible{outline:3px solid #85b7ff;outline-offset:3px}.fleet-photo-workspace .civil-photo-card{border-radius:12px;overflow:hidden}.fleet-history-intro{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;border-radius:12px;background:rgba(96,140,193,.075);padding:14px 17px;margin-bottom:14px}.fleet-history-intro strong{font-size:14px}.fleet-history-intro span{font-size:12px;color:var(--text-dim)}.fleet-history-workspace table{width:100%}@media(max-width:560px){.fleet-assign-body{padding:14px!important}.fleet-assign-choices button{flex:1}}';
  document.head.appendChild(style);
 }
