@@ -1,3 +1,4 @@
+import { personnelSafeTemplate } from "./lib/workspace-template.mjs";
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
 import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, AGENCY_PERSON_ORGANIZATION_QUERY, canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
@@ -5765,7 +5766,7 @@ async function getWorkspace(client, auth, event) {
     role_ids: roleIds,
     mfa_policy: workspaceAuth.mfaPolicy,
     records: workspaceRecords,
-    template: schedulingSafeTemplate(templateResult.rows[0]?.empty_state || {},workspaceAuth.admin),
+    template: personnelSafeTemplate(schedulingSafeTemplate(templateResult.rows[0]?.empty_state || {},workspaceAuth.admin),workspaceAuth.admin),
     tenant: tenantResult.rows[0],
     agency: agencyResult.rows[0]
   });
