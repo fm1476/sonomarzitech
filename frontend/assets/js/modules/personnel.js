@@ -4841,7 +4841,7 @@ function openShiftFormModal(existing){
   const overrideRoot=document.getElementById('fShiftOverrides');
   const syncOverrideCounts=()=>{
     const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({
-      id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',
+      id:row.dataset.categoryId,name:staffingRowLabel(row),
       count:Number(row.querySelector('[data-staffing-count]').value)||1
     }));
     overrideRoot.querySelectorAll('[data-staff-override]').forEach(card=>{
@@ -4853,8 +4853,8 @@ function openShiftFormModal(existing){
   };
   document.getElementById('fShiftAddOverride').onclick=()=>{
     syncOverrideCounts();
-    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value||'Operational position',count:Number(row.querySelector('[data-staffing-count]').value)||1}));
-    if(!base.length){toast('Add operational positions first.',true);return;}
+    const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:staffingRowLabel(row),count:Number(row.querySelector('[data-staffing-count]').value)||1}));
+    if(!base.length){toast('Add a Rank or Skill staffing requirement before defining different staffing for a day.',true);return;}
     overrideRoot.insertAdjacentHTML('beforeend',staffingOverrideCard({type:'weekday',value:'5'},base));
   };
   overrideRoot.addEventListener('change',e=>{
