@@ -44,3 +44,25 @@ assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',u
 assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'patrol-officer',unitId:'patrol'},auth,new Map([['patrol-officer','patrol']])),false);
 assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'dispatch'},auth,new Map([['dispatcher',null]])),false,'Conflicting unit mapping must deny even when record claims Dispatch');
 console.log('Runtime Personnel scope predicate negative cases passed.');
+
+// Execute the signed-URL organizational guard, not just a source-pattern assertion.
+const attachmentStart=source.indexOf('async function fieldTrainingAttachmentScopeAllowed(');
+const attachmentEnd=source.indexOf('async function attachmentReadAllowed(',attachmentStart);
+assert.ok(attachmentStart>=0 && attachmentEnd>attachmentStart);
+const attachmentSandbox={
+  loadPersonnelScope:async()=>dispatchScope,
+  collectionFromRecordKey:key=>{const decoded=JSON.parse(key);return {collection:decoded[0].join('.'),itemId:decoded[1]};},
+  canAccessOrganizationalRecord
+};
+vm.createContext(attachmentSandbox);
+vm.runInContext(source.slice(attachmentStart,attachmentEnd),attachmentSandbox);
+const key=(collection,id)=>JSON.stringify([collection.split('.'),id]);
+const member={tenantId:'tenant',agencyId:'agency',personId:'manager'};
+const enrollment={trainee_user:'trainee-user'};
+const attachmentClient=async records=>({query:async(query)=>query.includes('suite_memberships')?{rows:[{person_id:'person-dispatch'}]}:{rows:records}});
+const dispatchRow={key:key('pm.records','dispatch'),value:{personId:'person-dispatch',unitId:'dispatch'}};
+const patrolRow={key:key('personnel','conflict'),value:{id:'person-dispatch',unitId:'patrol'}};
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,enrollment),true);
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow,patrolRow]),member,enrollment),false,'Conflicting unit rows must block signed URL access');
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([{...dispatchRow,value:{personId:'person-dispatch',unitId:'patrol'}}]),member,enrollment),false);
+console.log('Signed URL runtime organizational access checks passed.');
