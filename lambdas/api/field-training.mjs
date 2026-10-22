@@ -1,4 +1,5 @@
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
 import {
   response,
   resolveWorkspaceMembership,
@@ -112,6 +113,23 @@ async function ftLoadOrgScope(client, ctx) {
 async function ftOrgMembers(client, ctx, members) {
   const scope=await ftLoadOrgScope(client,ctx);
   if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id)),personByUser:new Map(members.map(m=>[m.user_id,String(m.person_id||'')]))};
+  // Prefer validated multi-assignments when the canonical schema is installed.
+  const canonical=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
+    to_regclass('suite_organization_nodes') AS nodes`);
+  if(canonical.rows[0]?.assignments && canonical.rows[0]?.nodes) {
+    const personByUser=new Map(members.map(m=>[m.user_id,String(m.person_id||'')]));
+    const allowed=new Set();
+    for(const member of members) {
+      const personId=String(member.person_id||'');
+      if(!personId)continue;
+      const result=await client.query(PERSON_ORGANIZATION_QUERY,[ctx.tenantId,ctx.agencyId,personId]);
+      if(authorizedPersonFromAssignments(scope,result.rows,{
+        tenantId:ctx.tenantId,agencyId:ctx.agencyId,personId,actorPersonId:ctx.personId
+      }))allowed.add(member.user_id);
+    }
+    return {scope,allowed,personByUser};
+  }
+  // Transitional compatibility for tenants without installed canonical schema.
   const records=await client.query(
     `SELECT key,value FROM suite_records
       WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
