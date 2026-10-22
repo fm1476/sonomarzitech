@@ -28,3 +28,11 @@ Canonical UUID grants cannot prove legacy-unit isolation while canonical rollout
 | Exports | Authorized rows only | Hidden subjects, totals and identifiers | Restricted live test pending |
 
 Record allowed/denied HTTP outcomes and response bodies through a supported authenticated test facility; UI absence alone is insufficient. Recheck after fixes. Never record authentication secrets. Current Cloud Browser session verified Demo PD and System Admin plus Platform Admin roles, so it is only an administrator baseline, not isolation evidence.
+
+## Live SES failure and connected regression
+
+Operator's IAM-controlled invocation of /workspace for the stored SES Cognito subject returned HTTP 200 with role_1792682993431, empty Personnel template arrays, but all shared and HR personnel rows including Patrol and ordering IDs. The stored membership was active, non-platform-admin, with selected canonical Dispatch UUID grants and rollout disabled. This proves remaining server-side disclosure after the template fix.
+
+Root cause: resolveWorkspaceMembership omitted authenticated auth.userId. Personnel scope lookup received an undefined user ID, missed the configured grant and used pre-rollout legacy behavior. The fix preserves the authenticated actor ID and fails closed if absent. Explicit selected UUID grants now use canonical assignment evaluation for that actor while unconfigured account defaults continue to depend solely on agency rollout. No rollout record is modified.
+
+scripts/verify-workspace-identity-scope.mjs executes the actual membership resolver, scope loader, canonical evaluator and Personnel filter together, checking Dispatch allow, Patrol/unassigned deny, ordering suppression, missing-actor denial and separation of explicit UUID scopes from agency rollout. A rerun of the live SES response and browser/search/export/attachment/Field Training/Patrol tests remains required after deploying this fix. No release signoff.
