@@ -3065,6 +3065,13 @@ function staffingCategoryName(record,id){return (record?.staffingRequirements||[
 function staffingBreakdownHtml(summary){
   return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
 }
+function effectiveStaffingRequirements(shift,date){
+  const base=shift.staffingRequirements||[];
+  const rule=(shift.staffingOverrides||[]).find(r=>r.type==='date'&&r.value===date)||
+    (shift.staffingOverrides||[]).find(r=>r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
+  if(!rule)return base;
+  return base.map(r=>({...r,count:Object.prototype.hasOwnProperty.call(rule.counts||{},r.id)?Number(rule.counts[r.id]):r.count})).filter(r=>r.count>0);
+}
 function shiftStaffingSummary(shift,date){
   const assigned=STATE.pm.scheduleAssignments.filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
   const coverage=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
@@ -4571,13 +4578,6 @@ function openCoverageDetailModal(coverage){
   document.getElementById('mCancel').onclick=closeModal;
 }
 
-function effectiveStaffingRequirements(shift,date){
-  const base=shift.staffingRequirements||[];
-  const rule=(shift.staffingOverrides||[]).find(r=>r.type==='date'&&r.value===date)||
-    (shift.staffingOverrides||[]).find(r=>r.type==='weekday'&&Number(r.value)===new Date(date+'T12:00:00').getDay());
-  if(!rule)return base;
-  return base.map(r=>({...r,count:Object.prototype.hasOwnProperty.call(rule.counts||{},r.id)?Number(rule.counts[r.id]):r.count})).filter(r=>r.count>0);
-}
 function staffingOverrideCard(rule={},base=[]){
   const id=rule.id||'rule'+Date.now()+Math.random().toString(36).slice(2,8);
   return `<div class="pm-staff-override-card" data-staff-override data-id="${escapeHtml(id)}">
