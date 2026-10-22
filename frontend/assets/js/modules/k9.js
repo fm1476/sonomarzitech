@@ -29,7 +29,13 @@ function defaultRefDataK9(){
     statuses: [...K9_STATUSES], retirementDispositions: [...RETIREMENT_DISPOSITIONS],
   };
 }
-const MONTHLY_TRAINING_HOURS_STANDARD = 16; // USPCA / NPCA / NAPWDA industry maintenance-training standard
+const MONTHLY_TRAINING_HOURS_STANDARD = 16; // default; each agency may configure its own standard
+const k9ComplianceDefaults=()=>({monthlyTrainingHours:16,trainingAlertPercent:100,certificationWarningDays:45,certificationValidityDays:{}});
+function k9Compliance(){return STATE.k9.complianceSettings||(STATE.k9.complianceSettings=k9ComplianceDefaults());}
+function k9TrainingRequirement(){return Number(k9Compliance().monthlyTrainingHours)||MONTHLY_TRAINING_HOURS_STANDARD;}
+function k9CertificationValidity(type){return Number(k9Compliance().certificationValidityDays?.[type])||365;}
+function k9CertExpiration(start,type){const date=new Date(String(start)+'T12:00:00');if(!Number.isFinite(date.getTime()))return '';return fmt(addDays(date,k9CertificationValidity(type)));}
+
 
 /* Illustrated placeholder avatars (original, breed-colored line art - not photos) so the
    roster doesn't show a generic paw-print icon for every dog. */
@@ -213,6 +219,7 @@ function buildData(){
     deployments: seedDeploymentsK9(),
     incidents: seedIncidentsK9(),
     refData: defaultRefDataK9(),
+    complianceSettings: k9ComplianceDefaults(),
     notifications: [],
     notifySettings: { certExpiringRoleId:"role_admin", vaccineDueRoleId:"role_admin", trainingComplianceRoleId:"role_admin", retirementRoleId:"role_admin" },
     activity: [],
@@ -222,6 +229,9 @@ function buildData(){
 
 function migrateData(){
   if(!STATE.k9.refData) STATE.k9.refData = defaultRefDataK9();
+  if(!STATE.k9.complianceSettings)STATE.k9.complianceSettings=k9ComplianceDefaults();
+  if(!STATE.k9.complianceSettings.certificationValidityDays)STATE.k9.complianceSettings.certificationValidityDays={};
+  if(STATE.k9.complianceSettings.trainingAlertPercent===undefined)STATE.k9.complianceSettings.trainingAlertPercent=100;
   if(!STATE.k9.notifications) STATE.k9.notifications = [];
   if(!STATE.k9.notifySettings) STATE.k9.notifySettings = { certExpiringRoleId: STATE.roles[0].id, vaccineDueRoleId: STATE.roles[0].id, trainingComplianceRoleId: STATE.roles[0].id, retirementRoleId: STATE.roles[0].id };
   if(!STATE.k9.incidents) STATE.k9.incidents = [];
@@ -338,14 +348,14 @@ function recalcNotifications(){
       }
     });
     const hrs = monthlyTrainingHours(k.id, 1);
-    if(hrs < MONTHLY_TRAINING_HOURS_STANDARD){
-      upcoming.push({type:"training_compliance", entityId:k.id, message:`${k.name} has logged ${hrs} of ${MONTHLY_TRAINING_HOURS_STANDARD} required maintenance-training hours in the last 30 days.`, recipientRoleId: STATE.k9.notifySettings.trainingComplianceRoleId});
+    if(hrs < k9TrainingRequirement()*(Number(k9Compliance().trainingAlertPercent??100)/100)){
+      upcoming.push({type:"training_compliance", entityId:k.id, message:`${k.name} has logged ${hrs} of ${k9TrainingRequirement()} required maintenance-training hours in the last 30 days.`, recipientRoleId: STATE.k9.notifySettings.trainingComplianceRoleId});
     }
   });
   STATE.k9.certifications.forEach(c=>{
     if(c.expirationDate){
       const days = daysBetween(fmt(today), c.expirationDate);
-      if(days<=45){
+      if(days<=Number(k9Compliance().certificationWarningDays ?? 45)){
         const k = k9For(c.k9Id);
         if(k) upcoming.push({type:"cert_expiring", entityId:c.id, message:`${k.name}'s ${c.certType} certification ${days<0?'expired '+Math.abs(days)+' days ago':'expires in '+days+' days'} (${c.expirationDate}).`, recipientRoleId: STATE.k9.notifySettings.certExpiringRoleId});
       }
@@ -425,7 +435,7 @@ function renderWidget(id){
   }
   if(id==='stat_below_compliance'){
     const belowCompliance = STATE.k9.notifications.filter(n=>n.type==="training_compliance").length;
-    return `<button class="stat-card dash-clickable" data-nav-dest="k9-training"><div class="label">${ICONS.award} <span>Below Training Compliance</span></div><div class="value" style="color:${belowCompliance?'var(--red)':'var(--heading)'}">${belowCompliance}</div><div class="delta ${belowCompliance?'warn':'ok'}">${MONTHLY_TRAINING_HOURS_STANDARD}hrs/mo standard</div></button>`;
+    return `<button class="stat-card dash-clickable" data-nav-dest="k9-training"><div class="label">${ICONS.award} <span>Below Training Compliance</span></div><div class="value" style="color:${belowCompliance?'var(--red)':'var(--heading)'}">${belowCompliance}</div><div class="delta ${belowCompliance?'warn':'ok'}">${k9TrainingRequirement()}hrs/mo standard</div></button>`;
   }
   if(id==='stat_open_incidents'){
     const openIncidents = STATE.k9.incidents.filter(i=>i.reviewStatus==="Pending").length;
@@ -435,11 +445,11 @@ function renderWidget(id){
   if(id==='list_training_compliance'){
     const complianceRows = STATE.k9.k9s.filter(k=>k.status!=="Retired" && k.status!=="Deceased").map(k=>{
       const hrs = monthlyTrainingHours(k.id,1);
-      const pct = Math.min(100, Math.round((hrs/MONTHLY_TRAINING_HOURS_STANDARD)*100));
+      const pct = Math.min(100, Math.round((hrs/k9TrainingRequirement())*100));
       return {k, hrs, pct};
     });
-    const rows = complianceRows.map(({k,hrs,pct})=>`<tr><td>${k9Link(k.id)}</td><td>${escapeHtml(personName(k.handlerId))}</td><td>${hrs} / ${MONTHLY_TRAINING_HOURS_STANDARD}</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;max-width:140px;"><div style="width:${pct}%;height:100%;background:${pct>=100?'var(--green)':(pct>=50?'var(--gold)':'var(--red)')};"></div></div><span style="font-size:11.5px;color:var(--text-dim);">${pct}%</span></div></td></tr>`).join('');
-    return `<div class="panel"><div class="panel-head"><h2>Monthly Maintenance-Training Compliance</h2><span class="hint">USPCA / NPCA / NAPWDA standard: ${MONTHLY_TRAINING_HOURS_STANDARD} hrs / month per team</span></div><div class="panel-body" style="padding:0;"><table><thead><tr><th>K9</th><th>Handler</th><th>Hours (30d)</th><th>Compliance</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    const rows = complianceRows.map(({k,hrs,pct})=>`<tr><td>${k9Link(k.id)}</td><td>${escapeHtml(personName(k.handlerId))}</td><td>${hrs} / ${k9TrainingRequirement()}</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;max-width:140px;"><div style="width:${pct}%;height:100%;background:${pct>=100?'var(--green)':(pct>=50?'var(--gold)':'var(--red)')};"></div></div><span style="font-size:11.5px;color:var(--text-dim);">${pct}%</span></div></td></tr>`).join('');
+    return `<div class="panel"><div class="panel-head"><h2>Monthly Maintenance-Training Compliance</h2><span class="hint">USPCA / NPCA / NAPWDA standard: ${k9TrainingRequirement()} hrs / month per team</span></div><div class="panel-body" style="padding:0;"><table><thead><tr><th>K9</th><th>Handler</th><th>Hours (30d)</th><th>Compliance</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
   if(id==='chart_deployments_by_type'){
     return `<div class="panel"><div class="panel-head"><h2>Deployments by Type</h2></div><div class="panel-body"><div class="chart-box" style="height:220px;"><canvas id="chartDeployType"></canvas></div></div></div>`;
@@ -643,7 +653,7 @@ function renderRoster(){
 
   const cards = rows.map(k=>{
     const hrs = monthlyTrainingHours(k.id,1);
-    const compliant = k.status==="Retired"||k.status==="Deceased" ? null : hrs>=MONTHLY_TRAINING_HOURS_STANDARD;
+    const compliant = k.status==="Retired"||k.status==="Deceased" ? null : hrs>=k9TrainingRequirement();
     const photo = k.photoDataUrl
       ? `<img src="${k.photoDataUrl}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;">`
       : `<div style="width:72px;height:72px;border-radius:50%;background:var(--lightgray);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;"><span style="width:32px;height:32px;display:inline-block;">${ICONS.pawprint}</span></div>`;
@@ -663,7 +673,7 @@ function renderRoster(){
         <div style="color:var(--text-dim);margin-bottom:4px;">Skills</div>
         <div style="margin-bottom:10px;">${k.skills.map(sk=>`<span class="badge badge-role" style="margin:1px;">${escapeHtml(sk)}</span>`).join(' ')||'—'}</div>
         <div style="color:var(--text-dim);margin-bottom:4px;">Training (30d)</div>
-        <div>${compliant===null ? '—' : (compliant ? `<span style="color:var(--green);font-weight:700;">&#10003; ${hrs}h / ${MONTHLY_TRAINING_HOURS_STANDARD}h</span>` : `<span style="color:var(--red);font-weight:700;">${hrs}h / ${MONTHLY_TRAINING_HOURS_STANDARD}h</span>`)}</div>
+        <div>${compliant===null ? '—' : (compliant ? `<span style="color:var(--green);font-weight:700;">&#10003; ${hrs}h / ${k9TrainingRequirement()}h</span>` : `<span style="color:var(--red);font-weight:700;">${hrs}h / ${k9TrainingRequirement()}h</span>`)}</div>
       </div>
       ${(canEdit || canDelete) ? `
       <div class="cell-actions" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);justify-content:flex-start;">
@@ -916,7 +926,7 @@ function renderK9DetailTabContent(k){
   if(K9_DETAIL_TAB==='overview'){
     const age = k.dob ? Math.floor(daysBetween(k.dob, fmt(new Date()))/365) : null;
     const hours=monthlyTrainingHours(k.id,1);
-    const percent=MONTHLY_TRAINING_HOURS_STANDARD>0?Math.round(hours/MONTHLY_TRAINING_HOURS_STANDARD*100):100;
+    const percent=k9TrainingRequirement()>0?Math.round(hours/k9TrainingRequirement()*100):100;
     const certs=STATE.k9.certifications.filter(c=>c.k9Id===k.id);
     const nearing=certs.filter(c=>{const d=c.expirationDate||c.expiryDate||c.expires;return d&&d<=fmt(addDays(new Date(),30));});
     const review=percent<100||nearing.length>0;
@@ -924,7 +934,7 @@ function renderK9DetailTabContent(k){
       <div class="k9-record-hero"><div><small>K9 / OPERATIONAL PROFILE</small><h2>${escapeHtml(k.name)}</h2><p>${escapeHtml(k.breed||'Breed unrecorded')} · ${escapeHtml(k.tagId||'Unit unrecorded')} · Handler: ${escapeHtml(personName(k.handlerId))}</p></div><span class="badge ${statusBadgeClassK9(k.status)}">${escapeHtml(k.status)}</span></div>
       <div class="k9-record-metrics">
         <div><small>PRIMARY HANDLER</small><strong>${escapeHtml(personName(k.handlerId))}</strong><span>${escapeHtml(k.unit||'Unit unrecorded')}</span></div>
-        <div><small>MONTHLY TRAINING</small><strong>${hours.toFixed(1)} <em>/ ${MONTHLY_TRAINING_HOURS_STANDARD} hrs</em></strong><span>${percent>=100?'Training standard met':'Below monthly standard'}</span></div>
+        <div><small>MONTHLY TRAINING</small><strong>${hours.toFixed(1)} <em>/ ${k9TrainingRequirement()} hrs</em></strong><span>${percent>=100?'Training standard met':'Below monthly standard'}</span></div>
         <div><small>CERTIFICATION ADVISORIES</small><strong>${nearing.length}</strong><span>Expired or expiring soon</span></div>
         <div><small>SKILLS / DISCIPLINES</small><strong>${(k.skills||[]).length}</strong><span>Recorded specialties</span></div>
       </div>
@@ -953,8 +963,8 @@ function renderK9DetailTabContent(k){
       <div class="panel k9-compliance-panel" style="box-shadow:none;margin-top:18px;"><div class="panel-head"><h2>Maintenance-Training Compliance</h2></div>
         <div class="panel-body">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="flex:1;height:10px;background:var(--border);border-radius:5px;overflow:hidden;max-width:260px;"><div style="width:${Math.min(100,Math.round((monthlyTrainingHours(k.id,1)/MONTHLY_TRAINING_HOURS_STANDARD)*100))}%;height:100%;background:${monthlyTrainingHours(k.id,1)>=MONTHLY_TRAINING_HOURS_STANDARD?'var(--green)':'var(--red)'};"></div></div>
-            <span style="font-size:13px;font-weight:700;">${monthlyTrainingHours(k.id,1)} / ${MONTHLY_TRAINING_HOURS_STANDARD} hrs (last 30 days)</span>
+            <div style="flex:1;height:10px;background:var(--border);border-radius:5px;overflow:hidden;max-width:260px;"><div style="width:${Math.min(100,Math.round((monthlyTrainingHours(k.id,1)/k9TrainingRequirement())*100))}%;height:100%;background:${monthlyTrainingHours(k.id,1)>=k9TrainingRequirement()?'var(--green)':'var(--red)'};"></div></div>
+            <span style="font-size:13px;font-weight:700;">${monthlyTrainingHours(k.id,1)} / ${k9TrainingRequirement()} hrs (last 30 days)</span>
           </div>
         </div>
       </div>
@@ -1276,6 +1286,7 @@ function openK9CertFormModal(k){
         <div class="form-row"><label>Certification Date</label><input type="date" id="fCertDate" value="${fmt(new Date())}"></div>
         <div class="form-row"><label>Result</label><select id="fCertResult"><option value="Passed">Passed</option><option value="Failed">Failed</option></select></div>
       </div>
+      <div class="form-row"><label for="fCertExpires">Expiration Date</label><input type="date" id="fCertExpires" value="${k9CertExpiration(fmt(new Date()),STATE.k9.refData.certTypes[0])}"><p class="hint">Suggested from agency policy; authorized users can change this date before recording.</p></div>
       <div class="form-2col">
         <div class="form-row"><label>Score (optional)</label><input type="number" id="fCertScore" placeholder="e.g. 88"></div>
         <div class="form-row"><label>Certifying Official</label><input type="text" id="fCertOfficial" placeholder="Master Trainer name"></div>
@@ -1287,13 +1298,16 @@ function openK9CertFormModal(k){
   openModal();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
+  const refreshK9CertExpiry=()=>{document.getElementById('fCertExpires').value=k9CertExpiration(document.getElementById('fCertDate').value,document.getElementById('fCertType').value);};
+  document.getElementById('fCertDate').addEventListener('change',refreshK9CertExpiry);
+  document.getElementById('fCertType').addEventListener('change',refreshK9CertExpiry);
   document.getElementById('mSave').onclick = ()=>{
     const result = document.getElementById('fCertResult').value;
     const certDate = document.getElementById('fCertDate').value;
     const actualK9 = fromDetail ? k : k9For(document.getElementById('fCertK9').value);
     const newC = {
       id:'k9cert'+Date.now(), k9Id:actualK9.id, certType: document.getElementById('fCertType').value, certifyingBody: document.getElementById('fCertBody').value,
-      certDate, expirationDate: result==='Passed' ? fmt(addDays(new Date(certDate), 365)) : null,
+      certDate, expirationDate: result==='Passed' ? document.getElementById('fCertExpires').value||null : null,
       certifyingOfficial: document.getElementById('fCertOfficial').value.trim(),
       passFail: result, score: document.getElementById('fCertScore').value ? Number(document.getElementById('fCertScore').value) : null,
       notes: document.getElementById('fCertNotes').value.trim(),
@@ -1519,7 +1533,7 @@ function renderTraining(){
   const canManage = can('k9_training_manage');
   const complianceRows = STATE.k9.k9s.filter(k=>k.status!=="Retired" && k.status!=="Deceased").map(k=>{
     const hrs = monthlyTrainingHours(k.id,1);
-    return {k, hrs, compliant: hrs>=MONTHLY_TRAINING_HOURS_STANDARD};
+    return {k, hrs, compliant: hrs>=k9TrainingRequirement()};
   });
   const list = STATE.k9.trainingSessions.slice().sort((a,b)=>b.date.localeCompare(a.date));
   const rows = list.map(t=>`
@@ -1529,9 +1543,9 @@ function renderTraining(){
   document.getElementById('view-k9-training').innerHTML = `
     ${!canManage ? lockedNote("You're viewing training records in read-only mode.") : ""}
     <div class="panel" style="margin-bottom:16px;">
-      <div class="panel-head"><h2>Monthly Maintenance-Training Compliance</h2><span class="hint">Industry standard: ${MONTHLY_TRAINING_HOURS_STANDARD} hrs / month per K9 team (USPCA / NPCA / NAPWDA)</span></div>
+      <div class="panel-head"><h2>Monthly Maintenance-Training Compliance</h2><span class="hint">Industry standard: ${k9TrainingRequirement()} hrs / month per K9 team (USPCA / NPCA / NAPWDA)</span></div>
       <div class="panel-body" style="padding:0;"><table><thead><tr><th>K9</th><th>Hours (30d)</th><th>Status</th></tr></thead><tbody>
-      ${complianceRows.map(({k,hrs,compliant})=>`<tr><td>${k9Link(k.id)}</td><td>${hrs} / ${MONTHLY_TRAINING_HOURS_STANDARD}</td><td>${compliant?'<span class="badge badge-available">Compliant</span>':'<span class="badge badge-missing">Below Standard</span>'}</td></tr>`).join('')}
+      ${complianceRows.map(({k,hrs,compliant})=>`<tr><td>${k9Link(k.id)}</td><td>${hrs} / ${k9TrainingRequirement()}</td><td>${compliant?'<span class="badge badge-available">Compliant</span>':'<span class="badge badge-missing">Below Standard</span>'}</td></tr>`).join('')}
       </tbody></table></div>
     </div>
     <div class="toolbar"><div></div>${canManage ? `<button class="btn btn-primary" id="btnLogTrainingQuick">${ICONS.plus} Log Training Session</button>` : ''}</div>
@@ -1764,7 +1778,7 @@ function renderIndividualK9Report(){
       <div><div class="k">Total Training Hours on File</div><div class="v">${totalHours}</div></div>
       <div><div class="k">Bite Incidents on File</div><div class="v">${bites}</div></div>
       <div><div class="k">Active Certifications</div><div class="v">${certs.filter(c=>c.expirationDate && c.expirationDate>=fmt(new Date())).length}</div></div>
-      <div><div class="k">30-Day Training Compliance</div><div class="v">${monthlyTrainingHours(k.id,1)} / ${MONTHLY_TRAINING_HOURS_STANDARD} hrs</div></div>
+      <div><div class="k">30-Day Training Compliance</div><div class="v">${monthlyTrainingHours(k.id,1)} / ${k9TrainingRequirement()} hrs</div></div>
     </div>
     <div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Deployment History</h2></div>
       <div class="panel-body" style="padding:0;"><table><thead><tr><th>Date</th><th>Type</th><th>Location</th><th>Outcome</th></tr></thead><tbody>
@@ -1887,6 +1901,7 @@ function renderAdmin(){
   const tabs = [];
   if(canManage){
     Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label]));
+    tabs.push(['compliance','Compliance Standards']);
     tabs.push(['notifications','Notification Routing']);
   }
   if(can('k9_bulk_import')) tabs.push(['bulkImport','Bulk Import']);
@@ -1906,6 +1921,7 @@ function renderAdmin(){
 function renderAdminTabBody(){
   const body = document.getElementById('adminTabBodyK9');
   if(SIMPLE_LIST_TABS[ADMIN_TAB]) renderSimpleListTab(body, ADMIN_TAB);
+  else if(ADMIN_TAB==='compliance') renderK9ComplianceSettings(body);
   else if(ADMIN_TAB==='notifications') renderNotificationRoutingTab(body);
   else if(ADMIN_TAB==='bulkImport') renderBulkImportTab(body, 'k9');
   else if(ADMIN_TAB==='audit') renderPlatformAuditLogTab(body);
@@ -1950,6 +1966,47 @@ function renderSimpleListTab(body, key){
   }));
 }
 
+function renderK9ComplianceSettings(body){
+  const policy=k9Compliance();
+  const types=STATE.k9.refData.certTypes||[];
+  body.innerHTML=`
+    <div class="panel k9-compliance-admin">
+      <div class="panel-head"><h2>K9 Compliance Standards</h2><span class="hint">Agency configuration</span></div>
+      <div class="panel-body">
+        <p class="hint">These standards drive readiness indicators and alerts, not scheduling eligibility. Changes do not rewrite existing certification expiration dates.</p>
+        <div class="form-2col">
+          <div class="form-row"><label for="k9MonthlyStandard">Required maintenance-training hours (rolling 30 days)</label><input type="number" id="k9MonthlyStandard" min="1" max="744" step="0.5" value="${policy.monthlyTrainingHours}"></div>
+          <div class="form-row"><label for="k9CertWarning">Certification expiration warning (days ahead)</label><input type="number" id="k9CertWarning" min="0" max="365" step="1" value="${policy.certificationWarningDays??45}"></div>
+        </div>
+        <div class="form-row"><label for="k9TrainingAlert">Training compliance alert threshold (% of monthly standard)</label><input type="number" id="k9TrainingAlert" min="1" max="100" step="1" value="${policy.trainingAlertPercent??100}"><p class="hint">Default 100%: generate a training shortfall alert whenever the rolling 30-day total falls below the required hours.</p></div>
+        <h3 style="margin:22px 0 8px;font-size:16px;">Certification validity by type</h3>
+        <p class="hint">New passed certifications receive a suggested expiration using these intervals. The recording user may override it.</p>
+        <div class="k9-compliance-types">${types.map((type,index)=>`<div class="form-row"><label for="k9Validity_${index}">${escapeHtml(type)} (days)</label><input id="k9Validity_${index}" data-cert-validity="${index}" type="number" min="1" max="3650" step="1" value="${k9CertificationValidity(type)}"></div>`).join('')}</div>
+        <button type="button" class="btn btn-primary" id="saveK9Compliance">Save Compliance Standards</button>
+      </div>
+    </div>`;
+  body.querySelector('#saveK9Compliance').onclick=()=>{
+    const hours=Number(body.querySelector('#k9MonthlyStandard').value);
+    const days=Number(body.querySelector('#k9CertWarning').value);
+    const trainingAlert=Number(body.querySelector('#k9TrainingAlert').value);
+    if(!Number.isFinite(hours)||hours<1||hours>744||Math.round(hours*2)!==hours*2){toast('Training hours must be between 1 and 744, in half-hour increments.',true);return;}
+    if(!Number.isSafeInteger(days)||days<0||days>365){toast('Warning days must be between 0 and 365.',true);return;}
+    if(!Number.isSafeInteger(trainingAlert)||trainingAlert<1||trainingAlert>100){toast('Training alert threshold must be 1 to 100%.',true);return;}
+    const validity={};
+    for(const input of body.querySelectorAll('[data-cert-validity]')){
+      const amount=Number(input.value);
+      if(!Number.isSafeInteger(amount)||amount<1||amount>3650){toast('Certification validity must be 1 to 3650 whole days.',true);return;}
+      validity[types[Number(input.dataset.certValidity)]]=amount;
+    }
+    policy.monthlyTrainingHours=hours;
+    policy.trainingAlertPercent=trainingAlert;
+    policy.certificationWarningDays=days;
+    policy.certificationValidityDays=validity;
+    logActivity('Updated K9 agency compliance standards.','k9_admin');
+    persist();recalcNotifications();toast('K9 compliance standards saved.');renderAdminTabBody();
+  };
+}
+
 function renderNotificationRoutingTab(body){
   const roleOpts = (sel)=>STATE.roles.map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${escapeHtml(r.name)}</option>`).join('');
   body.innerHTML = `
@@ -1982,7 +2039,7 @@ function startK9Module(){
   renderNav();
   switchView('k9-dashboard');
 }
-window.K9 = { start: startK9Module, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openK9Detail, k9For, monthlyTrainingHours, MONTHLY_TRAINING_HOURS_STANDARD };
+window.K9 = { start: startK9Module, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openK9Detail, k9For, monthlyTrainingHours, get MONTHLY_TRAINING_HOURS_STANDARD(){return k9TrainingRequirement();} };
 
 })();
 
@@ -1998,3 +2055,5 @@ if(typeof document!=='undefined'&&!document.getElementById('k9-modern-editor-sty
  st.textContent='.k9-modern-editor{max-width:960px!important;overflow:hidden!important}.k9-modern-editor>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto!important;overscroll-behavior-y:auto!important;padding:24px!important}.k9-edit-section{border-top:1px solid var(--border);padding-top:18px;margin:22px 0 14px}.k9-edit-section:first-of-type{border-top:0;margin-top:6px}.k9-edit-section h4{font-size:15px;font-weight:800;margin:0 0 5px}.k9-edit-section p{font-size:12px;color:var(--text-dim);margin:0}.k9-modern-editor textarea{display:block;min-height:82px;width:100%;box-sizing:border-box}@media(max-width:540px){.k9-modern-editor>.modal-body{padding:13px!important}}';
  document.head.append(st);
 }
+
+if(typeof document!=='undefined'&&!document.getElementById('k9-compliance-admin-style')){const style=document.createElement('style');style.id='k9-compliance-admin-style';style.textContent='.k9-compliance-admin{border-radius:14px;overflow:hidden}.k9-compliance-admin .panel-body{padding:22px!important}.k9-compliance-types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:15px 0 22px}.k9-compliance-types .form-row{border:1px solid var(--border);border-radius:11px;padding:13px;background:rgba(100,145,195,.045)}@media(max-width:650px){.k9-compliance-types{grid-template-columns:1fr}}';document.head.append(style);}
