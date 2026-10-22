@@ -108,9 +108,9 @@ WHERE a.tenant_id=$1 AND a.agency_id=$2
 
 /**
  * The presence of empty schema tables is NOT evidence that migration finished.
- * Organizational grants are only switched to canonical resolution once an
- * agency-scoped explicit activation record is set by a reviewed migration.
- * A missing activation table/row always stays on the legacy guarded path.
+ * Agency-wide defaults switch only through explicit activation. An existing
+ * selected UUID grant can independently opt that actor into canonical assignment
+ * resolution; missing-grant callers never supply this opt-in scope.
  */
 export const CANONICAL_ORGANIZATION_ACTIVE_QUERY = `
 SELECT EXISTS (
@@ -120,7 +120,7 @@ SELECT EXISTS (
 ) AS enabled
 `;
 
-export async function canonicalOrganizationReady(client, tenantId, agencyId) {
+export async function canonicalOrganizationReady(client, tenantId, agencyId, explicitScope = null) {
   if (!tenantId || !agencyId) return false;
   const existing = await client.query(`
     SELECT to_regclass('suite_person_organization_assignments') AS assignments,
@@ -129,6 +129,13 @@ export async function canonicalOrganizationReady(client, tenantId, agencyId) {
   `);
   const row=existing.rows[0];
   if(!row?.assignments || !row?.nodes || !row?.rollout)return false;
+  // A configured UUID grant opts this actor into canonical resolution only.
+  // Missing-grant defaults still depend exclusively on agency rollout because
+  // those callers do not supply an explicit scope. Never match display labels.
+  const normalized=normalizeOrganizationalScope(explicitScope);
+  const ids=[...normalized.unitIds,...normalized.divisionIds,...normalized.workGroupIds];
+  if(normalized.mode==='selected' && ids.length &&
+     ids.every(id=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))return true;
   const active=await client.query(CANONICAL_ORGANIZATION_ACTIVE_QUERY,[tenantId,agencyId]);
   return active.rows[0]?.enabled === true;
 }
