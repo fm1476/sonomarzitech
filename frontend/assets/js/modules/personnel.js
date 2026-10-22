@@ -646,7 +646,7 @@ function openCustomizeDashboardModal(){
         <span style="flex:1;font-size:13px;">${escapeHtml(w.label)}</span>
       </div>`).join('')}
     </div>
-    <div class="modal-foot"><span id="pmStepProgress" class="hint" aria-live="polite">Step 1 of 3</span><button class="btn btn-outline" id="mCancel">Cancel</button><button type="button" class="btn btn-outline" id="pmStepBack" style="display:none">Back</button><button type="button" class="btn btn-primary" id="pmStepNext">Continue</button><button class="btn btn-primary" id="mSave" style="display:none">Save</button></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Save</button></div>
   `;
   openModal();
   document.getElementById('mClose').onclick = closeModal;
