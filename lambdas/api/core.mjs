@@ -1805,6 +1805,8 @@ async function filterOfficerWorkspaceRecords(
     }
 
     const { collection, itemId } = parsed;
+    // Respect module licensing before any scope-specific aggregate projection.
+    if (!moduleLicensed(workspaceAuth.enabledModules, collection)) continue;
     if(personnelScope && PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
       // Collection-wide ordering and legacy aggregate arrays can reveal hidden identities.
       if(itemId==='$order')continue;
