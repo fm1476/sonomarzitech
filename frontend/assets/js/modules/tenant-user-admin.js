@@ -49,6 +49,7 @@ const TenantUserAdmin=(()=>{
   async function openOrganizationalAccess(user,tenant,agencies){
     const agency=agencies.find(a=>a.id===user.agency_id);
     if(!agency){toast('Agency information is unavailable.',true);return;}
+    if(TenantPlatform.current?.agencyId!==user.agency_id){toast('Switch to this agency context before editing its organizational assignments.',true);return;}
     const box=document.getElementById('modalBox');box.className='modal modal-xl';
     const units=[...new Map((STATE.pm?.records||[]).filter(r=>r.unitId).map(r=>[String(r.unitId),{id:String(r.unitId),name:String(r.unitName||r.unitId)}])).values()];
     const groups=(STATE.pm?.scheduleWorkGroups||[]).filter(g=>g.active!==false).map(g=>({id:String(g.id),name:String(g.name)}));
@@ -78,6 +79,9 @@ const TenantUserAdmin=(()=>{
       const existing=(data.assignments||[]).find(a=>a.user_id===user.user_id)?.scope||{mode:'none'};
       mode.value=['none','self','selected'].includes(existing.mode)?existing.mode:'none';
       box.querySelectorAll('[data-org-kind]').forEach(input=>{input.checked=(existing[input.dataset.orgKind]||[]).includes(input.value)});
+      const undisplayed=['divisionIds','unitIds','workGroupIds'].some(kind=>(existing[kind]||[]).some(id=>!box.querySelectorAll('[data-org-kind="'+kind+'"]').length || ![...box.querySelectorAll('[data-org-kind="'+kind+'"]')].some(x=>x.value===id)));
+      if(undisplayed){box.querySelector('#orgError').textContent='Some existing organizational assignments are not available in the current catalogs. Saving is disabled to avoid accidentally removing them.';box.querySelector('#orgSave').disabled=true;}
+
       preview();
     } catch(error){box.querySelector('#orgError').textContent=error.message;box.querySelector('#orgSave').disabled=true;return;}
     box.querySelector('#orgSave').onclick=async()=>{
