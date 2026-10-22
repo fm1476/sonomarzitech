@@ -811,3 +811,26 @@ button,a,input,select,textarea{-webkit-tap-highlight-color:transparent;}
   background-position:right 8px center;
   background-size:18px 18px;
 }
+
+/* Fleet dialogs: a single vertical scroll owner avoids wheel trapping in cards. */
+.modal-overlay.open .modal:has(#vehDetailBody),
+.modal-overlay.open .modal:has(.fleet-edit-body),
+.modal-overlay.open .modal.fleet-inspection-workspace,
+.modal-overlay.open .modal.fleet-maintenance-workspace,
+.modal-overlay.open .modal.fleet-assign-modal{
+ display:flex;flex-direction:column;overflow:hidden!important;
+ max-height:calc(100dvh - 36px);
+}
+.modal:has(#vehDetailBody)>.modal-body,
+.modal:has(.fleet-edit-body)>.modal-body,
+.modal.fleet-inspection-workspace>.modal-body,
+.modal.fleet-maintenance-workspace>.modal-body,
+.modal.fleet-assign-modal>.modal-body{
+ flex:1 1 auto;min-height:0;overflow-y:auto!important;
+ overscroll-behavior-y:auto!important;
+}
+.modal:has(#vehDetailBody) .fleet-detail-card,
+.modal:has(#vehDetailBody) .fleet-metric,
+.modal:has(#vehDetailBody) .panel-body{
+ max-height:none;overflow-y:visible;
+}

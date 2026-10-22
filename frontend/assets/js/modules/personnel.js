@@ -771,7 +771,16 @@ function renderRecords(){
 
   document.getElementById('view-pm-records').innerHTML = `
     ${!canEdit ? lockedNote("You're viewing personnel records in read-only mode.") : ""}
-    <div class="toolbar">
+    <div class="pm-roster-intro">
+      <div><small>PERSONNEL / SERVICE RECORDS</small><h2>Personnel directory</h2><p>Find people, review assignments, and manage the records that drive staffing and readiness.</p></div>
+      <div class="pm-roster-counter"><strong>${rows.length}</strong><span>matching records</span></div>
+    </div>
+    <div class="pm-roster-metrics">
+      <div><small>Total records</small><strong>${STATE.pm.records.length}</strong></div>
+      <div><small>Active employment</small><strong>${STATE.pm.records.filter(r=>/active|full.time|probation/i.test(r.employmentStatus||'')).length}</strong></div>
+      <div><small>Units represented</small><strong>${new Set(STATE.pm.records.map(r=>r.unitId).filter(Boolean)).size}</strong></div>
+    </div>
+    <div class="toolbar pm-roster-toolbar">
       <div class="filters">
         <input type="text" id="recSearch" title="Filters the roster below as you type, matching name, badge number, or employee ID" placeholder="Search name, badge, employee ID..." style="width:230px;" value="${escapeHtml(f.q)}">
         <select id="recRank" title="Filter personnel records to a single rank"><option ${f.rank==='All'?'selected':''}>All</option>${STATE.pm.refData.ranks.map(r=>`<option ${f.rank===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
@@ -961,6 +970,19 @@ function openRecordEditModal(personId){
     </div>
   `;
   openModal();
+  const editBox=document.getElementById('modalBox');
+  editBox.classList.add('pm-modern-editor');
+  const editBody=editBox.querySelector('.modal-body');
+  editBody?.classList.add('pm-modern-editor-body');
+  editBody?.querySelectorAll(':scope > .panel').forEach((panel,index)=>{
+    panel.classList.add('pm-modern-section');
+    const title=panel.querySelector('.panel-head h2');
+    if(title)title.textContent=String(index+1).padStart(2,'0')+' · '+title.textContent;
+  });
+  const intro=document.createElement('div');
+  intro.className='pm-editor-intro';
+  intro.textContent='Employee service record · Staffing, identity, qualifications and career history';
+  editBody?.prepend(intro);
   wirePhotoDropZone('fPmPhoto', (dataUrl)=>{ pendingPhoto = dataUrl; });
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1093,7 +1115,43 @@ function renderRecordDetailTabContent(r){
 
   if(RECORD_DETAIL_TAB==='overview'){
     body.innerHTML = `
+      <div class="pm-record-identity">
+        <div class="pm-record-identity-copy">
+          <small>PERSONNEL / SERVICE RECORD</small>
+          <h3>${escapeHtml(personName(personId))}</h3>
+          <span>${escapeHtml(r.rank||'Rank not recorded')} · ${escapeHtml(r.unitId||'Unit not recorded')}</span>
+        </div>
+        <span class="badge ${statusBadgeClass(r.employmentStatus)}">${escapeHtml(r.employmentStatus||'Unknown')}</span>
+      </div>
+      <div class="pm-record-stats">
+        <div class="pm-record-stat"><small>Badge</small><strong>${escapeHtml(r.badgeNumber||'Not recorded')}</strong><span>Public safety identifier</span></div>
+        <div class="pm-record-stat"><small>Rank</small><strong>${escapeHtml(r.rank||'Not recorded')}</strong><span>Current classification</span></div>
+        <div class="pm-record-stat"><small>Assignment</small><strong>${escapeHtml(r.assignment||'Unassigned')}</strong><span>${escapeHtml(r.unitId||'Unit not recorded')}</span></div>
+        <div class="pm-record-stat"><small>Hire date</small><strong>${escapeHtml(r.hireDate||'Not recorded')}</strong><span>Employment timeline</span></div>
+      </div>
+      <div class="pm-record-panels">
+        <section class="pm-record-card">
+          <h4>Current assignment</h4>
+          <div class="pm-record-facts">
+            <div><small>Agency</small><strong>${escapeHtml(r.agency||'Not recorded')}</strong></div>
+            <div><small>Unit</small><strong>${escapeHtml(r.unitId||'Not recorded')}</strong></div>
+            <div><small>Assignment</small><strong>${escapeHtml(r.assignment||'Not recorded')}</strong></div>
+            <div><small>Supervisors</small><strong>${(r.supervisorIds||[]).length?r.supervisorIds.map(sid=>escapeHtml(personName(sid))).join(', '):'Not recorded'}</strong></div>
+          </div>
+        </section>
+        <section class="pm-record-card">
+          <h4>Service milestones</h4>
+          <div class="pm-record-facts">
+            <div><small>Employee ID</small><strong>${escapeHtml(r.employeeId||'Not recorded')}</strong></div>
+            <div><small>Hire date</small><strong>${escapeHtml(r.hireDate||'Not recorded')}</strong></div>
+            <div><small>Sworn date</small><strong>${escapeHtml(r.swornDate||'Not recorded')}</strong></div>
+            <div><small>Termination date</small><strong>${escapeHtml(r.terminationDate||'Not applicable')}</strong></div>
+          </div>
+        </section>
+      </div>
+
       ${(canEdit || canDocs) ? `<div style="margin-bottom:14px;display:flex;gap:8px;">${canEdit?`<button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Record</button>`:''}${canDocs?`<button class="btn btn-sm btn-outline" id="btnUploadPhoto">${ICONS.camera} ${r.photoDataUrl?'Change':'Attach'} Photo</button>`:''}</div>` : ''}
+      <details class="pm-record-extra"><summary>Additional personnel information</summary>
       <div class="detail-grid">
         <div><div class="k">Agency</div><div class="v">${escapeHtml(r.agency)}</div></div>
         <div><div class="k">Employee ID</div><div class="v">${(r.employeeId?escapeHtml(r.employeeId):'—')}</div></div>
@@ -1114,6 +1172,7 @@ function renderRecordDetailTabContent(r){
         <div><div class="k">Special Skills</div><div class="v">${r.specialSkills.length?r.specialSkills.map(escapeHtml).join(', '):'—'}</div></div>
         <div><div class="k">Education</div><div class="v">${r.education.length?r.education.map(e=>`${escapeHtml(e.degree)}, ${escapeHtml(e.institution)} (${e.year})`).join('; '):'—'}</div></div>
       </div>
+      </details>
     `;
     const editBtn = document.getElementById('btnEditFromDetail');
     if(editBtn) editBtn.addEventListener('click', ()=>openRecordEditModal(personId));
@@ -1242,6 +1301,29 @@ function renderRecordDetailTabContent(r){
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Every change to key fields (rank, unit, employment status) is captured here with who made the change and the before/after values. Every other action on this record is also in the Platform Audit Log under Admin.</div>
       <table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
+  if(RECORD_DETAIL_TAB!=='overview'){
+    body.classList.add('pm-record-tab-workspace');
+    const titles={
+      promotions:['Career progression','Promotion and classification history'],
+      disciplinary:['Disciplinary actions','Access-controlled personnel documentation'],
+      medical:['Medical history','Sensitive personnel records, restricted by role'],
+      training:['Training and certifications','Courses, outcomes and recertification'],
+      inquiries:['Professional standards inquiries','Documented inquiries and outcomes'],
+      documents:['Personnel documents','Supporting documents and records'],
+      lodd:['Line-of-duty information','Restricted contingency records'],
+      history:['Change history','Auditable changes to record information']
+    };
+    const heading=titles[RECORD_DETAIL_TAB]||['Personnel information','Employee records'];
+    const title=document.createElement('div');title.className='pm-record-tab-intro';
+    const h=document.createElement('h3');h.textContent=heading[0];
+    const p=document.createElement('p');p.textContent=heading[1];
+    title.append(h,p);body.prepend(title);
+    body.querySelectorAll('table').forEach(table=>{
+      if(table.closest('.pm-record-table-scroll'))return;
+      const wrap=document.createElement('div');wrap.className='pm-record-table-scroll';
+      table.before(wrap);wrap.append(table);
+    });
+  }
 }
 
 function openPhotoUploadModal(r){
@@ -1251,7 +1333,7 @@ function openPhotoUploadModal(r){
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         ${r.photoDataUrl ? `<img src="${r.photoDataUrl}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">` : `<div style="width:64px;height:64px;border-radius:50%;background:var(--lightgray);"></div>`}
-        <input type="file" id="fPhotoFile" accept="image/*">
+        <div class="pm-photo-upload-actions"><button type="button" class="btn btn-outline" id="pmChoosePhoto">Upload Photo</button><span id="pmPhotoSelected">No new photo selected</span><input type="file" id="fPhotoFile" accept="image/*" class="pm-photo-file-input"></div>
       </div>
       <div style="font-size:11px;color:var(--text-dim);">Stored as a small resized thumbnail in this prototype's data record.</div>
     </div>
@@ -1261,8 +1343,11 @@ function openPhotoUploadModal(r){
   let pending = r.photoDataUrl;
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('pmChoosePhoto')?.addEventListener('click',()=>document.getElementById('fPhotoFile')?.click());
   document.getElementById('fPhotoFile').addEventListener('change', (e)=>{
     const file = e.target.files[0]; if(!file) return;
+    if(!file.type.startsWith('image/')){toast('Select a photo file.',true);e.target.value='';return;}
+    document.getElementById('pmPhotoSelected').textContent=file.name;
     const img = new Image(); const reader = new FileReader();
     reader.onload = (ev)=>{ img.onload = ()=>{
       const canvas = document.createElement('canvas'); const size = 160;
@@ -5257,3 +5342,21 @@ window.PM = { start: startPmModule, buildData, migrateData, recalcNotifications,
 
 })();
 
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-record-modern-style')){
+ const st=document.createElement('style');st.id='pm-record-modern-style';
+ st.textContent='.pm-record-identity{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}.pm-record-identity-copy small{display:block;font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}.pm-record-identity-copy h3{margin:5px 0;font-size:22px}.pm-record-identity-copy span{font-size:12px;color:var(--text-dim)}.pm-record-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pm-record-stat,.pm-record-card{border-radius:13px;border:1px solid var(--border);padding:16px;background:rgba(105,143,187,.055);min-width:0}.pm-record-stat small,.pm-record-facts small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-record-stat strong{font-size:17px;display:block;overflow-wrap:anywhere}.pm-record-stat span{display:block;font-size:11px;color:var(--text-dim);margin-top:5px}.pm-record-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pm-record-card h4{font-size:14px;font-weight:800;margin:0 0 14px}.pm-record-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pm-record-facts strong{font-size:13px;overflow-wrap:anywhere}.pm-record-extra{margin-top:17px;border:1px solid var(--border);border-radius:12px;padding:14px}.pm-record-extra summary{font-weight:750;cursor:pointer}.pm-record-extra .detail-grid{margin-top:17px}.modal:has(#recDetailBody){overflow:hidden!important}.modal:has(#recDetailBody)>.modal-body{overflow-y:auto!important;overscroll-behavior-y:auto!important;flex:1 1 auto;min-height:0}@media(max-width:820px){.pm-record-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.pm-record-stats,.pm-record-panels{grid-template-columns:1fr}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-full-modernization-style')){
+ const st=document.createElement('style');st.id='pm-full-modernization-style';
+ st.textContent='.pm-modern-editor{max-width:1130px!important}.pm-modern-editor-body{padding:22px 26px!important;max-width:1070px;margin:0 auto;width:100%;box-sizing:border-box}.pm-editor-intro{background:rgba(55,125,218,.085);border-left:4px solid #4b86d7;border-radius:9px;padding:16px;font-size:13px;font-weight:700;margin-bottom:20px}.pm-modern-section{border:1px solid var(--border)!important;border-radius:14px!important;overflow:visible!important;margin-bottom:17px!important;background:rgba(104,140,185,.04)!important}.pm-modern-section>.panel-head{border-radius:13px 13px 0 0!important;padding:14px 18px!important;background:rgba(75,134,215,.09)!important}.pm-modern-section>.panel-head h2{font-size:15px!important;font-weight:800!important}.pm-modern-section>.panel-body{padding:18px!important;max-height:none!important;overflow:visible!important}.pm-record-tab-intro{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;border-radius:12px;background:rgba(100,140,195,.085);padding:17px 19px;margin-bottom:17px}.pm-record-tab-intro h3{font-size:16px;font-weight:800;margin:0}.pm-record-tab-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-record-table-scroll{max-width:100%;overflow-x:auto;overflow-y:visible;border:1px solid var(--border);border-radius:11px}.pm-record-table-scroll table{width:100%;min-width:580px;border-collapse:collapse}.pm-record-tab-workspace .btn{border-radius:9px}.pm-record-tab-workspace .panel{border-radius:12px;overflow:visible}.pm-photo-upload-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.pm-photo-file-input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important}.pm-photo-upload-actions #pmChoosePhoto{border-radius:10px;font-weight:700;padding:11px 16px}.pm-photo-upload-actions #pmPhotoSelected{font-size:12px;color:var(--text-dim)}@media(max-width:650px){.pm-modern-editor-body{padding:13px!important}.pm-record-tab-intro{padding:13px}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-roster-modern-style')){
+ const st=document.createElement('style');st.id='pm-roster-modern-style';
+ st.textContent='.pm-roster-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:15px}.pm-roster-intro small{font-size:10px;letter-spacing:.11em;color:var(--text-dim);font-weight:800}.pm-roster-intro h2{font-size:23px;margin:4px 0}.pm-roster-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-roster-counter{background:rgba(59,134,215,.1);border-radius:13px;padding:14px 20px;display:flex;flex-direction:column;min-width:130px}.pm-roster-counter strong{font-size:24px}.pm-roster-counter span{font-size:11px;color:var(--text-dim)}.pm-roster-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}.pm-roster-metrics>div{background:rgba(100,140,190,.05);border:1px solid var(--border);border-radius:12px;padding:14px 17px}.pm-roster-metrics small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-roster-metrics strong{font-size:20px}.pm-roster-toolbar{border:1px solid var(--border);background:rgba(85,126,173,.04);border-radius:12px;padding:12px!important}.pm-roster-toolbar .btn{border-radius:9px}@media(max-width:600px){.pm-roster-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.pm-roster-metrics>div{padding:11px}.pm-roster-intro h2{font-size:19px}}';
+ document.head.append(st);
+}
