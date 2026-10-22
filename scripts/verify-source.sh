@@ -49,6 +49,7 @@ node scripts/verify-scheduling-access.mjs
 node scripts/verify-organizational-access.mjs
 node scripts/verify-organizational-access-admin.mjs
 node scripts/verify-organizational-access-ui.mjs
+node scripts/verify-personnel-org-scope.mjs
 node scripts/verify-scheduling-api.mjs
 node scripts/verify-scheduling-module.mjs
 node scripts/verify-dashboard-navigation.mjs
