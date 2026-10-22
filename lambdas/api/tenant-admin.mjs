@@ -757,6 +757,77 @@ async function tenantAdminDbApi(client, auth, body) {
     if (admin.error) return admin.error;
   }
 
+  // Organizational access grants are explicit agency-local assignments; these
+  // endpoints do not activate record authorization until the module APIs enforce it.
+  if (action === 'list_organizational_access' || action === 'set_organizational_access') {
+    const agencyId = String(body?.agencyId || body?.agency_id || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(String(tenantId || '')) ||
+        !/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(agencyId)) {
+      return response(400,{success:false,error:'Valid tenant and agency IDs are required.'});
+    }
+    const agency = await client.query(
+      'SELECT id FROM suite_agencies WHERE id=$1 AND tenant_id=$2 LIMIT 1',
+      [agencyId,tenantId]
+    );
+    if (!agency.rows.length) return response(404,{success:false,error:'Agency not found in tenant.'});
+    if (!auth.platformAdmin) {
+      const agencyAdmin=await client.query(
+        `SELECT 1 FROM suite_memberships WHERE tenant_id=$1 AND agency_id=$2
+           AND user_id=$3 AND status='active' AND 'role_admin'=ANY(role_ids)`,
+        [tenantId,agencyId,auth.userId]
+      );
+      if (!agencyAdmin.rows.length) return response(403,{success:false,error:'System Admin access in this agency is required.'});
+    }
+    await client.query(`CREATE TABLE IF NOT EXISTS suite_organizational_access (
+      tenant_id UUID NOT NULL,
+      agency_id UUID NOT NULL,
+      user_id UUID NOT NULL,
+      scope JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by UUID NOT NULL,
+      PRIMARY KEY(tenant_id,agency_id,user_id)
+    )`);
+    if (action === 'list_organizational_access') {
+      const rows=await client.query(
+        `SELECT g.user_id,g.scope,g.updated_at,g.updated_by
+           FROM suite_organizational_access g
+           JOIN suite_memberships m
+             ON m.tenant_id=g.tenant_id AND m.agency_id=g.agency_id AND m.user_id=g.user_id
+          WHERE g.tenant_id=$1 AND g.agency_id=$2 AND m.status='active'`,
+        [tenantId,agencyId]
+      );
+      return response(200,{success:true,data:{assignments:rows.rows}});
+    }
+    const userId=String(body?.userId || '').trim();
+    const scope=body?.scope;
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(userId) ||
+        !scope || typeof scope !== 'object' || Array.isArray(scope) ||
+        !['none','self','selected'].includes(scope.mode)) {
+      return response(400,{success:false,error:'Valid user and restricted organizational scope required.'});
+    }
+    const validIds=values=>Array.isArray(values)&&values.length<=100&&values.every(v=>typeof v==='string'&&v.length>0&&v.length<=128);
+    if (!['unitIds','divisionIds','workGroupIds'].every(k=>validIds(scope[k]||[]))) {
+      return response(400,{success:false,error:'Organizational assignments must be valid ID lists (maximum 100 each).'});
+    }
+    const member=await client.query(
+      `SELECT 1 FROM suite_memberships WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND status='active'`,
+      [tenantId,agencyId,userId]
+    );
+    if (!member.rows.length) return response(404,{success:false,error:'User is not an active member of this agency.'});
+    const clean={mode:scope.mode,unitIds:[...new Set(scope.unitIds||[])],
+      divisionIds:[...new Set(scope.divisionIds||[])],workGroupIds:[...new Set(scope.workGroupIds||[])]};
+    await client.query(
+      `INSERT INTO suite_organizational_access(tenant_id,agency_id,user_id,scope,updated_by)
+       VALUES($1,$2,$3,$4::jsonb,$5)
+       ON CONFLICT(tenant_id,agency_id,user_id) DO UPDATE SET
+       scope=excluded.scope,updated_at=now(),updated_by=excluded.updated_by`,
+      [tenantId,agencyId,userId,JSON.stringify(clean),auth.userId]
+    );
+    await appendAuditEvent(client,auth,{tenantId,agencyId,module:'User Administration',
+      entityType:'organizational_access',description:'Updated organizational scope for user '+userId});
+    return response(200,{success:true,data:{userId,scope:clean}});
+  }
+
   if (action === 'update_agency_branding') {
     const agencyId = String(body?.agencyId || body?.agency_id || '');
     const branding = body?.branding && typeof body.branding === 'object' ? body.branding : {};
