@@ -1590,7 +1590,25 @@ function openMaintenanceForm(v, isSchedule){
     </div>
   `;
   openModal();
-  wireMaintenanceFormCommon();
+  const maintenanceBox=document.getElementById('modalBox');
+  maintenanceBox.classList.add('fleet-maintenance-workspace');
+  const maintenanceBody=maintenanceBox.querySelector('.modal-body');
+  maintenanceBody?.classList.add('fleet-maintenance-body');
+  const fields=maintenanceBody?.querySelectorAll('.form-row, .form-2col');
+  if(fields?.length){
+    const header=document.createElement('div');
+    header.className='fleet-maintenance-heading';
+    header.innerHTML='<h4>Service details</h4><p>Specify the work and service date before saving.</p>';
+    maintenanceBody.prepend(header);
+    const summary=document.createElement('div');
+    summary.className='fleet-maintenance-summary';summary.setAttribute('aria-live','polite');
+    maintenanceBody.appendChild(summary);
+    const update=()=>{
+      const kind=maintenanceBox.querySelector('#fMType')?.value||'Maintenance';
+      const date=maintenanceBox.querySelector('#fMDate')?.value||'No date';
+      const labor=Number(maintenanceBox.querySelector('#fMLabor')?.value||0);
+      const parts=Number(maintenanceBox.querySelector('#fMParts')?.value||0);
+      summary.textContent=kind+' · '+date+' · Estimated recorded costs: 
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
@@ -1780,7 +1798,48 @@ function openNewInspectionModal(prefillVehicleId){
     document.getElementById('fIFuel').value = v ? v.currentFuelLevel : 100;
   };
   openModal();
+  // Decorate existing inspection controls in place; do not detach them.
+  const inspectionBox=document.getElementById('modalBox');
+  inspectionBox.classList.add('fleet-inspection-workspace');
+  const inspectionBody=inspectionBox.querySelector('.modal-body');
+  inspectionBody?.classList.add('fleet-inspection-body');
+  const inspectionGroups=[
+    ['fIVehicle','01 · Vehicle & inspector','Confirm the vehicle, shift and inspection team'],
+    ['fIMileage','02 · Vehicle readings','Record odometer, fuel and fluids'],
+    ['fIVehCondition','03 · Vehicle condition','Assess condition, cleanliness and damage'],
+    ['fINarrative','04 · Final notes','Document any additional observations']
+  ];
+  inspectionGroups.forEach(([id,title,hint])=>{
+    const field=inspectionBody?.querySelector('#'+id);
+    const row=field?.closest('.form-row, .form-2col');
+    if(!row)return;
+    const section=document.createElement('div');section.className='fleet-inspection-heading';
+    const h=document.createElement('h4');h.textContent=title;
+    const p=document.createElement('p');p.textContent=hint;
+    section.append(h,p);row.before(section);
+  });
+  const checklist=inspectionBody?.querySelector('.panel');
+  if(checklist){
+    const h=checklist.querySelector('.panel-head h2');
+    if(h)h.textContent='03 · Equipment checklist';
+    checklist.classList.add('fleet-inspection-checklist');
+  }
+  const inspectionSummary=document.createElement('div');
+  inspectionSummary.className='fleet-inspection-summary';inspectionSummary.setAttribute('aria-live','polite');
+  inspectionBody?.appendChild(inspectionSummary);
+  const refreshInspectionSummary=()=>{
+    const sel=inspectionBox.querySelector('#fIVehicle');
+    const vehicle=vehicleById(sel?.value);
+    const mileage=inspectionBox.querySelector('#fIMileage')?.value||'Not recorded';
+    const fuel=inspectionBox.querySelector('#fIFuel')?.value||'0';
+    const damaged=inspectionBox.querySelector('#fIBodyDamage')?.checked;
+    inspectionSummary.textContent=(vehicle?.unitNumber||'Vehicle')+' · '+mileage+' miles · '+fuel+'% fuel'+(damaged?' · Body damage flagged':' · No body damage flagged');
+    inspectionSummary.classList.toggle('fleet-inspection-alert',!!damaged);
+  };
+  inspectionBox.addEventListener('change',refreshInspectionSummary);
+  inspectionBox.addEventListener('input',refreshInspectionSummary);
   setMileageDefault();
+  refreshInspectionSummary();
   vSel.addEventListener('change', setMileageDefault);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -2630,5 +2689,2179 @@ window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData
 if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')){
  const style=document.createElement('style');style.id='fleet-modern-style';
  style.textContent='.fleet-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim);margin-bottom:5px}.fleet-detail-title{font-size:23px;margin:0 0 5px}.fleet-detail-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:17px}.fleet-detail-buttons{display:flex;gap:8px;flex-wrap:wrap}.fleet-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.fleet-metric,.fleet-detail-card{border:1px solid var(--border);border-radius:13px;background:rgba(105,143,187,.055);padding:17px;min-width:0}.fleet-metric small,.fleet-facts small{font-size:11px;color:var(--text-dim);display:block;margin-bottom:7px}.fleet-metric strong{font-size:18px;font-weight:800;display:block;overflow-wrap:anywhere}.fleet-metric span{font-size:11px;color:var(--text-dim);display:block;margin-top:6px}.fleet-detail-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fleet-detail-card h4{font-size:14px;margin:0 0 16px;font-weight:800}.fleet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fleet-facts strong{display:block;font-size:13px;overflow-wrap:anywhere}.fleet-edit-body{max-width:1080px;margin:0 auto;padding:22px 25px!important}.fleet-edit-section-heading{border-top:1px solid var(--border);padding-top:18px;margin:20px 0 15px}.fleet-edit-section-heading:first-child{margin-top:0;border-top:0;padding-top:0}.fleet-edit-section-heading h4{font-size:15px;margin:0 0 5px;font-weight:800}.fleet-edit-section-heading p{font-size:12px;color:var(--text-dim);margin:0}@media(max-width:800px){.fleet-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.fleet-detail-metrics,.fleet-detail-panels{grid-template-columns:1fr}.fleet-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.fleet-edit-body{padding:14px!important}}';
+ document.head.appendChild(style);
+}
++(Math.max(0,labor)+Math.max(0,parts)).toFixed(2);
+    };
+    maintenanceBox.addEventListener('change',update);
+    maintenanceBox.addEventListener('input',update);
+    update();
+  }
+  wireMaintenanceFormCommon();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const rec = collectMaintenanceFormData(v.id, isSchedule);
+    STATE.fleet.maintenance.push(rec);
+    logActivity(isSchedule ? `Maintenance scheduled for ${v.unitNumber} on ${rec.date}.` : `Maintenance logged for ${v.unitNumber}: ${rec.notes||rec.type}.`, "maintenance", v.id);
+    if(!isSchedule && v.status==="In Service" && rec.type==="Repair") { /* leave status as-is; explicit OOS is a separate action */ }
+    persist();
+    toast(isSchedule ? 'Maintenance scheduled.' : 'Maintenance logged.');
+    VEH_DETAIL_TAB = 'maintenance';
+    renderVehicleDetailModal(v.id);
+    if(ACTIVE_VIEW==='fleet-dashboard') renderDashboard();
+  };
+}
+
+function openMaintenanceFormGlobal(isSchedule){
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>${isSchedule?'Schedule Maintenance':'Log Maintenance'}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">${maintenanceFormFields(null, isSchedule, true)}</div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${isSchedule?'Schedule':'Save Record'}</button>
+    </div>
+  `;
+  openModal();
+  const maintenanceBox=document.getElementById('modalBox');
+  maintenanceBox.classList.add('fleet-maintenance-workspace');
+  const maintenanceBody=maintenanceBox.querySelector('.modal-body');
+  maintenanceBody?.classList.add('fleet-maintenance-body');
+  const fields=maintenanceBody?.querySelectorAll('.form-row, .form-2col');
+  if(fields?.length){
+    const header=document.createElement('div');
+    header.className='fleet-maintenance-heading';
+    header.innerHTML='<h4>Service details</h4><p>Specify the work and service date before saving.</p>';
+    maintenanceBody.prepend(header);
+    const summary=document.createElement('div');
+    summary.className='fleet-maintenance-summary';summary.setAttribute('aria-live','polite');
+    maintenanceBody.appendChild(summary);
+    const update=()=>{
+      const kind=maintenanceBox.querySelector('#fMType')?.value||'Maintenance';
+      const date=maintenanceBox.querySelector('#fMDate')?.value||'No date';
+      const labor=Number(maintenanceBox.querySelector('#fMLabor')?.value||0);
+      const parts=Number(maintenanceBox.querySelector('#fMParts')?.value||0);
+      summary.textContent=kind+' · '+date+' · Estimated recorded costs: 
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const vehicleId = document.getElementById('fMVehicle').value;
+    const v = vehicleById(vehicleId);
+    const rec = collectMaintenanceFormData(vehicleId, isSchedule);
+    STATE.fleet.maintenance.push(rec);
+    logActivity(isSchedule ? `Maintenance scheduled for ${v.unitNumber} on ${rec.date}.` : `Maintenance logged for ${v.unitNumber}: ${rec.notes||rec.type}.`, "maintenance", v.id);
+    persist();
+    toast(isSchedule ? 'Maintenance scheduled.' : 'Maintenance logged.');
+    closeModal();
+    renderMaintenanceView();
+  };
+}
+
+/* =========================================================================
+   VEHICLE INSPECTIONS
+   ========================================================================= */
+let INSP_FILTER = {vehicle:"All", personnel:"All", dateFrom:"", dateTo:""};
+
+function renderInspections(){
+  const canConduct = can('fleet_inspection_conduct');
+  const canViewAll = can('fleet_inspection_view_all');
+  if(!canViewAll&&!canConduct){
+    document.getElementById('view-fleet-inspections').innerHTML = permissionBlockedView("You don't have permission to view vehicle inspections in this role.");
+    return;
+  }
+  const visibleIds=new Set(visibleVehicles().map(v=>v.id));
+  const filtered = STATE.fleet.inspections.filter(i=>{
+    if(!visibleIds.has(i.vehicleId))return false;
+    if(!canViewAll && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID)return false;
+    const matchVeh = INSP_FILTER.vehicle==="All" || i.vehicleId===INSP_FILTER.vehicle;
+    const matchPerson = INSP_FILTER.personnel==="All" || i.personnelIds.includes(INSP_FILTER.personnel);
+    const d = i.dateTime.slice(0,10);
+    const matchFrom = !INSP_FILTER.dateFrom || d >= INSP_FILTER.dateFrom;
+    const matchTo = !INSP_FILTER.dateTo || d <= INSP_FILTER.dateTo;
+    return matchVeh && matchPerson && matchFrom && matchTo;
+  }).slice().sort((a,b)=>b.dateTime.localeCompare(a.dateTime));
+
+  const rows = filtered.map(i=>{
+    const v = vehicleById(i.vehicleId);
+    return `<tr>
+      <td>${i.dateTime.replace('T',' ')}</td>
+      <td>${vehicleLink(v)}</td>
+      <td>${i.personnelIds.map(pid=>escapeHtml(personName(pid))).join(', ')}</td>
+      <td>${escapeHtml(i.shift)}</td>
+      <td>${i.fuelLevel}%</td>
+      <td>${i.bodyDamage ? `<span class="badge badge-overdue">Damage noted</span>` : `<span class="badge badge-available">Clean</span>`}</td>
+      <td><button class="btn btn-sm btn-outline" data-view-insp="${i.id}">View</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:18px;">No inspections match this filter.</td></tr>`;
+
+  document.getElementById('view-fleet-inspections').innerHTML = `
+    <div class="toolbar">
+      <div class="filters">
+        <select id="inspVehicle"><option value="All">All Vehicles</option>${visibleVehicles().map(v=>`<option value="${v.id}" ${INSP_FILTER.vehicle===v.id?'selected':''}>${escapeHtml(v.unitNumber)}</option>`).join('')}</select>
+        <select id="inspPersonnel"><option value="All">All Personnel</option>${STATE.personnel.map(p=>`<option value="${p.id}" ${INSP_FILTER.personnel===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+        <input type="date" id="inspFrom" value="${INSP_FILTER.dateFrom}" title="From date">
+        <input type="date" id="inspTo" value="${INSP_FILTER.dateTo}" title="To date">
+      </div>
+      ${canConduct ? `<button class="btn btn-primary" id="btnNewInspection">${ICONS.plus} New Inspection</button>` : ""}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr><th>Date/Time</th><th>Vehicle</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-top:8px;">${filtered.length} of ${STATE.fleet.inspections.length} inspections</div>
+  `;
+  ['inspVehicle','inspPersonnel','inspFrom','inspTo'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', e=>{
+      const key = {inspVehicle:'vehicle',inspPersonnel:'personnel',inspFrom:'dateFrom',inspTo:'dateTo'}[id];
+      INSP_FILTER[key] = e.target.value;
+      renderInspections();
+    });
+  });
+  const newBtn = document.getElementById('btnNewInspection');
+  if(newBtn) newBtn.addEventListener('click', ()=>openNewInspectionModal());
+  wireVehicleLinks();
+  document.querySelectorAll('[data-view-insp]').forEach(b=>b.addEventListener('click', ()=>viewInspectionDetail(b.dataset.viewInsp)));
+}
+
+/* ---------- New Inspection: mobile-optimized single-column flow ----------
+   This form is intentionally single-column with large touch targets so it
+   works as-is on a phone browser, standing in for the "mobile application"
+   requirement. A native app would call the same underlying record shape. */
+function openNewInspectionModal(prefillVehicleId){
+  if(!can('fleet_inspection_conduct'))return toast('Your role cannot conduct vehicle inspections.',true);
+  const available=visibleVehicles();
+  if(!available.length)return toast('No vehicles are visible to this role. Check the Fleet vehicle visibility and unit scope abilities.',true);
+  const box = document.getElementById('modalBox');
+  box.className = 'modal modal-wide';
+  const equipRows = EQUIPMENT_CATALOG.map((name,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div style="flex:1;min-width:160px;font-size:13.5px;font-weight:600;">${escapeHtml(name)}</div>
+      <label class="switch"><input type="checkbox" class="insp-equip-present" data-equip-idx="${i}" checked><span class="slider"></span></label>
+      <select class="insp-equip-condition" data-equip-idx="${i}" style="width:140px;">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select>
+    </div>
+  `).join('');
+  box.innerHTML = `
+    <div class="modal-head"><h3>New Vehicle Inspection</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body" style="max-width:520px;margin:0 auto;">
+      <div class="form-row"><label>Vehicle</label>
+        <select id="fIVehicle">${available.map(v=>`<option value="${v.id}" ${prefillVehicleId===v.id?'selected':''}>${escapeHtml(v.unitNumber)} — ${escapeHtml(v.make)} ${escapeHtml(v.model)}</option>`).join('')}</select>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Inspection Date</label><input type="date" id="fIDate" value="${fmt(new Date())}"></div>
+        <div class="form-row"><label>Time</label><input type="time" id="fITime" value="${new Date().toTimeString().slice(0,5)}"></div>
+      </div>
+      <div class="form-row"><label>Shift</label><select id="fIShift">${SHIFTS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      <div class="form-row"><label for="fIPerson">Personnel Performing Inspection</label>
+        <select id="fIPerson">${(can('fleet_inspection_view_all')?STATE.personnel:STATE.personnel.filter(p=>p.id===CURRENT_USER_ID)).map(p=>`<option value="${p.id}" ${CURRENT_USER_ID===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+        ${can('fleet_inspection_view_all')?`<details style="margin-top:10px"><summary>Additional inspection participants</summary>${STATE.personnel.map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" class="insp-person" value="${p.id}" style="width:auto">${escapeHtml(p.name)}</label>`).join('')}</details>`:''}
+      </div>
+      <div class="form-row"><label>Current Mileage</label><input type="number" id="fIMileage" value=""></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Fuel Level (%)</label><input type="number" id="fIFuel" value="100" min="0" max="100"></div>
+        <div class="form-row"><label>Gallons of Fuel Added</label><input type="number" id="fIGallons" value="0" step="0.1"></div>
+      </div>
+      <div class="form-row"><label>Quarts of Oil Added</label><input type="number" id="fIQuarts" value="0" step="0.5"></div>
+
+      <div class="panel" style="box-shadow:none;">
+        <div class="panel-head"><h2>Equipment Condition</h2></div>
+        <div class="panel-body">
+          ${equipRows}
+          <div class="form-row" style="margin-top:10px;"><label>Equipment Comments</label><textarea id="fIEquipComments" rows="2" placeholder="Optional"></textarea></div>
+        </div>
+      </div>
+
+      <div class="form-2col">
+        <div class="form-row"><label>Vehicle Condition</label><select id="fIVehCondition">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div class="form-row"><label>Cleanliness</label><select id="fICleanliness">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-row"><label>Vehicle Condition Comments</label><textarea id="fIConditionComments" rows="2" placeholder="Optional"></textarea></div>
+      <div class="form-row"><label>Cleanliness Comments</label><textarea id="fICleanlinessComments" rows="2" placeholder="Optional"></textarea></div>
+
+      <div class="form-row">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="fIBodyDamage" style="width:auto;">
+          Body damage noted
+        </label>
+      </div>
+      <div class="form-row" id="fIDamageWrap" style="display:none;">
+        <label>Body Damage Comments</label><textarea id="fIDamageComments" rows="2" placeholder="Describe location and extent of damage"></textarea>
+      </div>
+
+      <div class="form-row"><label>Narrative / Comments</label><textarea id="fINarrative" rows="3" placeholder="Anything else worth noting"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">Submit Inspection</button>
+    </div>
+  `;
+  const vSel = document.getElementById('fIVehicle');
+  const setMileageDefault = ()=>{
+    const v = vehicleById(vSel.value);
+    document.getElementById('fIMileage').value = v ? v.mileage : '';
+    document.getElementById('fIFuel').value = v ? v.currentFuelLevel : 100;
+  };
+  openModal();
+  // Decorate existing inspection controls in place; do not detach them.
+  const inspectionBox=document.getElementById('modalBox');
+  inspectionBox.classList.add('fleet-inspection-workspace');
+  const inspectionBody=inspectionBox.querySelector('.modal-body');
+  inspectionBody?.classList.add('fleet-inspection-body');
+  const inspectionGroups=[
+    ['fIVehicle','01 · Vehicle & inspector','Confirm the vehicle, shift and inspection team'],
+    ['fIMileage','02 · Vehicle readings','Record odometer, fuel and fluids'],
+    ['fIVehCondition','03 · Vehicle condition','Assess condition, cleanliness and damage'],
+    ['fINarrative','04 · Final notes','Document any additional observations']
+  ];
+  inspectionGroups.forEach(([id,title,hint])=>{
+    const field=inspectionBody?.querySelector('#'+id);
+    const row=field?.closest('.form-row, .form-2col');
+    if(!row)return;
+    const section=document.createElement('div');section.className='fleet-inspection-heading';
+    const h=document.createElement('h4');h.textContent=title;
+    const p=document.createElement('p');p.textContent=hint;
+    section.append(h,p);row.before(section);
+  });
+  const checklist=inspectionBody?.querySelector('.panel');
+  if(checklist){
+    const h=checklist.querySelector('.panel-head h2');
+    if(h)h.textContent='03 · Equipment checklist';
+    checklist.classList.add('fleet-inspection-checklist');
+  }
+  const inspectionSummary=document.createElement('div');
+  inspectionSummary.className='fleet-inspection-summary';inspectionSummary.setAttribute('aria-live','polite');
+  inspectionBody?.appendChild(inspectionSummary);
+  const refreshInspectionSummary=()=>{
+    const sel=inspectionBox.querySelector('#fIVehicle');
+    const vehicle=vehicleById(sel?.value);
+    const mileage=inspectionBox.querySelector('#fIMileage')?.value||'Not recorded';
+    const fuel=inspectionBox.querySelector('#fIFuel')?.value||'0';
+    const damaged=inspectionBox.querySelector('#fIBodyDamage')?.checked;
+    inspectionSummary.textContent=(vehicle?.unitNumber||'Vehicle')+' · '+mileage+' miles · '+fuel+'% fuel'+(damaged?' · Body damage flagged':' · No body damage flagged');
+    inspectionSummary.classList.toggle('fleet-inspection-alert',!!damaged);
+  };
+  inspectionBox.addEventListener('change',refreshInspectionSummary);
+  inspectionBox.addEventListener('input',refreshInspectionSummary);
+  setMileageDefault();
+  refreshInspectionSummary();
+  vSel.addEventListener('change', setMileageDefault);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('fIBodyDamage').addEventListener('change', (e)=>{
+    document.getElementById('fIDamageWrap').style.display = e.target.checked ? '' : 'none';
+  });
+  let inspectionAttemptId=null;
+  document.getElementById('mSave').onclick = async ()=>{
+    const vehicleId = vSel.value;
+    const v = available.find(item=>item.id===vehicleId);
+    if(!v)return toast('This vehicle is no longer available for inspection.',true);
+    const personnelIds = [...new Set([document.getElementById('fIPerson').value,...Array.from(document.querySelectorAll('.insp-person:checked')).map(el=>el.value)])].filter(Boolean);
+    if(personnelIds.length===0){ toast("Select at least one person performing the inspection.", true); return; }
+    const equipmentChecklist = EQUIPMENT_CATALOG.map((name,i)=>({
+      name,
+      required: true,
+      present: document.querySelector(`.insp-equip-present[data-equip-idx="${i}"]`).checked,
+      condition: document.querySelector(`.insp-equip-condition[data-equip-idx="${i}"]`).value,
+    }));
+    const bodyDamage = document.getElementById('fIBodyDamage').checked;
+    const inspection = {
+      id:'insp'+Date.now(), vehicleId,
+      dateTime: document.getElementById('fIDate').value + 'T' + document.getElementById('fITime').value,
+      personnelIds, shift: document.getElementById('fIShift').value,
+      fuelLevel: Number(document.getElementById('fIFuel').value)||0,
+      gallonsAdded: Number(document.getElementById('fIGallons').value)||0,
+      quartsOilAdded: Number(document.getElementById('fIQuarts').value)||0,
+      mileageAtInspection: Number(document.getElementById('fIMileage').value)||v.mileage,
+      equipmentChecklist,
+      equipmentComments: document.getElementById('fIEquipComments').value.trim(),
+      vehicleCondition: document.getElementById('fIVehCondition').value,
+      vehicleConditionComments: document.getElementById('fIConditionComments').value.trim(),
+      cleanliness: document.getElementById('fICleanliness').value,
+      cleanlinessComments: document.getElementById('fICleanlinessComments').value.trim(),
+      bodyDamage,
+      bodyDamageComments: bodyDamage ? document.getElementById('fIDamageComments').value.trim() : '',
+      narrative: document.getElementById('fINarrative').value.trim(),
+      submittedByRoleId: primaryRoleId(),
+    };
+    STATE.fleet.inspections.push(inspection);
+    // an inspection is the source of truth for the vehicle's live state
+    v.mileage = Math.max(v.mileage, inspection.mileageAtInspection);
+    v.currentFuelLevel = inspection.fuelLevel;
+    v.equipmentChecklist = equipmentChecklist;
+    logActivity(`Inspection completed on ${v.unitNumber} by ${personnelIds.map(pid=>personName(pid)).join(', ')}.`, "inspection", v.id);
+    if(bodyDamage){
+      STATE.fleet.maintenance.push({
+        id:'m'+Date.now(), vehicleId: v.id, type:"Body Work", date: fmt(new Date()),
+        vendorId:null, laborCost:0, partsCost:0, cost:0, mileageAtService: v.mileage,
+        status:"Open", notes:`Body damage reported during inspection: ${inspection.bodyDamageComments}`,
+        isRecurring:false, intervalDays:null, intervalMiles:null,
+      });
+      logActivity(`${v.unitNumber}: body work ticket auto-created from inspection damage report.`, "maintenance", v.id);
+    }
+    persist();
+    toast("Inspection submitted.");
+    closeModal();
+    if(ACTIVE_VIEW==='fleet-inspections') renderInspections();
+    if(ACTIVE_VIEW==='fleet-dashboard') renderDashboard();
+    if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
+  };
+}
+
+function viewInspectionDetail(id){
+  const i = STATE.fleet.inspections.find(x=>x.id===id);
+  if(!i || (!can('fleet_inspection_view_all') && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID))
+    return toast('This inspection is not visible to your role.',true);
+  const v = vehicleById(i.vehicleId);
+  if(!v || !canSeeVehicle(v))return toast('This vehicle is not visible to your role.',true);
+  const equipRows = (i.equipmentChecklist||[]).map(e=>`
+    <tr><td>${escapeHtml(e.name)}</td><td>${e.present?`<span class="badge badge-available">Present</span>`:`<span class="badge badge-missing">Missing</span>`}</td><td>${escapeHtml(e.condition)}</td></tr>
+  `).join('');
+  document.getElementById('modalBox').className = 'modal modal-wide';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <h3 style="margin-bottom:2px;">Inspection — ${escapeHtml(v.unitNumber)}</h3>
+        <div class="mono" style="font-size:11.5px;color:var(--text-dim);">${i.dateTime.replace('T',' ')}</div>
+      </div>
+      <button class="modal-close" id="mClose">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid" style="margin-bottom:14px;">
+        <div><div class="k">Personnel</div><div class="v">${i.personnelIds.map(pid=>escapeHtml(personName(pid))).join(', ')}</div></div>
+        <div><div class="k">Shift</div><div class="v">${escapeHtml(i.shift)}</div></div>
+        <div><div class="k">Mileage</div><div class="v">${i.mileageAtInspection.toLocaleString()} mi</div></div>
+        <div><div class="k">Fuel Level</div><div class="v">${i.fuelLevel}%</div></div>
+        <div><div class="k">Gallons Added</div><div class="v">${i.gallonsAdded}</div></div>
+        <div><div class="k">Quarts Oil Added</div><div class="v">${i.quartsOilAdded}</div></div>
+        <div><div class="k">Vehicle Condition</div><div class="v">${escapeHtml(i.vehicleCondition)}</div></div>
+        <div><div class="k">Cleanliness</div><div class="v">${escapeHtml(i.cleanliness)}</div></div>
+      </div>
+      ${i.vehicleConditionComments ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Condition Comments</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.vehicleConditionComments)}</div></div>` : ''}
+      ${i.cleanlinessComments ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Cleanliness Comments</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.cleanlinessComments)}</div></div>` : ''}
+      <div class="panel" style="box-shadow:none;${i.bodyDamage?'border-color:var(--callout-red-border);':''}">
+        <div class="panel-head" style="${i.bodyDamage?'background:var(--callout-red-bg);':''}"><h2 style="${i.bodyDamage?'color:var(--red);':''}">Body Damage</h2></div>
+        <div class="panel-body" style="font-size:13px;">${i.bodyDamage ? escapeHtml(i.bodyDamageComments||'Noted, no further comments.') : 'None noted.'}</div>
+      </div>
+      <div class="panel" style="box-shadow:none;">
+        <div class="panel-head"><h2>Equipment Checklist</h2></div>
+        <div class="panel-body" style="padding:0;">
+          <table><thead><tr><th>Equipment</th><th>Status</th><th>Condition</th></tr></thead><tbody>${equipRows}</tbody></table>
+          ${i.equipmentComments ? `<div style="padding:10px 14px;font-size:13px;">${escapeHtml(i.equipmentComments)}</div>` : ''}
+        </div>
+      </div>
+      ${i.narrative ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Narrative</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.narrative)}</div></div>` : ''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+}
+
+/* =========================================================================
+   ROLES & ABILITIES
+   ========================================================================= */
+let SELECTED_ROLE_ID = null;
+
+function renderRoles(){
+  const canManage = can('admin_roles');
+  // System Admin is locked (its checkboxes are intentionally disabled, since it's meant to
+  // always carry every customer ability automatically) -- but that only holds if its *saved*
+  // abilities object actually has every current key in it. A role saved before a new ability
+  // category existed (like Bulk Import) simply doesn't have those keys yet, and since it's
+  // locked, there's no checkbox to fix it by hand. Self-heal it here instead of relying on a
+  // manual toggle that was never going to be clickable in the first place.
+  const systemAdminRole = STATE.roles.find(r=>r.id==='role_admin');
+  if(systemAdminRole){ ALL_CUSTOMER_ABILITY_IDS.forEach(id=>{ if(systemAdminRole.abilities[id]===undefined) systemAdminRole.abilities[id]=true; }); }
+  if(!SELECTED_ROLE_ID) SELECTED_ROLE_ID = STATE.currentRoleId;
+
+  const roleListHtml = STATE.roles.map(r=>`
+    <div class="role-list-item ${r.id===SELECTED_ROLE_ID?'active':''}" data-select-role="${r.id}">
+      <div>
+        <div class="name">${escapeHtml(r.name)}</div>
+        <div class="count">${countAbilities(r)} of ${ALL_ABILITY_IDS.length} abilities</div>
+      </div>
+      ${r.locked ? ICONS.lock : ""}
+    </div>
+  `).join('');
+
+  const selRole = STATE.roles.find(r=>r.id===SELECTED_ROLE_ID) || STATE.roles[0];
+  const agencyScopeHtml = `
+    <div class="ability-group">
+      <h3>Agency Visibility</h3>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Leave everything unchecked to see all agencies. Check specific agencies to restrict this role to only their vehicles (shared task-force assets remain visible regardless).</div>
+      ${STATE.fleet.refData.agencies.map(a=>`
+        <div class="ability-row">
+          <div class="lbl">${escapeHtml(a)}</div>
+          <label class="switch">
+            <input type="checkbox" data-agency-scope="${escapeHtml(a)}" ${selRole.agencyScope.includes(a)?'checked':''} ${!canManage?'disabled':''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  const groupsHtml = Object.entries(ABILITY_CATALOG).map(([group, abilities])=>`
+    <div class="ability-group">
+      <h3>${group}</h3>
+      ${abilities.map(([id,label])=>`
+        <div class="ability-row">
+          <div class="lbl">${label}</div>
+          <label class="switch">
+            <input type="checkbox" data-ability="${id}" ${selRole.abilities[id]?'checked':''} ${(!canManage || (selRole.locked && id!=='chatbot_access'))?'disabled':''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  document.getElementById('view-roles').innerHTML = `
+    ${!canManage ? lockedNote("You're viewing role definitions in read-only mode. Switch to Fleet Admin to edit abilities.") : ""}
+    <div class="toolbar">
+      <div></div>
+      ${canManage ? `<button class="btn btn-primary" id="btnAddRole">${ICONS.plus} New Role</button>` : ""}
+    </div>
+    <div class="role-grid">
+      <div><div class="role-list">${roleListHtml}</div></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>${escapeHtml(selRole.name)}</h2>
+            <div class="hint" style="margin-top:3px;">${escapeHtml(selRole.description||"")}</div>
+          </div>
+          ${canManage && !selRole.locked ? `
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm btn-outline" id="btnRenameRole">${ICONS.edit} Rename</button>
+              <button class="btn btn-sm btn-danger" id="btnDeleteRole">${ICONS.trash} Delete</button>
+            </div>` : (selRole.locked ? `<span class="hint">${ICONS.lock} Built-in role</span>` : '')}
+        </div>
+        <div class="panel-body">
+          ${agencyScopeHtml}
+          ${groupsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-select-role]').forEach(el=>{
+    el.addEventListener('click', ()=>{ SELECTED_ROLE_ID = el.dataset.selectRole; renderRoles(); });
+  });
+
+  if(canManage){
+    document.querySelectorAll('[data-ability]').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        selRole.abilities[chk.dataset.ability] = chk.checked;
+        persist();
+        renderRoles();
+        if(selRole.id===STATE.currentRoleId){ document.getElementById('abilityCountPill').textContent = countAbilities(selRole)+" abilities"; }
+      });
+    });
+    document.querySelectorAll('[data-agency-scope]').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        const agency = chk.dataset.agencyScope;
+        if(chk.checked){ if(!selRole.agencyScope.includes(agency)) selRole.agencyScope.push(agency); }
+        else { selRole.agencyScope = selRole.agencyScope.filter(a=>a!==agency); }
+        logActivity(`Updated agency visibility scope for role "${selRole.name}".`, "admin");
+        persist();
+        toast("Agency scope updated.");
+      });
+    });
+    const addBtn = document.getElementById('btnAddRole');
+    if(addBtn) addBtn.addEventListener('click', ()=>openAddRoleModal());
+    const renameBtn = document.getElementById('btnRenameRole');
+    if(renameBtn) renameBtn.addEventListener('click', ()=>openAddRoleModal(selRole));
+    const delBtn = document.getElementById('btnDeleteRole');
+    if(delBtn) delBtn.addEventListener('click', ()=>deleteRole(selRole));
+  }
+}
+
+function openAddRoleModal(existing){
+  const editing = !!existing;
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?"Rename Role":"Create New Role"}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Role name</label><input type="text" id="fRoleName" value="${editing?escapeHtml(existing.name):''}" placeholder="e.g. Motor Pool Clerk"></div>
+      <div class="form-row"><label>Description</label><textarea id="fRoleDesc" rows="2" placeholder="What is this role for?">${editing?escapeHtml(existing.description||''):''}</textarea></div>
+      ${!editing ? `<div class="form-row"><label>Start from</label>
+        <select id="fRoleTemplate">
+          <option value="blank">Blank (no abilities)</option>
+          ${STATE.roles.map(r=>`<option value="${r.id}">Copy from ${escapeHtml(r.name)}</option>`).join('')}
+        </select></div>` : ''}
+      <div style="font-size:12px;color:var(--text-dim);">There's no limit on how many roles you can create.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?"Save":"Create Role"}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const name = document.getElementById('fRoleName').value.trim();
+    if(!name){ toast("Enter a role name.", true); return; }
+    if(editing){
+      existing.name = name;
+      existing.description = document.getElementById('fRoleDesc').value.trim();
+      toast("Role updated.");
+    }else{
+      const tmplId = document.getElementById('fRoleTemplate').value;
+      const abilities = tmplId==="blank" ? abilitiesFor([]) : JSON.parse(JSON.stringify(STATE.roles.find(r=>r.id===tmplId).abilities));
+      abilities.chatbot_access=false;
+      abilities.workflow_use=false;
+      abilities.workflow_approve=false;
+      abilities.workflow_manage=false;
+      const newRole = {id:"role_"+Date.now(), name, description: document.getElementById('fRoleDesc').value.trim(), locked:false, agencyScope:[], abilities};
+      STATE.roles.push(newRole);
+      SELECTED_ROLE_ID = newRole.id;
+      toast("Role created.");
+    }
+    persist();
+    closeModal();
+    renderRoles();
+    renderRoleSwitcher();
+  };
+}
+
+function deleteRole(role){
+  const inUse = STATE.personnel.some(p=>p.roleId===role.id);
+  if(inUse){ toast("Can't delete a role that's still assigned to personnel. Reassign them first.", true); return; }
+  if(!confirm(`Delete the role "${role.name}"? This cannot be undone.`)) return;
+  STATE.roles = STATE.roles.filter(r=>r.id!==role.id);
+  if(STATE.currentRoleId===role.id) STATE.currentRoleId = STATE.roles[0].id;
+  SELECTED_ROLE_ID = STATE.roles[0].id;
+  persist();
+  toast("Role deleted.");
+  renderRoles();
+  renderRoleSwitcher();
+}
+
+/* =========================================================================
+   PERSONNEL
+   ========================================================================= */
+function renderPersonnel(){
+  const canView = can('personnel_view');
+  const canManage = can('personnel_manage');
+  if(!canView){
+    document.getElementById('view-personnel').innerHTML = permissionBlockedView("You don't have permission to view the personnel roster in this role.");
+    return;
+  }
+  const s = SORT.personnel;
+  const personnel = STATE.personnel.slice().sort((a,b)=>{
+    const av = s.key==='roleId' ? roleName(a.roleId).toLowerCase() : String(a[s.key]).toLowerCase();
+    const bv = s.key==='roleId' ? roleName(b.roleId).toLowerCase() : String(b[s.key]).toLowerCase();
+    if(av<bv) return s.dir==='asc'?-1:1; if(av>bv) return s.dir==='asc'?1:-1; return 0;
+  });
+
+  const rows = personnel.map(p=>`
+    <tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td class="mono">${escapeHtml(p.badge)}</td>
+      <td>${p.email?escapeHtml(p.email):'—'}</td>
+      <td>${escapeHtml(p.unit)}</td>
+      <td><span class="badge badge-role">${escapeHtml(roleName(p.roleId))}</span></td>
+      <td>${canManage ? `<div class="cell-actions"><button class="btn-icon" data-edit-p="${p.id}" title="Edit">${ICONS.edit}</button></div>` : ""}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('view-personnel').innerHTML = `
+    ${!canManage ? lockedNote("You're viewing the roster in read-only mode.") : ""}
+    <div class="toolbar">
+      <div></div>
+      ${canManage ? `<button class="btn btn-primary" id="btnAddPerson">${ICONS.plus} Add Personnel</button>` : ""}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr>
+          ${sortHeaderHtml('Name','personnel','name')}
+          ${sortHeaderHtml('Badge #','personnel','badge')}
+          <th>Email</th>
+          ${sortHeaderHtml('Unit','personnel','unit')}
+          ${sortHeaderHtml('Role','personnel','roleId')}
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  wireSortHeaders('personnel', renderPersonnel);
+  const addBtn = document.getElementById('btnAddPerson');
+  if(addBtn) addBtn.addEventListener('click', ()=>openPersonModal(null));
+  document.querySelectorAll('[data-edit-p]').forEach(b=>b.addEventListener('click', ()=>openPersonModal(b.dataset.editP)));
+}
+
+function openPersonModal(id){
+  const editing = !!id;
+  const p = editing ? STATE.personnel.find(p=>p.id===id) : {name:"",badge:"",email:"",unit:"",roleId:STATE.roles[STATE.roles.length-1].id};
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?"Edit Personnel":"Add Personnel"}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-2col">
+        <div class="form-row"><label>First name</label><input type="text" id="fPFirstName" value="${escapeHtml((p.name||'').split(' ')[0]||'')}"></div>
+        <div class="form-row"><label>Last name</label><input type="text" id="fPLastName" value="${escapeHtml((p.name||'').split(' ').slice(1).join(' '))}"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Badge / ID #</label><input type="text" id="fPBadge" value="${escapeHtml(p.badge)}"></div>
+        <div class="form-row"><label>Email</label><input type="text" id="fPEmail" value="${escapeHtml(p.email||'')}" placeholder="name@agency.gov"></div>
+      </div>
+      <div class="form-row"><label>Unit</label><input type="text" id="fPUnit" value="${escapeHtml(p.unit)}"></div>
+      <div class="form-row"><label>Role</label>
+        <select id="fPRole">${STATE.roles.map(r=>`<option value="${r.id}" ${p.roleId===r.id?'selected':''}>${escapeHtml(r.name)}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?"Save Changes":"Add Personnel"}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const firstName = document.getElementById('fPFirstName').value.trim();
+    const lastName = document.getElementById('fPLastName').value.trim();
+    if(!firstName || !lastName){ toast("Enter a first and last name.", true); return; }
+    const name = `${firstName} ${lastName}`;
+    const data = {name, badge:document.getElementById('fPBadge').value.trim(), email:document.getElementById('fPEmail').value.trim(), unit:document.getElementById('fPUnit').value.trim(), roleId:document.getElementById('fPRole').value};
+    if(editing){ Object.assign(p, data); toast("Personnel updated."); }
+    else{ STATE.personnel.push({id:"p"+Date.now(), ...data}); toast("Personnel added."); }
+    persist();
+    closeModal();
+    renderPersonnel();
+  };
+}
+
+/* =========================================================================
+   REPORTS
+   ========================================================================= */
+let CHART_REFS = {};
+function destroyCharts(){ Object.values(CHART_REFS).forEach(c=>c && c.destroy()); CHART_REFS = {}; }
+let REPORT_RANGE = {from:"", to:"", vehicleType:"All", agency:"All"};
+
+function inRange(dateStr){
+  if(!dateStr) return false;
+  const d = dateStr.slice(0,10);
+  if(REPORT_RANGE.from && d < REPORT_RANGE.from) return false;
+  if(REPORT_RANGE.to && d > REPORT_RANGE.to) return false;
+  return true;
+}
+
+function renderReports(){
+  if(!can('fleet_reports_view')){
+    document.getElementById('view-fleet-reports').innerHTML = permissionBlockedView("You don't have permission to view reports in this role.");
+    return;
+  }
+  const canExport = can('fleet_reports_export');
+  let veh = visibleVehicles();
+  if(REPORT_RANGE.vehicleType!=='All') veh = veh.filter(v=>v.vehicleType===REPORT_RANGE.vehicleType);
+  if(REPORT_RANGE.agency!=='All') veh = veh.filter(v=>v.agency===REPORT_RANGE.agency);
+  const inScopeVehicle = id => { const v = vehicleById(id); if(!v) return false; if(REPORT_RANGE.vehicleType!=='All' && v.vehicleType!==REPORT_RANGE.vehicleType) return false; if(REPORT_RANGE.agency!=='All' && v.agency!==REPORT_RANGE.agency) return false; return true; };
+  const hasRange = REPORT_RANGE.from || REPORT_RANGE.to;
+
+  // 1. Vehicle inspections by personnel
+  const inspInRange = STATE.fleet.inspections.filter(i => inScopeVehicle(i.vehicleId) && (!hasRange || inRange(i.dateTime)));
+  const byPerson = {};
+  inspInRange.forEach(i=> i.personnelIds.forEach(pid=>{ byPerson[pid]=(byPerson[pid]||0)+1; }));
+  const inspByPersonRows = Object.entries(byPerson).sort((a,b)=>b[1]-a[1]).map(([pid,count])=>`
+    <tr><td>${escapeHtml(personName(pid))}</td><td>${count}</td></tr>
+  `).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No inspections in this range.</td></tr>`;
+
+  // 2. Vehicles by fuel, oil, mileage (gallons/quarts summed from inspections in range; mileage is current odometer)
+  const fuelOilByVehicle = {};
+  inspInRange.forEach(i=>{
+    if(!fuelOilByVehicle[i.vehicleId]) fuelOilByVehicle[i.vehicleId] = {gallons:0, quarts:0};
+    fuelOilByVehicle[i.vehicleId].gallons += i.gallonsAdded;
+    fuelOilByVehicle[i.vehicleId].quarts += i.quartsOilAdded;
+  });
+  const fuelOilRows = veh.map(v=>{
+    const agg = fuelOilByVehicle[v.id] || {gallons:0, quarts:0};
+    return `<tr><td>${vehicleLink(v)}</td><td>${v.currentFuelLevel}%</td><td>${agg.gallons.toFixed(1)}</td><td>${agg.quarts.toFixed(1)}</td><td>${v.mileage.toLocaleString()} mi</td></tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles.</td></tr>`;
+
+  // 3. Vehicles by assignment
+  const assignmentRows = veh.map(v=>`
+    <tr><td>${vehicleLink(v)}</td><td>${escapeHtml(v.vehicleType)}</td><td>${assignmentLabel(v)}</td><td>${escapeHtml(v.location)}</td></tr>
+  `).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles.</td></tr>`;
+
+  // 4. Vehicle maintenance by type (date range on maintenance date)
+  const maintInRange = STATE.fleet.maintenance.filter(m => inScopeVehicle(m.vehicleId) && (!hasRange || inRange(m.date)));
+  const maintByType = {};
+  STATE.fleet.refData.maintenanceTypes.forEach(t=>maintByType[t]={count:0, cost:0});
+  maintInRange.forEach(m=>{
+    if(!maintByType[m.type]) maintByType[m.type] = {count:0, cost:0};
+    maintByType[m.type].count++;
+    maintByType[m.type].cost += m.cost;
+  });
+  const maintByTypeRows = Object.entries(maintByType).filter(([,v])=>v.count>0).map(([type,v])=>`
+    <tr><td>${escapeHtml(type)}</td><td>${v.count}</td><td>${money(v.cost)}</td></tr>
+  `).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No maintenance in this range.</td></tr>`;
+
+  // 5. Vehicles with assigned equipment (fully equipped)
+  const fullyEquipped = veh.filter(v=>(v.equipmentChecklist||[]).every(e=>e.present));
+  const equippedRows = fullyEquipped.map(v=>`
+    <tr><td>${vehicleLink(v)}</td><td>${(v.equipmentChecklist||[]).length} items</td></tr>
+  `).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No fully-equipped vehicles found.</td></tr>`;
+
+  // 6. Vehicles with missing equipment
+  const missingVehicles = veh.filter(v=>(v.equipmentChecklist||[]).some(e=>!e.present));
+  const missingRows = missingVehicles.map(v=>{
+    const missing = v.equipmentChecklist.filter(e=>!e.present).map(e=>e.name);
+    return `<tr><td>${vehicleLink(v)}</td><td>${escapeHtml(missing.join(', '))}</td></tr>`;
+  }).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles are missing equipment.</td></tr>`;
+
+  // 7. Vehicles with repairs needed (Open maintenance)
+  const needsRepair = STATE.fleet.maintenance.filter(m=>m.status==="Open" && inScopeVehicle(m.vehicleId));
+  const repairRows = needsRepair.map(m=>{
+    const v = vehicleById(m.vehicleId);
+    return `<tr><td>${vehicleLink(v)}</td><td>${m.type}</td><td>${m.date}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(m.notes||'')}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No open repairs.</td></tr>`;
+
+  // Bonus charts data
+  const byType = {}; STATE.fleet.refData.vehicleTypes.forEach(t=>byType[t]=0); veh.forEach(v=>byType[v.vehicleType]=(byType[v.vehicleType]||0)+1);
+  const byStatus = {}; veh.forEach(v=>byStatus[v.status]=(byStatus[v.status]||0)+1);
+  const costByVendor = {};
+  STATE.fleet.maintenance.filter(m=>m.status==="Completed").forEach(m=>{
+    const name = m.vendorId ? vendorName(m.vendorId) : "In-House";
+    costByVendor[name] = (costByVendor[name]||0) + m.cost;
+  });
+
+  document.getElementById('view-fleet-reports').innerHTML = `
+    <div class="panel" style="margin-bottom:16px;"><div class="panel-body"><div id="fleetReportFilterHost"></div></div></div>
+    <div class="toolbar">
+      <div></div>
+      <div style="display:flex;gap:8px;">
+        ${canExport ? `<button class="btn btn-outline" id="btnExportFleet">${ICONS.download} Export Fleet (CSV)</button>` : ""}
+        <button class="btn btn-outline" id="btnPrintReportFleet">Print / Save as PDF</button>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="panel"><div class="panel-head"><h2>Vehicles by Type</h2></div><div class="panel-body"><div class="chart-box"><canvas id="chartFleetType"></canvas></div></div></div>
+      <div class="panel"><div class="panel-head"><h2>Status Breakdown</h2></div><div class="panel-body"><div class="chart-box"><canvas id="chartFleetStatus"></canvas></div></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Maintenance Cost by Vendor</h2></div>
+      <div class="panel-body"><div class="chart-box" style="height:180px;"><canvas id="chartFleetVendorCost"></canvas></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicle Inspections by Personnel</h2><span class="hint">${hasRange?'Filtered by date range':'All time'} &bull; ${inspInRange.length} inspections</span></div>
+      <div class="panel-body" style="padding:0;"><table><thead><tr><th>Personnel</th><th># Inspections</th></tr></thead><tbody>${inspByPersonRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles by Fuel, Oil &amp; Mileage</h2><span class="hint">Gallons/quarts totaled ${hasRange?'within range':'all time'} from inspections</span></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Current Fuel</th><th>Gallons Added</th><th>Quarts Oil Added</th><th>Mileage</th></tr></thead><tbody>${fuelOilRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles by Assignment</h2></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Assigned To</th><th>Location</th></tr></thead><tbody>${assignmentRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicle Maintenance by Type</h2><span class="hint">${hasRange?'Filtered by date range':'All time'}</span></div>
+      <div class="panel-body" style="padding:0;"><table><thead><tr><th>Type</th><th>Count</th><th>Total Cost</th></tr></thead><tbody>${maintByTypeRows}</tbody></table></div>
+    </div>
+
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-head"><h2>Vehicles with Assigned Equipment</h2><span class="hint">Fully equipped &bull; ${fullyEquipped.length}</span></div>
+        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Vehicle</th><th>Equipment Count</th></tr></thead><tbody>${equippedRows}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Vehicles with Missing Equipment</h2><span class="hint">${missingVehicles.length} flagged</span></div>
+        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Vehicle</th><th>Missing Items</th></tr></thead><tbody>${missingRows}</tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles with Repairs Needed</h2><span class="hint">${needsRepair.length} open repair(s)</span></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Reported</th><th>Notes</th></tr></thead><tbody>${repairRows}</tbody></table></div>
+    </div>
+  `;
+
+  destroyCharts();
+  const navy = '#24364E', blue='#134DD1', slate='#B4C7CF', gold='#FFAC12', red='#D34120';
+  const palette = [blue, navy, slate, gold, '#6C8AA8', '#4E6C8C', '#8FA6B8', '#1E2E44', '#3D6BC7', '#B4372A'];
+  const baseBarOpts = (currency)=>({
+    maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ ticks:{color:chartTextColor(), font:{family:'Archivo', size:11}}, grid:{display:false} },
+      y:{ ticks:{color:chartTextColor(), font:{family:'Archivo', size:11}, callback: v=> currency ? '$'+v : v}, grid:{color:chartGridColor()} }
+    }
+  });
+  CHART_REFS.type = safeChart('chartFleetType', {
+    type:'bar', data:{ labels:Object.keys(byType), datasets:[{label:'Vehicles', data:Object.values(byType), backgroundColor:blue}] }, options: baseBarOpts()
+  });
+  CHART_REFS.status = safeChart('chartFleetStatus', {
+    type:'doughnut', data:{ labels:Object.keys(byStatus), datasets:[{data:Object.values(byStatus), backgroundColor:palette}] },
+    options:{ plugins:{ legend:{position:'right', labels:{color:navy, font:{family:'Archivo'}}} }, maintainAspectRatio:false }
+  });
+  CHART_REFS.vendorCost = safeChart('chartFleetVendorCost', {
+    type:'bar', data:{ labels:Object.keys(costByVendor), datasets:[{label:'Cost ($)', data:Object.values(costByVendor), backgroundColor:red}] },
+    options: {...baseBarOpts(true), indexAxis:'y'}
+  });
+
+  renderReportFilterBar(document.getElementById('fleetReportFilterHost'), [
+    {type:'daterange', keyFrom:'from', keyTo:'to', label:'Activity Date Range'},
+    {type:'select', key:'vehicleType', label:'Vehicle Type', options: STATE.fleet.refData.vehicleTypes},
+    {type:'select', key:'agency', label:'Agency', options: STATE.fleet.refData.agencies},
+  ], REPORT_RANGE, renderReports);
+  document.getElementById('btnPrintReportFleet').addEventListener('click', ()=>window.print());
+  const exportBtn = document.getElementById('btnExportFleet');
+  if(exportBtn) exportBtn.addEventListener('click', exportFleetCsv);
+  wireVehicleLinks();
+}
+
+function exportFleetCsv(){
+  const headers = ["Unit #","Make","Model","Year","VIN","Type","Status","Mileage","Location","Agency","Assigned To"];
+  const rows = STATE.fleet.vehicles.map(v=>[v.unitNumber,v.make,v.model,v.year,v.vin,v.vehicleType,v.status,v.mileage,v.location,v.agency, v.assignedToType==='person'?personName(v.assignedTo):(v.assignedTo||'')]);
+  const csv = [headers, ...rows].map(r=>r.map(x=>csvSafeCell(x)).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'fleet_vehicles.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast("Fleet exported.");
+}
+
+/* =========================================================================
+   ADMIN: reference data, vendors, notification routing, audit log
+   ========================================================================= */
+let ADMIN_TAB = 'vehicleTypes';
+const SIMPLE_LIST_TABS = {
+  vehicleTypes: {label:'Vehicle Types', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.vehicleType===v).length},
+  maintenanceTypes: {label:'Maintenance Types', usageCheck:(v)=>STATE.fleet.maintenance.filter(m=>m.type===v).length},
+  locations: {label:'Locations', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.location===v).length},
+  agencies: {label:'Agencies', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.agency===v).length},
+  equipmentCatalog: {label:'Equipment Catalog', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>(x.equipmentChecklist||[]).some(e=>e.name===v)).length},
+};
+
+function renderAdmin(){
+  const canManage = can('fleet_admin_categories');
+  const canAudit = can('fleet_admin_audit');
+  if(!canManage && !canAudit){
+    document.getElementById('view-fleet-admin').innerHTML = permissionBlockedView("You don't have permission to view administration settings in this role.");
+    return;
+  }
+  const tabs = [];
+  if(canManage){
+    Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label]));
+    tabs.push(['vendors','Vendors']);
+    tabs.push(['notifications','Notification Routing']);
+  }
+  if(can('fleet_bulk_import')) tabs.push(['bulkImport','Bulk Import']);
+  if(canAudit) tabs.push(['audit','Platform Audit Log']);
+  if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
+
+  document.getElementById('view-fleet-admin').innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+      ${tabs.map(([key,label])=>`<button class="btn btn-sm ${ADMIN_TAB===key?'btn-primary':'btn-outline'}" data-admin-tab="${key}">${label}</button>`).join('')}
+    </div>
+    <div id="adminTabBodyFleet"></div>
+  `;
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click', ()=>{ ADMIN_TAB=b.dataset.adminTab; renderAdmin(); }));
+  renderAdminTabBody();
+}
+
+function renderAdminTabBody(){
+  const body = document.getElementById('adminTabBodyFleet');
+  if(SIMPLE_LIST_TABS[ADMIN_TAB]){
+    renderSimpleListTab(body, ADMIN_TAB);
+  } else if(ADMIN_TAB==='vendors'){
+    renderVendorsTab(body);
+  } else if(ADMIN_TAB==='notifications'){
+    renderNotificationRoutingTab(body);
+  } else if(ADMIN_TAB==='bulkImport'){
+    renderBulkImportTab(body, 'fleet');
+  } else if(ADMIN_TAB==='audit'){
+    renderPlatformAuditLogTab(body);
+  }
+}
+
+function renderSimpleListTab(body, key){
+  const cfg = SIMPLE_LIST_TABS[key];
+  const list = STATE.fleet.refData[key];
+  const rows = list.map((v,i)=>{
+    const inUse = cfg.usageCheck(v);
+    return `<tr>
+      <td>${escapeHtml(v)}</td>
+      <td>${inUse ? `<span class="badge badge-role">${inUse} in use</span>` : `<span style="color:var(--text-dim);font-size:12px;">unused</span>`}</td>
+      <td><button class="btn-icon" data-remove-item="${i}" title="Remove">${ICONS.trash}</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No ${cfg.label.toLowerCase()} defined yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>${cfg.label}</h2><span class="hint">Agency-defined — add as many as you need</span></div>
+      <div class="panel-body">
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <input type="text" id="newItemInputFleet" placeholder="Add a new ${cfg.label.toLowerCase().replace(/s$/,'')}..." style="flex:1;">
+          <button class="btn btn-primary btn-sm" id="btnAddItemFleet">${ICONS.plus} Add</button>
+        </div>
+        <table><thead><tr><th>${cfg.label}</th><th>Usage</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnAddItemFleet').addEventListener('click', ()=>{
+    const val = document.getElementById('newItemInputFleet').value.trim();
+    if(!val){ toast("Enter a value first.", true); return; }
+    if(list.includes(val)){ toast("That already exists.", true); return; }
+    list.push(val);
+    logActivity(`Added "${val}" to ${cfg.label}.`, "admin");
+    persist();
+    renderAdminTabBody();
+  });
+  document.querySelectorAll('[data-remove-item]').forEach(b=>b.addEventListener('click', ()=>{
+    const idx = Number(b.dataset.removeItem);
+    const val = list[idx];
+    if(cfg.usageCheck(val)>0){ toast(`Can't remove "${val}" \u2014 it's currently used by ${cfg.usageCheck(val)} record(s). Reassign them first.`, true); return; }
+    if(!confirm(`Remove "${val}" from ${cfg.label}?`)) return;
+    list.splice(idx,1);
+    logActivity(`Removed "${val}" from ${cfg.label}.`, "admin");
+    persist();
+    renderAdminTabBody();
+  }));
+}
+
+function renderVendorsTab(body){
+  const rows = STATE.fleet.refData.vendors.map(v=>{
+    const inUse = STATE.fleet.maintenance.filter(m=>m.vendorId===v.id).length;
+    return `<tr>
+      <td>${escapeHtml(v.name)}</td>
+      <td>${escapeHtml(v.contact||'')}</td>
+      <td>${escapeHtml(v.phone||'')}</td>
+      <td style="font-size:12px;">${escapeHtml(v.servicesProvided||'')}</td>
+      <td>${inUse ? `<span class="badge badge-role">${inUse} in use</span>` : ''}</td>
+      <td><div class="cell-actions">
+        <button class="btn-icon" data-edit-vendor="${v.id}" title="Edit">${ICONS.edit}</button>
+        <button class="btn-icon" data-del-vendor="${v.id}" title="Delete">${ICONS.trash}</button>
+      </div></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No vendors yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Vendors</h2><span class="hint">Repair, service, and upfit vendors for cost tracking</span></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px;"><button class="btn btn-primary btn-sm" id="btnAddVendorFleet">${ICONS.plus} Add Vendor</button></div>
+        <table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Services Provided</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnAddVendorFleet').addEventListener('click', ()=>openVendorModal(null));
+  document.querySelectorAll('[data-edit-vendor]').forEach(b=>b.addEventListener('click', ()=>openVendorModal(b.dataset.editVendor)));
+  document.querySelectorAll('[data-del-vendor]').forEach(b=>b.addEventListener('click', ()=>{
+    const v = STATE.fleet.refData.vendors.find(v=>v.id===b.dataset.delVendor);
+    const inUse = STATE.fleet.maintenance.filter(m=>m.vendorId===v.id).length;
+    if(inUse>0){ toast(`Can't remove "${v.name}" \u2014 linked to ${inUse} maintenance record(s).`, true); return; }
+    if(!confirm(`Remove vendor "${v.name}"?`)) return;
+    STATE.fleet.refData.vendors = STATE.fleet.refData.vendors.filter(x=>x.id!==v.id);
+    logActivity(`Removed vendor "${v.name}".`, "admin");
+    persist();
+    renderAdminTabBody();
+  }));
+}
+
+function openVendorModal(id){
+  const editing = !!id;
+  const v = editing ? STATE.fleet.refData.vendors.find(v=>v.id===id) : {name:'',contact:'',phone:'',email:'',servicesProvided:''};
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?'Edit Vendor':'Add Vendor'}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Vendor Name</label><input type="text" id="fVName" value="${escapeHtml(v.name)}"></div>
+      <div class="form-row"><label>Contact Person</label><input type="text" id="fVContact" value="${escapeHtml(v.contact||'')}"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Phone</label><input type="text" id="fVPhone" value="${escapeHtml(v.phone||'')}"></div>
+        <div class="form-row"><label>Email</label><input type="text" id="fVEmail" value="${escapeHtml(v.email||'')}"></div>
+      </div>
+      <div class="form-row"><label>Services Provided</label><textarea id="fVServices" rows="2" placeholder="e.g. Oil changes, brakes, tires">${escapeHtml(v.servicesProvided||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Add Vendor'}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const name = document.getElementById('fVName').value.trim();
+    if(!name){ toast("Enter a vendor name.", true); return; }
+    const data = {name, contact:document.getElementById('fVContact').value.trim(), phone:document.getElementById('fVPhone').value.trim(), email:document.getElementById('fVEmail').value.trim(), servicesProvided:document.getElementById('fVServices').value.trim()};
+    if(editing){ Object.assign(v, data); logActivity(`Updated vendor "${name}".`, "admin"); }
+    else { STATE.fleet.refData.vendors.push({id:'v'+Date.now(), ...data}); logActivity(`Added vendor "${name}".`, "admin"); }
+    persist();
+    closeModal();
+    renderAdminTabBody();
+  };
+}
+
+function renderNotificationRoutingTab(body){
+  const roleOpts = (selected)=> STATE.roles.map(r=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${escapeHtml(r.name)}</option>`).join('');
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Notification Routing</h2><span class="hint">Which role receives each type of automatic alert</span></div>
+      <div class="panel-body">
+        <div class="form-row"><label>Maintenance Due Alerts</label><select id="fRouteMaintFleet">${roleOpts(STATE.fleet.notifySettings.maintenanceDueRoleId)}</select></div>
+        <div class="form-row"><label>Inspection Overdue Alerts</label><select id="fRouteInsp">${roleOpts(STATE.fleet.notifySettings.inspectionOverdueRoleId)}</select></div>
+        <div class="form-row"><label>Missing Equipment Alerts</label><select id="fRouteEquip">${roleOpts(STATE.fleet.notifySettings.missingEquipmentRoleId)}</select></div>
+        <button class="btn btn-primary btn-sm" id="btnSaveRoutingFleet">Save Routing</button>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:10px;">Anyone viewing the app as the selected role sees these alerts in the bell icon, top right. This is in-app only in this prototype — not email or SMS.</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnSaveRoutingFleet').addEventListener('click', ()=>{
+    STATE.fleet.notifySettings.maintenanceDueRoleId = document.getElementById('fRouteMaintFleet').value;
+    STATE.fleet.notifySettings.inspectionOverdueRoleId = document.getElementById('fRouteInsp').value;
+    STATE.fleet.notifySettings.missingEquipmentRoleId = document.getElementById('fRouteEquip').value;
+    logActivity("Updated notification routing settings.", "admin");
+    persist();
+    toast("Notification routing saved.");
+    renderNotifBell();
+  });
+}
+
+let AUDIT_FILTER = {entityType:"All"};
+function renderAuditLogTab(body){
+  const canExport = can('fleet_reports_export');
+  const types = ["All", ...new Set(STATE.fleet.activity.map(a=>a.entityType||"general"))];
+  const filtered = STATE.fleet.activity.filter(a=> AUDIT_FILTER.entityType==="All" || (a.entityType||"general")===AUDIT_FILTER.entityType).slice().reverse();
+  const vehEntityTypes = ["vehicle","maintenance","inspection"];
+  const rows = filtered.map(a=>{
+    const linkedVeh = (vehEntityTypes.includes(a.entityType) && a.entityId) ? vehicleById(a.entityId) : null;
+    return `<tr>
+      <td class="mono" style="white-space:nowrap;">${a.ts}</td>
+      <td><span class="badge badge-role">${escapeHtml(a.entityType||'general')}</span></td>
+      <td>${escapeHtml(a.text)}</td>
+      <td>${linkedVeh ? `<button class="btn btn-sm btn-outline" data-open-veh="${linkedVeh.id}">View Vehicle</button>` : ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No activity recorded yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="toolbar">
+      <div class="filters"><select id="auditTypeFleet" title="Filter the physical audit log to a single entity type">${types.map(t=>`<option ${AUDIT_FILTER.entityType===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      ${canExport ? `<button class="btn btn-outline" id="btnExportAuditFleet">${ICONS.download} Export Log (CSV)</button>` : ''}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr><th>Timestamp</th><th>Type</th><th>Event</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-top:8px;">${filtered.length} of ${STATE.fleet.activity.length} events</div>
+  `;
+  document.getElementById('auditTypeFleet').addEventListener('change', e=>{AUDIT_FILTER.entityType=e.target.value; renderAdminTabBody();});
+  wireVehicleLinks();
+  const exportBtn = document.getElementById('btnExportAuditFleet');
+  if(exportBtn) exportBtn.addEventListener('click', ()=>{
+    const headers = ["Timestamp","Type","Event"];
+    const csvRows = filtered.map(a=>[a.ts, a.entityType||'general', a.text]);
+    const csv = [headers, ...csvRows].map(r=>r.map(v=>csvSafeCell(v)).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fleet_audit_log.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Audit log exported.");
+  });
+}
+
+/* =========================================================================
+   MODAL PLUMBING
+   ========================================================================= */
+function openModal(){ SuiteUX.openModal(); }
+function closeModal(event){ return SuiteUX.closeModal(event); }
+
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+function startFleetModule(){
+  renderNav();
+  switchView('fleet-dashboard');
+}
+window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData: migrateFleetData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openVehicleDetail };
+
+})();
+
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')){
+ const style=document.createElement('style');style.id='fleet-modern-style';
+ style.textContent='.fleet-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim);margin-bottom:5px}.fleet-detail-title{font-size:23px;margin:0 0 5px}.fleet-detail-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:17px}.fleet-detail-buttons{display:flex;gap:8px;flex-wrap:wrap}.fleet-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.fleet-metric,.fleet-detail-card{border:1px solid var(--border);border-radius:13px;background:rgba(105,143,187,.055);padding:17px;min-width:0}.fleet-metric small,.fleet-facts small{font-size:11px;color:var(--text-dim);display:block;margin-bottom:7px}.fleet-metric strong{font-size:18px;font-weight:800;display:block;overflow-wrap:anywhere}.fleet-metric span{font-size:11px;color:var(--text-dim);display:block;margin-top:6px}.fleet-detail-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fleet-detail-card h4{font-size:14px;margin:0 0 16px;font-weight:800}.fleet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fleet-facts strong{display:block;font-size:13px;overflow-wrap:anywhere}.fleet-edit-body{max-width:1080px;margin:0 auto;padding:22px 25px!important}.fleet-edit-section-heading{border-top:1px solid var(--border);padding-top:18px;margin:20px 0 15px}.fleet-edit-section-heading:first-child{margin-top:0;border-top:0;padding-top:0}.fleet-edit-section-heading h4{font-size:15px;margin:0 0 5px;font-weight:800}.fleet-edit-section-heading p{font-size:12px;color:var(--text-dim);margin:0}@media(max-width:800px){.fleet-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.fleet-detail-metrics,.fleet-detail-panels{grid-template-columns:1fr}.fleet-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.fleet-edit-body{padding:14px!important}}';
+ document.head.appendChild(style);
+}
++(Math.max(0,labor)+Math.max(0,parts)).toFixed(2);
+    };
+    maintenanceBox.addEventListener('change',update);
+    maintenanceBox.addEventListener('input',update);
+    update();
+  }
+  wireMaintenanceFormCommon();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const vehicleId = document.getElementById('fMVehicle').value;
+    const v = vehicleById(vehicleId);
+    const rec = collectMaintenanceFormData(vehicleId, isSchedule);
+    STATE.fleet.maintenance.push(rec);
+    logActivity(isSchedule ? `Maintenance scheduled for ${v.unitNumber} on ${rec.date}.` : `Maintenance logged for ${v.unitNumber}: ${rec.notes||rec.type}.`, "maintenance", v.id);
+    persist();
+    toast(isSchedule ? 'Maintenance scheduled.' : 'Maintenance logged.');
+    closeModal();
+    renderMaintenanceView();
+  };
+}
+
+/* =========================================================================
+   VEHICLE INSPECTIONS
+   ========================================================================= */
+let INSP_FILTER = {vehicle:"All", personnel:"All", dateFrom:"", dateTo:""};
+
+function renderInspections(){
+  const canConduct = can('fleet_inspection_conduct');
+  const canViewAll = can('fleet_inspection_view_all');
+  if(!canViewAll&&!canConduct){
+    document.getElementById('view-fleet-inspections').innerHTML = permissionBlockedView("You don't have permission to view vehicle inspections in this role.");
+    return;
+  }
+  const visibleIds=new Set(visibleVehicles().map(v=>v.id));
+  const filtered = STATE.fleet.inspections.filter(i=>{
+    if(!visibleIds.has(i.vehicleId))return false;
+    if(!canViewAll && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID)return false;
+    const matchVeh = INSP_FILTER.vehicle==="All" || i.vehicleId===INSP_FILTER.vehicle;
+    const matchPerson = INSP_FILTER.personnel==="All" || i.personnelIds.includes(INSP_FILTER.personnel);
+    const d = i.dateTime.slice(0,10);
+    const matchFrom = !INSP_FILTER.dateFrom || d >= INSP_FILTER.dateFrom;
+    const matchTo = !INSP_FILTER.dateTo || d <= INSP_FILTER.dateTo;
+    return matchVeh && matchPerson && matchFrom && matchTo;
+  }).slice().sort((a,b)=>b.dateTime.localeCompare(a.dateTime));
+
+  const rows = filtered.map(i=>{
+    const v = vehicleById(i.vehicleId);
+    return `<tr>
+      <td>${i.dateTime.replace('T',' ')}</td>
+      <td>${vehicleLink(v)}</td>
+      <td>${i.personnelIds.map(pid=>escapeHtml(personName(pid))).join(', ')}</td>
+      <td>${escapeHtml(i.shift)}</td>
+      <td>${i.fuelLevel}%</td>
+      <td>${i.bodyDamage ? `<span class="badge badge-overdue">Damage noted</span>` : `<span class="badge badge-available">Clean</span>`}</td>
+      <td><button class="btn btn-sm btn-outline" data-view-insp="${i.id}">View</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:18px;">No inspections match this filter.</td></tr>`;
+
+  document.getElementById('view-fleet-inspections').innerHTML = `
+    <div class="toolbar">
+      <div class="filters">
+        <select id="inspVehicle"><option value="All">All Vehicles</option>${visibleVehicles().map(v=>`<option value="${v.id}" ${INSP_FILTER.vehicle===v.id?'selected':''}>${escapeHtml(v.unitNumber)}</option>`).join('')}</select>
+        <select id="inspPersonnel"><option value="All">All Personnel</option>${STATE.personnel.map(p=>`<option value="${p.id}" ${INSP_FILTER.personnel===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+        <input type="date" id="inspFrom" value="${INSP_FILTER.dateFrom}" title="From date">
+        <input type="date" id="inspTo" value="${INSP_FILTER.dateTo}" title="To date">
+      </div>
+      ${canConduct ? `<button class="btn btn-primary" id="btnNewInspection">${ICONS.plus} New Inspection</button>` : ""}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr><th>Date/Time</th><th>Vehicle</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-top:8px;">${filtered.length} of ${STATE.fleet.inspections.length} inspections</div>
+  `;
+  ['inspVehicle','inspPersonnel','inspFrom','inspTo'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', e=>{
+      const key = {inspVehicle:'vehicle',inspPersonnel:'personnel',inspFrom:'dateFrom',inspTo:'dateTo'}[id];
+      INSP_FILTER[key] = e.target.value;
+      renderInspections();
+    });
+  });
+  const newBtn = document.getElementById('btnNewInspection');
+  if(newBtn) newBtn.addEventListener('click', ()=>openNewInspectionModal());
+  wireVehicleLinks();
+  document.querySelectorAll('[data-view-insp]').forEach(b=>b.addEventListener('click', ()=>viewInspectionDetail(b.dataset.viewInsp)));
+}
+
+/* ---------- New Inspection: mobile-optimized single-column flow ----------
+   This form is intentionally single-column with large touch targets so it
+   works as-is on a phone browser, standing in for the "mobile application"
+   requirement. A native app would call the same underlying record shape. */
+function openNewInspectionModal(prefillVehicleId){
+  if(!can('fleet_inspection_conduct'))return toast('Your role cannot conduct vehicle inspections.',true);
+  const available=visibleVehicles();
+  if(!available.length)return toast('No vehicles are visible to this role. Check the Fleet vehicle visibility and unit scope abilities.',true);
+  const box = document.getElementById('modalBox');
+  box.className = 'modal modal-wide';
+  const equipRows = EQUIPMENT_CATALOG.map((name,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div style="flex:1;min-width:160px;font-size:13.5px;font-weight:600;">${escapeHtml(name)}</div>
+      <label class="switch"><input type="checkbox" class="insp-equip-present" data-equip-idx="${i}" checked><span class="slider"></span></label>
+      <select class="insp-equip-condition" data-equip-idx="${i}" style="width:140px;">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select>
+    </div>
+  `).join('');
+  box.innerHTML = `
+    <div class="modal-head"><h3>New Vehicle Inspection</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body" style="max-width:520px;margin:0 auto;">
+      <div class="form-row"><label>Vehicle</label>
+        <select id="fIVehicle">${available.map(v=>`<option value="${v.id}" ${prefillVehicleId===v.id?'selected':''}>${escapeHtml(v.unitNumber)} — ${escapeHtml(v.make)} ${escapeHtml(v.model)}</option>`).join('')}</select>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Inspection Date</label><input type="date" id="fIDate" value="${fmt(new Date())}"></div>
+        <div class="form-row"><label>Time</label><input type="time" id="fITime" value="${new Date().toTimeString().slice(0,5)}"></div>
+      </div>
+      <div class="form-row"><label>Shift</label><select id="fIShift">${SHIFTS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      <div class="form-row"><label for="fIPerson">Personnel Performing Inspection</label>
+        <select id="fIPerson">${(can('fleet_inspection_view_all')?STATE.personnel:STATE.personnel.filter(p=>p.id===CURRENT_USER_ID)).map(p=>`<option value="${p.id}" ${CURRENT_USER_ID===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+        ${can('fleet_inspection_view_all')?`<details style="margin-top:10px"><summary>Additional inspection participants</summary>${STATE.personnel.map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" class="insp-person" value="${p.id}" style="width:auto">${escapeHtml(p.name)}</label>`).join('')}</details>`:''}
+      </div>
+      <div class="form-row"><label>Current Mileage</label><input type="number" id="fIMileage" value=""></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Fuel Level (%)</label><input type="number" id="fIFuel" value="100" min="0" max="100"></div>
+        <div class="form-row"><label>Gallons of Fuel Added</label><input type="number" id="fIGallons" value="0" step="0.1"></div>
+      </div>
+      <div class="form-row"><label>Quarts of Oil Added</label><input type="number" id="fIQuarts" value="0" step="0.5"></div>
+
+      <div class="panel" style="box-shadow:none;">
+        <div class="panel-head"><h2>Equipment Condition</h2></div>
+        <div class="panel-body">
+          ${equipRows}
+          <div class="form-row" style="margin-top:10px;"><label>Equipment Comments</label><textarea id="fIEquipComments" rows="2" placeholder="Optional"></textarea></div>
+        </div>
+      </div>
+
+      <div class="form-2col">
+        <div class="form-row"><label>Vehicle Condition</label><select id="fIVehCondition">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div class="form-row"><label>Cleanliness</label><select id="fICleanliness">${CONDITIONS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-row"><label>Vehicle Condition Comments</label><textarea id="fIConditionComments" rows="2" placeholder="Optional"></textarea></div>
+      <div class="form-row"><label>Cleanliness Comments</label><textarea id="fICleanlinessComments" rows="2" placeholder="Optional"></textarea></div>
+
+      <div class="form-row">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="fIBodyDamage" style="width:auto;">
+          Body damage noted
+        </label>
+      </div>
+      <div class="form-row" id="fIDamageWrap" style="display:none;">
+        <label>Body Damage Comments</label><textarea id="fIDamageComments" rows="2" placeholder="Describe location and extent of damage"></textarea>
+      </div>
+
+      <div class="form-row"><label>Narrative / Comments</label><textarea id="fINarrative" rows="3" placeholder="Anything else worth noting"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">Submit Inspection</button>
+    </div>
+  `;
+  const vSel = document.getElementById('fIVehicle');
+  const setMileageDefault = ()=>{
+    const v = vehicleById(vSel.value);
+    document.getElementById('fIMileage').value = v ? v.mileage : '';
+    document.getElementById('fIFuel').value = v ? v.currentFuelLevel : 100;
+  };
+  openModal();
+  // Decorate existing inspection controls in place; do not detach them.
+  const inspectionBox=document.getElementById('modalBox');
+  inspectionBox.classList.add('fleet-inspection-workspace');
+  const inspectionBody=inspectionBox.querySelector('.modal-body');
+  inspectionBody?.classList.add('fleet-inspection-body');
+  const inspectionGroups=[
+    ['fIVehicle','01 · Vehicle & inspector','Confirm the vehicle, shift and inspection team'],
+    ['fIMileage','02 · Vehicle readings','Record odometer, fuel and fluids'],
+    ['fIVehCondition','03 · Vehicle condition','Assess condition, cleanliness and damage'],
+    ['fINarrative','04 · Final notes','Document any additional observations']
+  ];
+  inspectionGroups.forEach(([id,title,hint])=>{
+    const field=inspectionBody?.querySelector('#'+id);
+    const row=field?.closest('.form-row, .form-2col');
+    if(!row)return;
+    const section=document.createElement('div');section.className='fleet-inspection-heading';
+    const h=document.createElement('h4');h.textContent=title;
+    const p=document.createElement('p');p.textContent=hint;
+    section.append(h,p);row.before(section);
+  });
+  const checklist=inspectionBody?.querySelector('.panel');
+  if(checklist){
+    const h=checklist.querySelector('.panel-head h2');
+    if(h)h.textContent='03 · Equipment checklist';
+    checklist.classList.add('fleet-inspection-checklist');
+  }
+  const inspectionSummary=document.createElement('div');
+  inspectionSummary.className='fleet-inspection-summary';inspectionSummary.setAttribute('aria-live','polite');
+  inspectionBody?.appendChild(inspectionSummary);
+  const refreshInspectionSummary=()=>{
+    const sel=inspectionBox.querySelector('#fIVehicle');
+    const vehicle=vehicleById(sel?.value);
+    const mileage=inspectionBox.querySelector('#fIMileage')?.value||'Not recorded';
+    const fuel=inspectionBox.querySelector('#fIFuel')?.value||'0';
+    const damaged=inspectionBox.querySelector('#fIBodyDamage')?.checked;
+    inspectionSummary.textContent=(vehicle?.unitNumber||'Vehicle')+' · '+mileage+' miles · '+fuel+'% fuel'+(damaged?' · Body damage flagged':' · No body damage flagged');
+    inspectionSummary.classList.toggle('fleet-inspection-alert',!!damaged);
+  };
+  inspectionBox.addEventListener('change',refreshInspectionSummary);
+  inspectionBox.addEventListener('input',refreshInspectionSummary);
+  setMileageDefault();
+  refreshInspectionSummary();
+  vSel.addEventListener('change', setMileageDefault);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('fIBodyDamage').addEventListener('change', (e)=>{
+    document.getElementById('fIDamageWrap').style.display = e.target.checked ? '' : 'none';
+  });
+  let inspectionAttemptId=null;
+  document.getElementById('mSave').onclick = async ()=>{
+    const vehicleId = vSel.value;
+    const v = available.find(item=>item.id===vehicleId);
+    if(!v)return toast('This vehicle is no longer available for inspection.',true);
+    const personnelIds = [...new Set([document.getElementById('fIPerson').value,...Array.from(document.querySelectorAll('.insp-person:checked')).map(el=>el.value)])].filter(Boolean);
+    if(personnelIds.length===0){ toast("Select at least one person performing the inspection.", true); return; }
+    const equipmentChecklist = EQUIPMENT_CATALOG.map((name,i)=>({
+      name,
+      required: true,
+      present: document.querySelector(`.insp-equip-present[data-equip-idx="${i}"]`).checked,
+      condition: document.querySelector(`.insp-equip-condition[data-equip-idx="${i}"]`).value,
+    }));
+    const bodyDamage = document.getElementById('fIBodyDamage').checked;
+    const inspection = {
+      id:'insp'+Date.now(), vehicleId,
+      dateTime: document.getElementById('fIDate').value + 'T' + document.getElementById('fITime').value,
+      personnelIds, shift: document.getElementById('fIShift').value,
+      fuelLevel: Number(document.getElementById('fIFuel').value)||0,
+      gallonsAdded: Number(document.getElementById('fIGallons').value)||0,
+      quartsOilAdded: Number(document.getElementById('fIQuarts').value)||0,
+      mileageAtInspection: Number(document.getElementById('fIMileage').value)||v.mileage,
+      equipmentChecklist,
+      equipmentComments: document.getElementById('fIEquipComments').value.trim(),
+      vehicleCondition: document.getElementById('fIVehCondition').value,
+      vehicleConditionComments: document.getElementById('fIConditionComments').value.trim(),
+      cleanliness: document.getElementById('fICleanliness').value,
+      cleanlinessComments: document.getElementById('fICleanlinessComments').value.trim(),
+      bodyDamage,
+      bodyDamageComments: bodyDamage ? document.getElementById('fIDamageComments').value.trim() : '',
+      narrative: document.getElementById('fINarrative').value.trim(),
+      submittedByRoleId: primaryRoleId(),
+    };
+    STATE.fleet.inspections.push(inspection);
+    // an inspection is the source of truth for the vehicle's live state
+    v.mileage = Math.max(v.mileage, inspection.mileageAtInspection);
+    v.currentFuelLevel = inspection.fuelLevel;
+    v.equipmentChecklist = equipmentChecklist;
+    logActivity(`Inspection completed on ${v.unitNumber} by ${personnelIds.map(pid=>personName(pid)).join(', ')}.`, "inspection", v.id);
+    if(bodyDamage){
+      STATE.fleet.maintenance.push({
+        id:'m'+Date.now(), vehicleId: v.id, type:"Body Work", date: fmt(new Date()),
+        vendorId:null, laborCost:0, partsCost:0, cost:0, mileageAtService: v.mileage,
+        status:"Open", notes:`Body damage reported during inspection: ${inspection.bodyDamageComments}`,
+        isRecurring:false, intervalDays:null, intervalMiles:null,
+      });
+      logActivity(`${v.unitNumber}: body work ticket auto-created from inspection damage report.`, "maintenance", v.id);
+    }
+    persist();
+    toast("Inspection submitted.");
+    closeModal();
+    if(ACTIVE_VIEW==='fleet-inspections') renderInspections();
+    if(ACTIVE_VIEW==='fleet-dashboard') renderDashboard();
+    if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
+  };
+}
+
+function viewInspectionDetail(id){
+  const i = STATE.fleet.inspections.find(x=>x.id===id);
+  if(!i || (!can('fleet_inspection_view_all') && !i.personnelIds?.includes(CURRENT_USER_ID) && i.submittedByPersonId!==CURRENT_USER_ID))
+    return toast('This inspection is not visible to your role.',true);
+  const v = vehicleById(i.vehicleId);
+  if(!v || !canSeeVehicle(v))return toast('This vehicle is not visible to your role.',true);
+  const equipRows = (i.equipmentChecklist||[]).map(e=>`
+    <tr><td>${escapeHtml(e.name)}</td><td>${e.present?`<span class="badge badge-available">Present</span>`:`<span class="badge badge-missing">Missing</span>`}</td><td>${escapeHtml(e.condition)}</td></tr>
+  `).join('');
+  document.getElementById('modalBox').className = 'modal modal-wide';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <h3 style="margin-bottom:2px;">Inspection — ${escapeHtml(v.unitNumber)}</h3>
+        <div class="mono" style="font-size:11.5px;color:var(--text-dim);">${i.dateTime.replace('T',' ')}</div>
+      </div>
+      <button class="modal-close" id="mClose">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid" style="margin-bottom:14px;">
+        <div><div class="k">Personnel</div><div class="v">${i.personnelIds.map(pid=>escapeHtml(personName(pid))).join(', ')}</div></div>
+        <div><div class="k">Shift</div><div class="v">${escapeHtml(i.shift)}</div></div>
+        <div><div class="k">Mileage</div><div class="v">${i.mileageAtInspection.toLocaleString()} mi</div></div>
+        <div><div class="k">Fuel Level</div><div class="v">${i.fuelLevel}%</div></div>
+        <div><div class="k">Gallons Added</div><div class="v">${i.gallonsAdded}</div></div>
+        <div><div class="k">Quarts Oil Added</div><div class="v">${i.quartsOilAdded}</div></div>
+        <div><div class="k">Vehicle Condition</div><div class="v">${escapeHtml(i.vehicleCondition)}</div></div>
+        <div><div class="k">Cleanliness</div><div class="v">${escapeHtml(i.cleanliness)}</div></div>
+      </div>
+      ${i.vehicleConditionComments ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Condition Comments</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.vehicleConditionComments)}</div></div>` : ''}
+      ${i.cleanlinessComments ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Cleanliness Comments</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.cleanlinessComments)}</div></div>` : ''}
+      <div class="panel" style="box-shadow:none;${i.bodyDamage?'border-color:var(--callout-red-border);':''}">
+        <div class="panel-head" style="${i.bodyDamage?'background:var(--callout-red-bg);':''}"><h2 style="${i.bodyDamage?'color:var(--red);':''}">Body Damage</h2></div>
+        <div class="panel-body" style="font-size:13px;">${i.bodyDamage ? escapeHtml(i.bodyDamageComments||'Noted, no further comments.') : 'None noted.'}</div>
+      </div>
+      <div class="panel" style="box-shadow:none;">
+        <div class="panel-head"><h2>Equipment Checklist</h2></div>
+        <div class="panel-body" style="padding:0;">
+          <table><thead><tr><th>Equipment</th><th>Status</th><th>Condition</th></tr></thead><tbody>${equipRows}</tbody></table>
+          ${i.equipmentComments ? `<div style="padding:10px 14px;font-size:13px;">${escapeHtml(i.equipmentComments)}</div>` : ''}
+        </div>
+      </div>
+      ${i.narrative ? `<div class="panel" style="box-shadow:none;"><div class="panel-head"><h2>Narrative</h2></div><div class="panel-body" style="font-size:13px;">${escapeHtml(i.narrative)}</div></div>` : ''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+}
+
+/* =========================================================================
+   ROLES & ABILITIES
+   ========================================================================= */
+let SELECTED_ROLE_ID = null;
+
+function renderRoles(){
+  const canManage = can('admin_roles');
+  // System Admin is locked (its checkboxes are intentionally disabled, since it's meant to
+  // always carry every customer ability automatically) -- but that only holds if its *saved*
+  // abilities object actually has every current key in it. A role saved before a new ability
+  // category existed (like Bulk Import) simply doesn't have those keys yet, and since it's
+  // locked, there's no checkbox to fix it by hand. Self-heal it here instead of relying on a
+  // manual toggle that was never going to be clickable in the first place.
+  const systemAdminRole = STATE.roles.find(r=>r.id==='role_admin');
+  if(systemAdminRole){ ALL_CUSTOMER_ABILITY_IDS.forEach(id=>{ if(systemAdminRole.abilities[id]===undefined) systemAdminRole.abilities[id]=true; }); }
+  if(!SELECTED_ROLE_ID) SELECTED_ROLE_ID = STATE.currentRoleId;
+
+  const roleListHtml = STATE.roles.map(r=>`
+    <div class="role-list-item ${r.id===SELECTED_ROLE_ID?'active':''}" data-select-role="${r.id}">
+      <div>
+        <div class="name">${escapeHtml(r.name)}</div>
+        <div class="count">${countAbilities(r)} of ${ALL_ABILITY_IDS.length} abilities</div>
+      </div>
+      ${r.locked ? ICONS.lock : ""}
+    </div>
+  `).join('');
+
+  const selRole = STATE.roles.find(r=>r.id===SELECTED_ROLE_ID) || STATE.roles[0];
+  const agencyScopeHtml = `
+    <div class="ability-group">
+      <h3>Agency Visibility</h3>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Leave everything unchecked to see all agencies. Check specific agencies to restrict this role to only their vehicles (shared task-force assets remain visible regardless).</div>
+      ${STATE.fleet.refData.agencies.map(a=>`
+        <div class="ability-row">
+          <div class="lbl">${escapeHtml(a)}</div>
+          <label class="switch">
+            <input type="checkbox" data-agency-scope="${escapeHtml(a)}" ${selRole.agencyScope.includes(a)?'checked':''} ${!canManage?'disabled':''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  const groupsHtml = Object.entries(ABILITY_CATALOG).map(([group, abilities])=>`
+    <div class="ability-group">
+      <h3>${group}</h3>
+      ${abilities.map(([id,label])=>`
+        <div class="ability-row">
+          <div class="lbl">${label}</div>
+          <label class="switch">
+            <input type="checkbox" data-ability="${id}" ${selRole.abilities[id]?'checked':''} ${(!canManage || (selRole.locked && id!=='chatbot_access'))?'disabled':''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  document.getElementById('view-roles').innerHTML = `
+    ${!canManage ? lockedNote("You're viewing role definitions in read-only mode. Switch to Fleet Admin to edit abilities.") : ""}
+    <div class="toolbar">
+      <div></div>
+      ${canManage ? `<button class="btn btn-primary" id="btnAddRole">${ICONS.plus} New Role</button>` : ""}
+    </div>
+    <div class="role-grid">
+      <div><div class="role-list">${roleListHtml}</div></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>${escapeHtml(selRole.name)}</h2>
+            <div class="hint" style="margin-top:3px;">${escapeHtml(selRole.description||"")}</div>
+          </div>
+          ${canManage && !selRole.locked ? `
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm btn-outline" id="btnRenameRole">${ICONS.edit} Rename</button>
+              <button class="btn btn-sm btn-danger" id="btnDeleteRole">${ICONS.trash} Delete</button>
+            </div>` : (selRole.locked ? `<span class="hint">${ICONS.lock} Built-in role</span>` : '')}
+        </div>
+        <div class="panel-body">
+          ${agencyScopeHtml}
+          ${groupsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-select-role]').forEach(el=>{
+    el.addEventListener('click', ()=>{ SELECTED_ROLE_ID = el.dataset.selectRole; renderRoles(); });
+  });
+
+  if(canManage){
+    document.querySelectorAll('[data-ability]').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        selRole.abilities[chk.dataset.ability] = chk.checked;
+        persist();
+        renderRoles();
+        if(selRole.id===STATE.currentRoleId){ document.getElementById('abilityCountPill').textContent = countAbilities(selRole)+" abilities"; }
+      });
+    });
+    document.querySelectorAll('[data-agency-scope]').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        const agency = chk.dataset.agencyScope;
+        if(chk.checked){ if(!selRole.agencyScope.includes(agency)) selRole.agencyScope.push(agency); }
+        else { selRole.agencyScope = selRole.agencyScope.filter(a=>a!==agency); }
+        logActivity(`Updated agency visibility scope for role "${selRole.name}".`, "admin");
+        persist();
+        toast("Agency scope updated.");
+      });
+    });
+    const addBtn = document.getElementById('btnAddRole');
+    if(addBtn) addBtn.addEventListener('click', ()=>openAddRoleModal());
+    const renameBtn = document.getElementById('btnRenameRole');
+    if(renameBtn) renameBtn.addEventListener('click', ()=>openAddRoleModal(selRole));
+    const delBtn = document.getElementById('btnDeleteRole');
+    if(delBtn) delBtn.addEventListener('click', ()=>deleteRole(selRole));
+  }
+}
+
+function openAddRoleModal(existing){
+  const editing = !!existing;
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?"Rename Role":"Create New Role"}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Role name</label><input type="text" id="fRoleName" value="${editing?escapeHtml(existing.name):''}" placeholder="e.g. Motor Pool Clerk"></div>
+      <div class="form-row"><label>Description</label><textarea id="fRoleDesc" rows="2" placeholder="What is this role for?">${editing?escapeHtml(existing.description||''):''}</textarea></div>
+      ${!editing ? `<div class="form-row"><label>Start from</label>
+        <select id="fRoleTemplate">
+          <option value="blank">Blank (no abilities)</option>
+          ${STATE.roles.map(r=>`<option value="${r.id}">Copy from ${escapeHtml(r.name)}</option>`).join('')}
+        </select></div>` : ''}
+      <div style="font-size:12px;color:var(--text-dim);">There's no limit on how many roles you can create.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?"Save":"Create Role"}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const name = document.getElementById('fRoleName').value.trim();
+    if(!name){ toast("Enter a role name.", true); return; }
+    if(editing){
+      existing.name = name;
+      existing.description = document.getElementById('fRoleDesc').value.trim();
+      toast("Role updated.");
+    }else{
+      const tmplId = document.getElementById('fRoleTemplate').value;
+      const abilities = tmplId==="blank" ? abilitiesFor([]) : JSON.parse(JSON.stringify(STATE.roles.find(r=>r.id===tmplId).abilities));
+      abilities.chatbot_access=false;
+      abilities.workflow_use=false;
+      abilities.workflow_approve=false;
+      abilities.workflow_manage=false;
+      const newRole = {id:"role_"+Date.now(), name, description: document.getElementById('fRoleDesc').value.trim(), locked:false, agencyScope:[], abilities};
+      STATE.roles.push(newRole);
+      SELECTED_ROLE_ID = newRole.id;
+      toast("Role created.");
+    }
+    persist();
+    closeModal();
+    renderRoles();
+    renderRoleSwitcher();
+  };
+}
+
+function deleteRole(role){
+  const inUse = STATE.personnel.some(p=>p.roleId===role.id);
+  if(inUse){ toast("Can't delete a role that's still assigned to personnel. Reassign them first.", true); return; }
+  if(!confirm(`Delete the role "${role.name}"? This cannot be undone.`)) return;
+  STATE.roles = STATE.roles.filter(r=>r.id!==role.id);
+  if(STATE.currentRoleId===role.id) STATE.currentRoleId = STATE.roles[0].id;
+  SELECTED_ROLE_ID = STATE.roles[0].id;
+  persist();
+  toast("Role deleted.");
+  renderRoles();
+  renderRoleSwitcher();
+}
+
+/* =========================================================================
+   PERSONNEL
+   ========================================================================= */
+function renderPersonnel(){
+  const canView = can('personnel_view');
+  const canManage = can('personnel_manage');
+  if(!canView){
+    document.getElementById('view-personnel').innerHTML = permissionBlockedView("You don't have permission to view the personnel roster in this role.");
+    return;
+  }
+  const s = SORT.personnel;
+  const personnel = STATE.personnel.slice().sort((a,b)=>{
+    const av = s.key==='roleId' ? roleName(a.roleId).toLowerCase() : String(a[s.key]).toLowerCase();
+    const bv = s.key==='roleId' ? roleName(b.roleId).toLowerCase() : String(b[s.key]).toLowerCase();
+    if(av<bv) return s.dir==='asc'?-1:1; if(av>bv) return s.dir==='asc'?1:-1; return 0;
+  });
+
+  const rows = personnel.map(p=>`
+    <tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td class="mono">${escapeHtml(p.badge)}</td>
+      <td>${p.email?escapeHtml(p.email):'—'}</td>
+      <td>${escapeHtml(p.unit)}</td>
+      <td><span class="badge badge-role">${escapeHtml(roleName(p.roleId))}</span></td>
+      <td>${canManage ? `<div class="cell-actions"><button class="btn-icon" data-edit-p="${p.id}" title="Edit">${ICONS.edit}</button></div>` : ""}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('view-personnel').innerHTML = `
+    ${!canManage ? lockedNote("You're viewing the roster in read-only mode.") : ""}
+    <div class="toolbar">
+      <div></div>
+      ${canManage ? `<button class="btn btn-primary" id="btnAddPerson">${ICONS.plus} Add Personnel</button>` : ""}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr>
+          ${sortHeaderHtml('Name','personnel','name')}
+          ${sortHeaderHtml('Badge #','personnel','badge')}
+          <th>Email</th>
+          ${sortHeaderHtml('Unit','personnel','unit')}
+          ${sortHeaderHtml('Role','personnel','roleId')}
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  wireSortHeaders('personnel', renderPersonnel);
+  const addBtn = document.getElementById('btnAddPerson');
+  if(addBtn) addBtn.addEventListener('click', ()=>openPersonModal(null));
+  document.querySelectorAll('[data-edit-p]').forEach(b=>b.addEventListener('click', ()=>openPersonModal(b.dataset.editP)));
+}
+
+function openPersonModal(id){
+  const editing = !!id;
+  const p = editing ? STATE.personnel.find(p=>p.id===id) : {name:"",badge:"",email:"",unit:"",roleId:STATE.roles[STATE.roles.length-1].id};
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?"Edit Personnel":"Add Personnel"}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-2col">
+        <div class="form-row"><label>First name</label><input type="text" id="fPFirstName" value="${escapeHtml((p.name||'').split(' ')[0]||'')}"></div>
+        <div class="form-row"><label>Last name</label><input type="text" id="fPLastName" value="${escapeHtml((p.name||'').split(' ').slice(1).join(' '))}"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Badge / ID #</label><input type="text" id="fPBadge" value="${escapeHtml(p.badge)}"></div>
+        <div class="form-row"><label>Email</label><input type="text" id="fPEmail" value="${escapeHtml(p.email||'')}" placeholder="name@agency.gov"></div>
+      </div>
+      <div class="form-row"><label>Unit</label><input type="text" id="fPUnit" value="${escapeHtml(p.unit)}"></div>
+      <div class="form-row"><label>Role</label>
+        <select id="fPRole">${STATE.roles.map(r=>`<option value="${r.id}" ${p.roleId===r.id?'selected':''}>${escapeHtml(r.name)}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?"Save Changes":"Add Personnel"}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const firstName = document.getElementById('fPFirstName').value.trim();
+    const lastName = document.getElementById('fPLastName').value.trim();
+    if(!firstName || !lastName){ toast("Enter a first and last name.", true); return; }
+    const name = `${firstName} ${lastName}`;
+    const data = {name, badge:document.getElementById('fPBadge').value.trim(), email:document.getElementById('fPEmail').value.trim(), unit:document.getElementById('fPUnit').value.trim(), roleId:document.getElementById('fPRole').value};
+    if(editing){ Object.assign(p, data); toast("Personnel updated."); }
+    else{ STATE.personnel.push({id:"p"+Date.now(), ...data}); toast("Personnel added."); }
+    persist();
+    closeModal();
+    renderPersonnel();
+  };
+}
+
+/* =========================================================================
+   REPORTS
+   ========================================================================= */
+let CHART_REFS = {};
+function destroyCharts(){ Object.values(CHART_REFS).forEach(c=>c && c.destroy()); CHART_REFS = {}; }
+let REPORT_RANGE = {from:"", to:"", vehicleType:"All", agency:"All"};
+
+function inRange(dateStr){
+  if(!dateStr) return false;
+  const d = dateStr.slice(0,10);
+  if(REPORT_RANGE.from && d < REPORT_RANGE.from) return false;
+  if(REPORT_RANGE.to && d > REPORT_RANGE.to) return false;
+  return true;
+}
+
+function renderReports(){
+  if(!can('fleet_reports_view')){
+    document.getElementById('view-fleet-reports').innerHTML = permissionBlockedView("You don't have permission to view reports in this role.");
+    return;
+  }
+  const canExport = can('fleet_reports_export');
+  let veh = visibleVehicles();
+  if(REPORT_RANGE.vehicleType!=='All') veh = veh.filter(v=>v.vehicleType===REPORT_RANGE.vehicleType);
+  if(REPORT_RANGE.agency!=='All') veh = veh.filter(v=>v.agency===REPORT_RANGE.agency);
+  const inScopeVehicle = id => { const v = vehicleById(id); if(!v) return false; if(REPORT_RANGE.vehicleType!=='All' && v.vehicleType!==REPORT_RANGE.vehicleType) return false; if(REPORT_RANGE.agency!=='All' && v.agency!==REPORT_RANGE.agency) return false; return true; };
+  const hasRange = REPORT_RANGE.from || REPORT_RANGE.to;
+
+  // 1. Vehicle inspections by personnel
+  const inspInRange = STATE.fleet.inspections.filter(i => inScopeVehicle(i.vehicleId) && (!hasRange || inRange(i.dateTime)));
+  const byPerson = {};
+  inspInRange.forEach(i=> i.personnelIds.forEach(pid=>{ byPerson[pid]=(byPerson[pid]||0)+1; }));
+  const inspByPersonRows = Object.entries(byPerson).sort((a,b)=>b[1]-a[1]).map(([pid,count])=>`
+    <tr><td>${escapeHtml(personName(pid))}</td><td>${count}</td></tr>
+  `).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No inspections in this range.</td></tr>`;
+
+  // 2. Vehicles by fuel, oil, mileage (gallons/quarts summed from inspections in range; mileage is current odometer)
+  const fuelOilByVehicle = {};
+  inspInRange.forEach(i=>{
+    if(!fuelOilByVehicle[i.vehicleId]) fuelOilByVehicle[i.vehicleId] = {gallons:0, quarts:0};
+    fuelOilByVehicle[i.vehicleId].gallons += i.gallonsAdded;
+    fuelOilByVehicle[i.vehicleId].quarts += i.quartsOilAdded;
+  });
+  const fuelOilRows = veh.map(v=>{
+    const agg = fuelOilByVehicle[v.id] || {gallons:0, quarts:0};
+    return `<tr><td>${vehicleLink(v)}</td><td>${v.currentFuelLevel}%</td><td>${agg.gallons.toFixed(1)}</td><td>${agg.quarts.toFixed(1)}</td><td>${v.mileage.toLocaleString()} mi</td></tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles.</td></tr>`;
+
+  // 3. Vehicles by assignment
+  const assignmentRows = veh.map(v=>`
+    <tr><td>${vehicleLink(v)}</td><td>${escapeHtml(v.vehicleType)}</td><td>${assignmentLabel(v)}</td><td>${escapeHtml(v.location)}</td></tr>
+  `).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles.</td></tr>`;
+
+  // 4. Vehicle maintenance by type (date range on maintenance date)
+  const maintInRange = STATE.fleet.maintenance.filter(m => inScopeVehicle(m.vehicleId) && (!hasRange || inRange(m.date)));
+  const maintByType = {};
+  STATE.fleet.refData.maintenanceTypes.forEach(t=>maintByType[t]={count:0, cost:0});
+  maintInRange.forEach(m=>{
+    if(!maintByType[m.type]) maintByType[m.type] = {count:0, cost:0};
+    maintByType[m.type].count++;
+    maintByType[m.type].cost += m.cost;
+  });
+  const maintByTypeRows = Object.entries(maintByType).filter(([,v])=>v.count>0).map(([type,v])=>`
+    <tr><td>${escapeHtml(type)}</td><td>${v.count}</td><td>${money(v.cost)}</td></tr>
+  `).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No maintenance in this range.</td></tr>`;
+
+  // 5. Vehicles with assigned equipment (fully equipped)
+  const fullyEquipped = veh.filter(v=>(v.equipmentChecklist||[]).every(e=>e.present));
+  const equippedRows = fullyEquipped.map(v=>`
+    <tr><td>${vehicleLink(v)}</td><td>${(v.equipmentChecklist||[]).length} items</td></tr>
+  `).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No fully-equipped vehicles found.</td></tr>`;
+
+  // 6. Vehicles with missing equipment
+  const missingVehicles = veh.filter(v=>(v.equipmentChecklist||[]).some(e=>!e.present));
+  const missingRows = missingVehicles.map(v=>{
+    const missing = v.equipmentChecklist.filter(e=>!e.present).map(e=>e.name);
+    return `<tr><td>${vehicleLink(v)}</td><td>${escapeHtml(missing.join(', '))}</td></tr>`;
+  }).join('') || `<tr><td colspan="2" style="text-align:center;color:var(--text-dim);padding:16px;">No vehicles are missing equipment.</td></tr>`;
+
+  // 7. Vehicles with repairs needed (Open maintenance)
+  const needsRepair = STATE.fleet.maintenance.filter(m=>m.status==="Open" && inScopeVehicle(m.vehicleId));
+  const repairRows = needsRepair.map(m=>{
+    const v = vehicleById(m.vehicleId);
+    return `<tr><td>${vehicleLink(v)}</td><td>${m.type}</td><td>${m.date}</td><td style="font-size:12px;color:var(--text-dim);">${escapeHtml(m.notes||'')}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No open repairs.</td></tr>`;
+
+  // Bonus charts data
+  const byType = {}; STATE.fleet.refData.vehicleTypes.forEach(t=>byType[t]=0); veh.forEach(v=>byType[v.vehicleType]=(byType[v.vehicleType]||0)+1);
+  const byStatus = {}; veh.forEach(v=>byStatus[v.status]=(byStatus[v.status]||0)+1);
+  const costByVendor = {};
+  STATE.fleet.maintenance.filter(m=>m.status==="Completed").forEach(m=>{
+    const name = m.vendorId ? vendorName(m.vendorId) : "In-House";
+    costByVendor[name] = (costByVendor[name]||0) + m.cost;
+  });
+
+  document.getElementById('view-fleet-reports').innerHTML = `
+    <div class="panel" style="margin-bottom:16px;"><div class="panel-body"><div id="fleetReportFilterHost"></div></div></div>
+    <div class="toolbar">
+      <div></div>
+      <div style="display:flex;gap:8px;">
+        ${canExport ? `<button class="btn btn-outline" id="btnExportFleet">${ICONS.download} Export Fleet (CSV)</button>` : ""}
+        <button class="btn btn-outline" id="btnPrintReportFleet">Print / Save as PDF</button>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="panel"><div class="panel-head"><h2>Vehicles by Type</h2></div><div class="panel-body"><div class="chart-box"><canvas id="chartFleetType"></canvas></div></div></div>
+      <div class="panel"><div class="panel-head"><h2>Status Breakdown</h2></div><div class="panel-body"><div class="chart-box"><canvas id="chartFleetStatus"></canvas></div></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Maintenance Cost by Vendor</h2></div>
+      <div class="panel-body"><div class="chart-box" style="height:180px;"><canvas id="chartFleetVendorCost"></canvas></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicle Inspections by Personnel</h2><span class="hint">${hasRange?'Filtered by date range':'All time'} &bull; ${inspInRange.length} inspections</span></div>
+      <div class="panel-body" style="padding:0;"><table><thead><tr><th>Personnel</th><th># Inspections</th></tr></thead><tbody>${inspByPersonRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles by Fuel, Oil &amp; Mileage</h2><span class="hint">Gallons/quarts totaled ${hasRange?'within range':'all time'} from inspections</span></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Current Fuel</th><th>Gallons Added</th><th>Quarts Oil Added</th><th>Mileage</th></tr></thead><tbody>${fuelOilRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles by Assignment</h2></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Assigned To</th><th>Location</th></tr></thead><tbody>${assignmentRows}</tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicle Maintenance by Type</h2><span class="hint">${hasRange?'Filtered by date range':'All time'}</span></div>
+      <div class="panel-body" style="padding:0;"><table><thead><tr><th>Type</th><th>Count</th><th>Total Cost</th></tr></thead><tbody>${maintByTypeRows}</tbody></table></div>
+    </div>
+
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-head"><h2>Vehicles with Assigned Equipment</h2><span class="hint">Fully equipped &bull; ${fullyEquipped.length}</span></div>
+        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Vehicle</th><th>Equipment Count</th></tr></thead><tbody>${equippedRows}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Vehicles with Missing Equipment</h2><span class="hint">${missingVehicles.length} flagged</span></div>
+        <div class="panel-body" style="padding:0;"><table><thead><tr><th>Vehicle</th><th>Missing Items</th></tr></thead><tbody>${missingRows}</tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Vehicles with Repairs Needed</h2><span class="hint">${needsRepair.length} open repair(s)</span></div>
+      <div class="panel-body" style="padding:0;overflow-x:auto;"><table><thead><tr><th>Vehicle</th><th>Type</th><th>Reported</th><th>Notes</th></tr></thead><tbody>${repairRows}</tbody></table></div>
+    </div>
+  `;
+
+  destroyCharts();
+  const navy = '#24364E', blue='#134DD1', slate='#B4C7CF', gold='#FFAC12', red='#D34120';
+  const palette = [blue, navy, slate, gold, '#6C8AA8', '#4E6C8C', '#8FA6B8', '#1E2E44', '#3D6BC7', '#B4372A'];
+  const baseBarOpts = (currency)=>({
+    maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ ticks:{color:chartTextColor(), font:{family:'Archivo', size:11}}, grid:{display:false} },
+      y:{ ticks:{color:chartTextColor(), font:{family:'Archivo', size:11}, callback: v=> currency ? '$'+v : v}, grid:{color:chartGridColor()} }
+    }
+  });
+  CHART_REFS.type = safeChart('chartFleetType', {
+    type:'bar', data:{ labels:Object.keys(byType), datasets:[{label:'Vehicles', data:Object.values(byType), backgroundColor:blue}] }, options: baseBarOpts()
+  });
+  CHART_REFS.status = safeChart('chartFleetStatus', {
+    type:'doughnut', data:{ labels:Object.keys(byStatus), datasets:[{data:Object.values(byStatus), backgroundColor:palette}] },
+    options:{ plugins:{ legend:{position:'right', labels:{color:navy, font:{family:'Archivo'}}} }, maintainAspectRatio:false }
+  });
+  CHART_REFS.vendorCost = safeChart('chartFleetVendorCost', {
+    type:'bar', data:{ labels:Object.keys(costByVendor), datasets:[{label:'Cost ($)', data:Object.values(costByVendor), backgroundColor:red}] },
+    options: {...baseBarOpts(true), indexAxis:'y'}
+  });
+
+  renderReportFilterBar(document.getElementById('fleetReportFilterHost'), [
+    {type:'daterange', keyFrom:'from', keyTo:'to', label:'Activity Date Range'},
+    {type:'select', key:'vehicleType', label:'Vehicle Type', options: STATE.fleet.refData.vehicleTypes},
+    {type:'select', key:'agency', label:'Agency', options: STATE.fleet.refData.agencies},
+  ], REPORT_RANGE, renderReports);
+  document.getElementById('btnPrintReportFleet').addEventListener('click', ()=>window.print());
+  const exportBtn = document.getElementById('btnExportFleet');
+  if(exportBtn) exportBtn.addEventListener('click', exportFleetCsv);
+  wireVehicleLinks();
+}
+
+function exportFleetCsv(){
+  const headers = ["Unit #","Make","Model","Year","VIN","Type","Status","Mileage","Location","Agency","Assigned To"];
+  const rows = STATE.fleet.vehicles.map(v=>[v.unitNumber,v.make,v.model,v.year,v.vin,v.vehicleType,v.status,v.mileage,v.location,v.agency, v.assignedToType==='person'?personName(v.assignedTo):(v.assignedTo||'')]);
+  const csv = [headers, ...rows].map(r=>r.map(x=>csvSafeCell(x)).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'fleet_vehicles.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast("Fleet exported.");
+}
+
+/* =========================================================================
+   ADMIN: reference data, vendors, notification routing, audit log
+   ========================================================================= */
+let ADMIN_TAB = 'vehicleTypes';
+const SIMPLE_LIST_TABS = {
+  vehicleTypes: {label:'Vehicle Types', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.vehicleType===v).length},
+  maintenanceTypes: {label:'Maintenance Types', usageCheck:(v)=>STATE.fleet.maintenance.filter(m=>m.type===v).length},
+  locations: {label:'Locations', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.location===v).length},
+  agencies: {label:'Agencies', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>x.agency===v).length},
+  equipmentCatalog: {label:'Equipment Catalog', usageCheck:(v)=>STATE.fleet.vehicles.filter(x=>(x.equipmentChecklist||[]).some(e=>e.name===v)).length},
+};
+
+function renderAdmin(){
+  const canManage = can('fleet_admin_categories');
+  const canAudit = can('fleet_admin_audit');
+  if(!canManage && !canAudit){
+    document.getElementById('view-fleet-admin').innerHTML = permissionBlockedView("You don't have permission to view administration settings in this role.");
+    return;
+  }
+  const tabs = [];
+  if(canManage){
+    Object.entries(SIMPLE_LIST_TABS).forEach(([key,cfg])=>tabs.push([key,cfg.label]));
+    tabs.push(['vendors','Vendors']);
+    tabs.push(['notifications','Notification Routing']);
+  }
+  if(can('fleet_bulk_import')) tabs.push(['bulkImport','Bulk Import']);
+  if(canAudit) tabs.push(['audit','Platform Audit Log']);
+  if(!tabs.find(([k])=>k===ADMIN_TAB)) ADMIN_TAB = tabs[0][0];
+
+  document.getElementById('view-fleet-admin').innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+      ${tabs.map(([key,label])=>`<button class="btn btn-sm ${ADMIN_TAB===key?'btn-primary':'btn-outline'}" data-admin-tab="${key}">${label}</button>`).join('')}
+    </div>
+    <div id="adminTabBodyFleet"></div>
+  `;
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click', ()=>{ ADMIN_TAB=b.dataset.adminTab; renderAdmin(); }));
+  renderAdminTabBody();
+}
+
+function renderAdminTabBody(){
+  const body = document.getElementById('adminTabBodyFleet');
+  if(SIMPLE_LIST_TABS[ADMIN_TAB]){
+    renderSimpleListTab(body, ADMIN_TAB);
+  } else if(ADMIN_TAB==='vendors'){
+    renderVendorsTab(body);
+  } else if(ADMIN_TAB==='notifications'){
+    renderNotificationRoutingTab(body);
+  } else if(ADMIN_TAB==='bulkImport'){
+    renderBulkImportTab(body, 'fleet');
+  } else if(ADMIN_TAB==='audit'){
+    renderPlatformAuditLogTab(body);
+  }
+}
+
+function renderSimpleListTab(body, key){
+  const cfg = SIMPLE_LIST_TABS[key];
+  const list = STATE.fleet.refData[key];
+  const rows = list.map((v,i)=>{
+    const inUse = cfg.usageCheck(v);
+    return `<tr>
+      <td>${escapeHtml(v)}</td>
+      <td>${inUse ? `<span class="badge badge-role">${inUse} in use</span>` : `<span style="color:var(--text-dim);font-size:12px;">unused</span>`}</td>
+      <td><button class="btn-icon" data-remove-item="${i}" title="Remove">${ICONS.trash}</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No ${cfg.label.toLowerCase()} defined yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>${cfg.label}</h2><span class="hint">Agency-defined — add as many as you need</span></div>
+      <div class="panel-body">
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <input type="text" id="newItemInputFleet" placeholder="Add a new ${cfg.label.toLowerCase().replace(/s$/,'')}..." style="flex:1;">
+          <button class="btn btn-primary btn-sm" id="btnAddItemFleet">${ICONS.plus} Add</button>
+        </div>
+        <table><thead><tr><th>${cfg.label}</th><th>Usage</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnAddItemFleet').addEventListener('click', ()=>{
+    const val = document.getElementById('newItemInputFleet').value.trim();
+    if(!val){ toast("Enter a value first.", true); return; }
+    if(list.includes(val)){ toast("That already exists.", true); return; }
+    list.push(val);
+    logActivity(`Added "${val}" to ${cfg.label}.`, "admin");
+    persist();
+    renderAdminTabBody();
+  });
+  document.querySelectorAll('[data-remove-item]').forEach(b=>b.addEventListener('click', ()=>{
+    const idx = Number(b.dataset.removeItem);
+    const val = list[idx];
+    if(cfg.usageCheck(val)>0){ toast(`Can't remove "${val}" \u2014 it's currently used by ${cfg.usageCheck(val)} record(s). Reassign them first.`, true); return; }
+    if(!confirm(`Remove "${val}" from ${cfg.label}?`)) return;
+    list.splice(idx,1);
+    logActivity(`Removed "${val}" from ${cfg.label}.`, "admin");
+    persist();
+    renderAdminTabBody();
+  }));
+}
+
+function renderVendorsTab(body){
+  const rows = STATE.fleet.refData.vendors.map(v=>{
+    const inUse = STATE.fleet.maintenance.filter(m=>m.vendorId===v.id).length;
+    return `<tr>
+      <td>${escapeHtml(v.name)}</td>
+      <td>${escapeHtml(v.contact||'')}</td>
+      <td>${escapeHtml(v.phone||'')}</td>
+      <td style="font-size:12px;">${escapeHtml(v.servicesProvided||'')}</td>
+      <td>${inUse ? `<span class="badge badge-role">${inUse} in use</span>` : ''}</td>
+      <td><div class="cell-actions">
+        <button class="btn-icon" data-edit-vendor="${v.id}" title="Edit">${ICONS.edit}</button>
+        <button class="btn-icon" data-del-vendor="${v.id}" title="Delete">${ICONS.trash}</button>
+      </div></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No vendors yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Vendors</h2><span class="hint">Repair, service, and upfit vendors for cost tracking</span></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px;"><button class="btn btn-primary btn-sm" id="btnAddVendorFleet">${ICONS.plus} Add Vendor</button></div>
+        <table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Services Provided</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnAddVendorFleet').addEventListener('click', ()=>openVendorModal(null));
+  document.querySelectorAll('[data-edit-vendor]').forEach(b=>b.addEventListener('click', ()=>openVendorModal(b.dataset.editVendor)));
+  document.querySelectorAll('[data-del-vendor]').forEach(b=>b.addEventListener('click', ()=>{
+    const v = STATE.fleet.refData.vendors.find(v=>v.id===b.dataset.delVendor);
+    const inUse = STATE.fleet.maintenance.filter(m=>m.vendorId===v.id).length;
+    if(inUse>0){ toast(`Can't remove "${v.name}" \u2014 linked to ${inUse} maintenance record(s).`, true); return; }
+    if(!confirm(`Remove vendor "${v.name}"?`)) return;
+    STATE.fleet.refData.vendors = STATE.fleet.refData.vendors.filter(x=>x.id!==v.id);
+    logActivity(`Removed vendor "${v.name}".`, "admin");
+    persist();
+    renderAdminTabBody();
+  }));
+}
+
+function openVendorModal(id){
+  const editing = !!id;
+  const v = editing ? STATE.fleet.refData.vendors.find(v=>v.id===id) : {name:'',contact:'',phone:'',email:'',servicesProvided:''};
+  document.getElementById('modalBox').className = 'modal';
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head"><h3>${editing?'Edit Vendor':'Add Vendor'}</h3><button class="modal-close" id="mClose">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Vendor Name</label><input type="text" id="fVName" value="${escapeHtml(v.name)}"></div>
+      <div class="form-row"><label>Contact Person</label><input type="text" id="fVContact" value="${escapeHtml(v.contact||'')}"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Phone</label><input type="text" id="fVPhone" value="${escapeHtml(v.phone||'')}"></div>
+        <div class="form-row"><label>Email</label><input type="text" id="fVEmail" value="${escapeHtml(v.email||'')}"></div>
+      </div>
+      <div class="form-row"><label>Services Provided</label><textarea id="fVServices" rows="2" placeholder="e.g. Oil changes, brakes, tires">${escapeHtml(v.servicesProvided||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Add Vendor'}</button>
+    </div>
+  `;
+  openModal();
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mCancel').onclick = closeModal;
+  document.getElementById('mSave').onclick = ()=>{
+    const name = document.getElementById('fVName').value.trim();
+    if(!name){ toast("Enter a vendor name.", true); return; }
+    const data = {name, contact:document.getElementById('fVContact').value.trim(), phone:document.getElementById('fVPhone').value.trim(), email:document.getElementById('fVEmail').value.trim(), servicesProvided:document.getElementById('fVServices').value.trim()};
+    if(editing){ Object.assign(v, data); logActivity(`Updated vendor "${name}".`, "admin"); }
+    else { STATE.fleet.refData.vendors.push({id:'v'+Date.now(), ...data}); logActivity(`Added vendor "${name}".`, "admin"); }
+    persist();
+    closeModal();
+    renderAdminTabBody();
+  };
+}
+
+function renderNotificationRoutingTab(body){
+  const roleOpts = (selected)=> STATE.roles.map(r=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${escapeHtml(r.name)}</option>`).join('');
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Notification Routing</h2><span class="hint">Which role receives each type of automatic alert</span></div>
+      <div class="panel-body">
+        <div class="form-row"><label>Maintenance Due Alerts</label><select id="fRouteMaintFleet">${roleOpts(STATE.fleet.notifySettings.maintenanceDueRoleId)}</select></div>
+        <div class="form-row"><label>Inspection Overdue Alerts</label><select id="fRouteInsp">${roleOpts(STATE.fleet.notifySettings.inspectionOverdueRoleId)}</select></div>
+        <div class="form-row"><label>Missing Equipment Alerts</label><select id="fRouteEquip">${roleOpts(STATE.fleet.notifySettings.missingEquipmentRoleId)}</select></div>
+        <button class="btn btn-primary btn-sm" id="btnSaveRoutingFleet">Save Routing</button>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:10px;">Anyone viewing the app as the selected role sees these alerts in the bell icon, top right. This is in-app only in this prototype — not email or SMS.</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnSaveRoutingFleet').addEventListener('click', ()=>{
+    STATE.fleet.notifySettings.maintenanceDueRoleId = document.getElementById('fRouteMaintFleet').value;
+    STATE.fleet.notifySettings.inspectionOverdueRoleId = document.getElementById('fRouteInsp').value;
+    STATE.fleet.notifySettings.missingEquipmentRoleId = document.getElementById('fRouteEquip').value;
+    logActivity("Updated notification routing settings.", "admin");
+    persist();
+    toast("Notification routing saved.");
+    renderNotifBell();
+  });
+}
+
+let AUDIT_FILTER = {entityType:"All"};
+function renderAuditLogTab(body){
+  const canExport = can('fleet_reports_export');
+  const types = ["All", ...new Set(STATE.fleet.activity.map(a=>a.entityType||"general"))];
+  const filtered = STATE.fleet.activity.filter(a=> AUDIT_FILTER.entityType==="All" || (a.entityType||"general")===AUDIT_FILTER.entityType).slice().reverse();
+  const vehEntityTypes = ["vehicle","maintenance","inspection"];
+  const rows = filtered.map(a=>{
+    const linkedVeh = (vehEntityTypes.includes(a.entityType) && a.entityId) ? vehicleById(a.entityId) : null;
+    return `<tr>
+      <td class="mono" style="white-space:nowrap;">${a.ts}</td>
+      <td><span class="badge badge-role">${escapeHtml(a.entityType||'general')}</span></td>
+      <td>${escapeHtml(a.text)}</td>
+      <td>${linkedVeh ? `<button class="btn btn-sm btn-outline" data-open-veh="${linkedVeh.id}">View Vehicle</button>` : ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:16px;">No activity recorded yet.</td></tr>`;
+  body.innerHTML = `
+    <div class="toolbar">
+      <div class="filters"><select id="auditTypeFleet" title="Filter the physical audit log to a single entity type">${types.map(t=>`<option ${AUDIT_FILTER.entityType===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      ${canExport ? `<button class="btn btn-outline" id="btnExportAuditFleet">${ICONS.download} Export Log (CSV)</button>` : ''}
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:0;overflow-x:auto;">
+        <table><thead><tr><th>Timestamp</th><th>Type</th><th>Event</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-top:8px;">${filtered.length} of ${STATE.fleet.activity.length} events</div>
+  `;
+  document.getElementById('auditTypeFleet').addEventListener('change', e=>{AUDIT_FILTER.entityType=e.target.value; renderAdminTabBody();});
+  wireVehicleLinks();
+  const exportBtn = document.getElementById('btnExportAuditFleet');
+  if(exportBtn) exportBtn.addEventListener('click', ()=>{
+    const headers = ["Timestamp","Type","Event"];
+    const csvRows = filtered.map(a=>[a.ts, a.entityType||'general', a.text]);
+    const csv = [headers, ...csvRows].map(r=>r.map(v=>csvSafeCell(v)).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fleet_audit_log.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Audit log exported.");
+  });
+}
+
+/* =========================================================================
+   MODAL PLUMBING
+   ========================================================================= */
+function openModal(){ SuiteUX.openModal(); }
+function closeModal(event){ return SuiteUX.closeModal(event); }
+
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+function startFleetModule(){
+  renderNav();
+  switchView('fleet-dashboard');
+}
+window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData: migrateFleetData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openVehicleDetail };
+
+})();
+
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')){
+ const style=document.createElement('style');style.id='fleet-modern-style';
+ style.textContent='.fleet-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim);margin-bottom:5px}.fleet-detail-title{font-size:23px;margin:0 0 5px}.fleet-detail-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:17px}.fleet-detail-buttons{display:flex;gap:8px;flex-wrap:wrap}.fleet-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.fleet-metric,.fleet-detail-card{border:1px solid var(--border);border-radius:13px;background:rgba(105,143,187,.055);padding:17px;min-width:0}.fleet-metric small,.fleet-facts small{font-size:11px;color:var(--text-dim);display:block;margin-bottom:7px}.fleet-metric strong{font-size:18px;font-weight:800;display:block;overflow-wrap:anywhere}.fleet-metric span{font-size:11px;color:var(--text-dim);display:block;margin-top:6px}.fleet-detail-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fleet-detail-card h4{font-size:14px;margin:0 0 16px;font-weight:800}.fleet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fleet-facts strong{display:block;font-size:13px;overflow-wrap:anywhere}.fleet-edit-body{max-width:1080px;margin:0 auto;padding:22px 25px!important}.fleet-edit-section-heading{border-top:1px solid var(--border);padding-top:18px;margin:20px 0 15px}.fleet-edit-section-heading:first-child{margin-top:0;border-top:0;padding-top:0}.fleet-edit-section-heading h4{font-size:15px;margin:0 0 5px;font-weight:800}.fleet-edit-section-heading p{font-size:12px;color:var(--text-dim);margin:0}@media(max-width:800px){.fleet-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.fleet-detail-metrics,.fleet-detail-panels{grid-template-columns:1fr}.fleet-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.fleet-edit-body{padding:14px!important}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-inspection-maintenance-polish')){
+ const style=document.createElement('style');style.id='fleet-inspection-maintenance-polish';
+ style.textContent='.fleet-inspection-workspace{max-width:890px!important;width:min(890px,calc(100vw - 28px))!important}.fleet-inspection-workspace .fleet-inspection-body{max-width:730px!important;padding:20px!important;box-sizing:border-box}.fleet-inspection-heading{border-top:1px solid var(--border);padding-top:19px;margin:21px 0 13px}.fleet-inspection-heading:first-child{border:0;padding-top:0;margin-top:0}.fleet-inspection-heading h4,.fleet-maintenance-heading h4{font-weight:800;font-size:15px;margin:0 0 5px}.fleet-inspection-heading p,.fleet-maintenance-heading p{margin:0;color:var(--text-dim);font-size:12px}.fleet-inspection-checklist{border-radius:13px;overflow:hidden}.fleet-inspection-summary,.fleet-maintenance-summary{margin:18px 0 8px;border-left:3px solid #4b86d7;border-radius:9px;background:rgba(54,118,224,.1);padding:14px 16px;font-size:13px;line-height:1.5}.fleet-inspection-alert{border-left-color:#f0a144;background:rgba(240,161,68,.13)}.fleet-maintenance-workspace{max-width:760px!important;width:min(760px,calc(100vw - 28px))!important}.fleet-maintenance-workspace .fleet-maintenance-body{padding:20px 24px!important}.fleet-maintenance-heading{margin-bottom:18px}.fleet-maintenance-workspace .form-row textarea,.fleet-inspection-workspace .form-row textarea{display:block;min-height:84px;width:100%;box-sizing:border-box}@media(max-width:580px){.fleet-inspection-workspace .fleet-inspection-body,.fleet-maintenance-workspace .fleet-maintenance-body{padding:13px!important}}';
  document.head.appendChild(style);
 }
