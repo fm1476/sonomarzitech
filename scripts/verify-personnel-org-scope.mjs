@@ -137,3 +137,15 @@ console.log('Personnel canonical source-of-truth read/write guards passed.');
 assert.match(source,/A restricted editor cannot change the record person identity/);
 assert.match(source,/String\(beforeValue\.personId\|\|beforeValue\.id\|\|''\) !== String\(afterValue\.personId\|\|afterValue\.id\|\|''\)/);
 console.log('Restricted Personnel person identity rebinding protection passed.');
+
+// Regression checks for indirect shared-data reads: no hidden identity ordering,
+// no aggregate list bypass, and signed attachment guard before URL authorization.
+const readSection=source.slice(source.indexOf('async function filterOfficerWorkspaceRecords('),source.indexOf('async function attachmentReadAllowed('));
+assert.match(readSection,/if\(personnelScope && PERSONNEL_SCOPED_COLLECTIONS\.has\(collection\)\)/);
+assert.match(readSection,/if\(itemId==='\$order'\)continue;/,'Scoped ordering keys can expose unauthorized person IDs');
+assert.match(readSection,/if\(itemId==='\$value'\)/);
+assert.match(readSection,/record\.value\.filter\(value=>canonicalAllows \? canonicalAllows\(value\) : personnelScopeAllows/,'Aggregate rows must be filtered before return');
+const downloadSection=source.slice(source.indexOf('async function attachmentReadAllowed('),source.indexOf('async function attachmentParentWriteAllowed('));
+assert.match(downloadSection,/filterOfficerWorkspaceRecords\(/,'Generic attachment downloads must check visible records');
+assert.match(downloadSection,/if\(!await fieldTrainingAttachmentScopeAllowed\(client,workspaceAuth,enrollment\)\)continue;/,'Field Training downloads must check trainee scope');
+console.log('Indirect Personnel list and attachment access guards verified.');
