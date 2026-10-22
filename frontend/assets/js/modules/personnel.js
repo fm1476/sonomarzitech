@@ -4409,7 +4409,7 @@ function renderRollCallSub(){
 }
 
 function openSchedulingDayDetail(date,shifts){
-  const allowed=shifts.filter(shift=>canViewScheduleShift(shift));
+  const allowed=shifts.filter(shift=>canViewScheduleShift(shift)&&(!shift.startDate||shift.startDate<=date)&&(!shift.endDate||shift.endDate>=date));
   if(!allowed.length)return;
   const dayLabel=new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   const cards=allowed.map(shift=>{
@@ -4475,7 +4475,7 @@ function renderDutyCalendar(body){
     const dayCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && displayedShiftIds.has(c.shiftId) && (SCHED_CAL_SHIFT==='all' || c.shiftId===SCHED_CAL_SHIFT));
     const isToday = dateStr === fmt(new Date());
     const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
-    const staffingChecks=displayedShifts.map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
+    const staffingChecks=displayedShifts.filter(shift=>(!shift.startDate||shift.startDate<=dateStr)&&(!shift.endDate||shift.endDate>=dateStr)).map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
     const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&(e.endDate||e.startDate)>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
     const belowMinimum=staffingChecks.some(x=>!x.ok);
     const belowPreferred=staffingChecks.some(x=>x.preferredNeeded>0);
@@ -4760,6 +4760,10 @@ function openShiftFormModal(existing){
     const altAnchorDate = document.getElementById('fShiftAltAnchor').value;
     if(selectedType==='weekly' && weekdays.length===0 && altWeekdays.length===0){ toast("Select at least one day of the week.", true); return; }
     if(selectedType==='weekly' && altWeekdays.length>0 && !altAnchorDate){ toast("Pick a reference date for the alternating day.", true); return; }
+    if(selectedType==='rotation'){
+      const on=Number(document.getElementById('fShiftDaysOn').value),off=Number(document.getElementById('fShiftDaysOff').value);
+      if(!Number.isSafeInteger(on)||on<1||on>365||!Number.isSafeInteger(off)||off<0||off>365){toast('Choose whole-number days on (1–365) and days off (0–365).',true);showStep(1);return;}
+    }
     const startDate = document.getElementById('fShiftStartDate').value;
     const endDate = document.getElementById('fShiftEndDate').value || null;
     if(!startDate){ toast("Enter an effective start date.", true); return; }
