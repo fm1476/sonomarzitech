@@ -646,7 +646,7 @@ function openCustomizeDashboardModal(){
         <span style="flex:1;font-size:13px;">${escapeHtml(w.label)}</span>
       </div>`).join('')}
     </div>
-    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Save</button></div>
+    <div class="modal-foot"><span id="pmStepProgress" class="hint" aria-live="polite">Step 1 of 3</span><button class="btn btn-outline" id="mCancel">Cancel</button><button type="button" class="btn btn-outline" id="pmStepBack" style="display:none">Back</button><button type="button" class="btn btn-primary" id="pmStepNext">Continue</button><button class="btn btn-primary" id="mSave" style="display:none">Save</button></div>
   `;
   openModal();
   document.getElementById('mClose').onclick = closeModal;
@@ -2998,10 +2998,11 @@ function staffingSkillOptions(selected=''){
     `<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>`;
 }
 function staffingNeedsRow(row={}){
-  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+  return `<div class="staffing-need-row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:12px 0;border-bottom:1px solid var(--border)" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Minimum<input data-staffing-count aria-label="Minimum staffing" type="number" min="1" step="1" value="${row.count||1}"></label><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Preferred<input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" step="1" value="${row.preferredCount??row.count??1}"></label><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
 }
 function staffingNeedsEditor(id,record){
-  const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length);
+  const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
+  const templates=(STATE.pm.scheduleShifts||[]).filter(s=>s.staffingTemplateName&&(s.staffingRequirements||[]).length&&canViewScheduleShift(s));
   return `<section class="pm-staff-builder" aria-label="Staffing requirements">
     <div class="pm-builder-heading"><div><span class="pm-builder-kicker">STEP 3 · STAFFING</span><h3>Who does this shift need?</h3><p>Start with a template, copy another shift, or build your own. Every shift pattern keeps its own requirements.</p></div><span class="pm-builder-total" id="${id}Total">0 positions</span></div>
     <div class="pm-builder-starters">
@@ -3009,13 +3010,15 @@ function staffingNeedsEditor(id,record){
       <button type="button" class="btn btn-outline" data-staffing-preset="dispatch" id="${id}Dispatch">Dispatch example</button>
       <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
     </div>
+    <div class="form-row pm-builder-copy"><label for="${id}Template">Apply a saved staffing template</label><select id="${id}Template"><option value="">Choose a reusable template...</option>${templates.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.staffingTemplateName)} · ${escapeHtml(p.name)}</option>`).join('')}</select></div>
+    <div class="form-row"><label for="${id}TemplateName">Save as a reusable template (optional)</label><input id="${id}TemplateName" type="text" maxlength="100" value="${escapeHtml(record?.staffingTemplateName||'')}" placeholder="Example: Standard Dispatch Coverage"><p class="hint">Saving this pattern also makes its staffing configuration available as a reusable template to authorized schedulers. Each applied copy remains independent.</p></div>
     <div class="form-row pm-builder-copy"><label for="${id}Copy">Copy requirements from another shift</label><select id="${id}Copy"><option value="">Choose an existing shift pattern...</option>${otherPatterns.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.staffingRequirements.reduce((n,r)=>n+Number(r.count||0),0)} positions)</option>`).join('')}</select></div>
-    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div>
+    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2,var(--surface))"></div>
     <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add operational position</button><span class="hint">Qualifications are advisory. The scheduler can still assign someone if a skill is missing.</span></div>
   </section>`;
 }
 function readStaffingNeeds(id){
-  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value)}));
+  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value),preferredCount:Number(row.querySelector('[data-staffing-preferred]').value)}));
   try{validateStaffingRequirements(rows);return rows;}catch(error){toast(error.message,true);return null;}
 }
 function wireStaffingNeedsEditor(id,totalId){
@@ -3023,7 +3026,7 @@ function wireStaffingNeedsEditor(id,totalId){
   const update=()=>{const rows=[...container.querySelectorAll('[data-staffing-row]')];total.readOnly=rows.length>0;if(rows.length)total.value=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[data-staffing-count]').value)||0),0);};
   container.addEventListener('input',update);container.addEventListener('click',e=>{if(e.target.closest('[data-remove-staffing]')){e.target.closest('[data-staffing-row]').remove();update();}});
   const totalBadge=document.getElementById(id+'Total');
-  const refresh=()=>{update();if(totalBadge){const count=[...container.querySelectorAll('[data-staffing-count]')].reduce((n,field)=>n+(Number(field.value)||0),0);totalBadge.textContent=count+' position'+(count===1?'':'s');}};
+  const refresh=()=>{update();const rows=[...container.querySelectorAll('[data-staffing-row]')];let minimum=0,preferred=0;for(const row of rows){const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;minimum+=min;preferred+=pref;}if(totalBadge)totalBadge.textContent=minimum+' minimum · '+preferred+' preferred';const preview=document.getElementById(id+'Preview');if(preview)preview.innerHTML='<strong>Staffing at a glance</strong><p class="hint" style="margin:5px 0">Minimum keeps the shift operational. Preferred is the ideal number of people.</p>'+(rows.length?rows.map(row=>{const name=escapeHtml(row.querySelector('[data-staffing-name]').value||'New position');const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+name+'</span><strong>'+min+' min / '+pref+' preferred</strong></div>';}).join(''):'<p class="hint">Add a position or choose an example to see the staffing plan.</p>')+(preferred<minimum?'<p style="color:var(--red)">Preferred staffing cannot be less than minimum staffing.</p>':'');};
   container.addEventListener('input',refresh);
   document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();};
   const catalog=STATE.pm.refData?.skillsCatalog||[];
@@ -3040,6 +3043,12 @@ function wireStaffingNeedsEditor(id,totalId){
     refresh();
     toast('Example loaded. Review the required skills and counts before saving.');
   }));
+  document.getElementById(id+'Template').addEventListener('change',e=>{
+    const source=(STATE.pm.scheduleShifts||[]).find(p=>p.id===e.target.value&&p.staffingTemplateName&&canViewScheduleShift(p));if(!source)return;
+    if(container.querySelector('[data-staffing-row]')&&!confirm('Replace current staffing with template '+source.staffingTemplateName+'?')){e.target.value='';return;}
+    container.innerHTML=source.staffingRequirements.map(r=>staffingNeedsRow({...r,id:'cat'+Date.now()+Math.random().toString(36).slice(2,9)})).join('');
+    e.target.value='';refresh();toast('Template applied. Changes here will not modify the original.');
+  });
   document.getElementById(id+'Copy').addEventListener('change',e=>{
     const source=STATE.pm.scheduleShifts.find(p=>p.id===e.target.value);if(!source)return;
     if(container.querySelector('[data-staffing-row]')&&!confirm('Replace the current staffing requirements with those from '+source.name+'?')){e.target.value='';return;}
@@ -3063,7 +3072,7 @@ function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
 }
 function staffingCategoryName(record,id){return (record?.staffingRequirements||[]).find(row=>row.id===id)?.name||'Unclassified';}
 function staffingBreakdownHtml(summary){
-  return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
+  return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count} min${row.preferredCount>row.count?' · '+row.preferredCount+' preferred':''}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
 }
 function effectiveStaffingRequirements(shift,date){
   const base=shift.staffingRequirements||[];
@@ -4408,6 +4417,42 @@ function renderRollCallSub(){
   }
 }
 
+function openSchedulingDayDetail(date,shifts){
+  const allowed=shifts.filter(shift=>canViewScheduleShift(shift)&&(!shift.startDate||shift.startDate<=date)&&(!shift.endDate||shift.endDate>=date));
+  if(!allowed.length)return;
+  const dayLabel=new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const cards=allowed.map(shift=>{
+    const summary=shiftStaffingSummary(shift,date);
+    const assignments=(STATE.pm.scheduleAssignments||[]).filter(a=>a.shiftId===shift.id&&isOnDutyOnDate(a,shift,date)&&!activeExceptionFor(a.personId,date));
+    const coverages=(STATE.pm.scheduleCoverages||[]).filter(c=>c.shiftId===shift.id&&c.date===date&&!activeExceptionFor(c.personId,date));
+    const occupancy=[...assignments,...coverages];
+    const people=[...new Set(occupancy.map(a=>a.personId))];
+    const proposals=typeof suggestStaffingReassignments==='function'?suggestStaffingReassignments(effectiveStaffingRequirements(shift,date),occupancy,STATE.pm.records):[];
+    const status=!summary.ok?'Below minimum':summary.preferredNeeded>0?'Below preferred':'Preferred staffing met';
+    const color=!summary.ok?'var(--red)':summary.preferredNeeded>0?'var(--gold)':'var(--green)';
+    return `<section style="padding:16px;margin-bottom:12px;border:1px solid var(--border);border-radius:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h4 style="margin:0;">${escapeHtml(shift.name)}</h4><span style="color:${color};font-weight:700;">${status}</span></div>
+      <p class="hint">${escapeHtml(SuiteUX.displayTimeOnly(shift.hoursStart)+' - '+SuiteUX.displayTimeOnly(shift.hoursEnd))}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;">
+        <div class="badge">${summary.staffed} scheduled</div><div class="badge">${summary.minStaff} minimum</div><div class="badge">${summary.categories.reduce((n,r)=>n+r.preferredCount,0)||summary.minStaff} preferred</div>
+      </div>
+      ${summary.categories.map(c=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);"><span>${escapeHtml(c.name)}</span><strong style="color:${c.needed?'var(--red)':c.preferredNeeded?'var(--gold)':'var(--green)'};">${c.staffed}/${c.count} min${c.preferredCount>c.count?' · '+c.preferredCount+' preferred':''}</strong></div>`).join('')}
+      <details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:600;">Assigned personnel (${people.length})</summary>${people.map(id=>`<div style="padding:5px 0;">${escapeHtml(personName(id))}</div>`).join('')||'<p class="hint">No assigned personnel.</p>'}</details>
+      ${summary.advisories.length?'<p class="hint" style="color:var(--gold);">Qualification advisories: '+summary.advisories.length+'</p>':''}
+      ${proposals.length?'<div style="margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:10px;"><strong>Coverage suggestions · scheduler review</strong>'+proposals.map(p=>'<p class="hint">'+escapeHtml(personName(p.personId))+' could move from '+escapeHtml(staffingCategoryName(shift,p.fromCategoryId))+' to '+escapeHtml(staffingCategoryName(shift,p.toCategoryId))+'.</p>'+(canManageScheduleShift(shift)?'<button type="button" class="btn btn-sm btn-outline" data-sched-review-assignment="'+escapeHtml(occupancy.find(a=>a.personId===p.personId&&a.staffingCategoryId===p.fromCategoryId)?.id||'')+'" data-sched-proposed-category="'+escapeHtml(p.toCategoryId)+'">Review change</button>':'')).join('')+'</div>':''}
+      ${summary.needed||summary.preferredNeeded?'<p class="hint">Coverage opportunity: '+(summary.needed?summary.needed+' minimum position(s) unfilled. ':summary.preferredNeeded+' additional preferred position(s).')+' Scheduler review required for any changes.</p>':''}
+    </section>`;
+  }).join('');
+  document.getElementById('modalBox').className='modal modal-lg pm-calendar-detail-sheet';
+  document.getElementById('modalBox').style.cssText='position:fixed;right:0;left:auto;top:0;bottom:0;transform:none;margin:0;max-height:100dvh;height:100dvh;width:min(620px,100vw);max-width:100vw;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(0,0,0,.22);';
+  document.getElementById('modalBox').innerHTML=`<div class="modal-head"><div><small class="pm-builder-kicker">SCHEDULING / DAY DETAILS</small><h3>${escapeHtml(dayLabel)}</h3><p class="hint">Calendar remains unchanged. Review staffing without editing assignments.</p></div><button class="modal-close" id="mClose" aria-label="Close">×</button></div><div class="modal-body" style="max-height:70vh;overflow:auto;">${cards||'<p>No shifts are visible for this date.</p>'}</div><div class="modal-foot"><button class="btn btn-primary" id="mCancel">Back to Calendar</button></div>`;
+  openModal();
+  document.getElementById('modalBox').querySelectorAll('[data-sched-review-assignment]').forEach(button=>button.addEventListener('click',()=>{const item=STATE.pm.scheduleAssignments.find(a=>a.id===button.dataset.schedReviewAssignment);if(item&&canManageScheduleShift(STATE.pm.scheduleShifts.find(sh=>sh.id===item.shiftId))){document.getElementById('modalBox').style.cssText='';openAssignmentFormModal(item);const selected=document.getElementById('fAssignCategory');if(selected){selected.value=button.dataset.schedProposedCategory;selected.dispatchEvent(new Event('change',{bubbles:true}));}}}));
+  document.getElementById('mClose').onclick=closeModal;
+  document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mClose').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
+  document.getElementById('mCancel').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
+}
 function renderDutyCalendar(body){
   const allGroups=visibleScheduleWorkGroups();
   if(!SCHED_CAL_WORKGROUPS.length) SCHED_CAL_WORKGROUPS=allGroups.map(g=>g.id);
@@ -4442,43 +4487,26 @@ function renderDutyCalendar(body){
     working.sort((a,b)=> (shiftOrder.get(a.shiftId) ?? 999) - (shiftOrder.get(b.shiftId) ?? 999));
     const dayCoverages = (STATE.pm.scheduleCoverages||[]).filter(c=>c.date===dateStr && displayedShiftIds.has(c.shiftId) && (SCHED_CAL_SHIFT==='all' || c.shiftId===SCHED_CAL_SHIFT));
     const isToday = dateStr === fmt(new Date());
-    let staffingBadge = '';
-    // A day is operationally covered only when every displayed shift with a configured
-    // minimum meets that minimum. Shifts with no minimum do not create an artificial shortage.
     const displayedShifts = SCHED_CAL_SHIFT==='all' ? shifts : shifts.filter(s=>s.id===SCHED_CAL_SHIFT);
-    const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&e.endDate>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
-    const staffingChecks = displayedShifts.map(shift=>{
-      return {shift,...shiftStaffingSummary(shift,dateStr)};
-    });
-    const eventChecks=dayEvents.map(e=>({event:e,...eventStaffingSummary(e)}));
-    const dayCovered = staffingChecks.every(x=>x.ok) && eventChecks.every(x=>x.ok);
-    let cellClass = 'cal-cell' + (isToday ? ' cal-cell-today' : '') + (dayCovered ? ' cal-cell-covered' : ' cal-cell-short');
-    if(SCHED_CAL_SHIFT!=='all'){
-      const check=staffingChecks[0];
-      if(check?.minStaff>0) staffingBadge = `<div style="font-size:10px;font-weight:800;color:${check.ok?'var(--green)':'var(--red)'};">${check.staffed}/${check.minStaff} staffed</div>`;
-    }
-    cells += `<div class="${cellClass}">
+    const staffingChecks=displayedShifts.filter(shift=>(!shift.startDate||shift.startDate<=dateStr)&&(!shift.endDate||shift.endDate>=dateStr)).map(shift=>({shift,...shiftStaffingSummary(shift,dateStr)}));
+    const dayEvents=(STATE.pm.specialEvents||[]).filter(e=>e.status!=='cancelled'&&e.startDate<=dateStr&&(e.endDate||e.startDate)>=dateStr&&(!(e.eligibleWorkGroupIds||[]).length||(e.eligibleWorkGroupIds||[]).some(id=>groupIds.has(id))));
+    const belowMinimum=staffingChecks.some(x=>!x.ok);
+    const belowPreferred=staffingChecks.some(x=>x.preferredNeeded>0);
+    const eventShort=dayEvents.some(e=>!eventStaffingSummary(e).ok);
+    const dayState=belowMinimum||eventShort?'short':belowPreferred?'preferred':'covered';
+    const calendarColor=dayState==='short'?'var(--red)':dayState==='preferred'?'var(--gold)':'var(--green)';
+    const statusLabel=dayState==='short'?'Below minimum':dayState==='preferred'?'Below preferred':'Staffing met';
+    const visibleChecks=staffingChecks.filter(x=>x.minStaff>0||x.categories.length);
+    cells += `<div class="cal-cell ${isToday?'cal-cell-today':''}" style="border-top:3px solid ${calendarColor};">
       <div class="cal-daynum" data-weekday="${WEEKDAY_ABBR[(startWeekday+d-1)%7]}">${d}</div>
-      ${staffingBadge}
-      ${staffingChecks.filter(x=>x.categories.length).map(x=>`<div class="calendar-staffing-breakdown"><strong>${escapeHtml(x.shift.name)}</strong><br>${staffingBreakdownHtml(x)}</div>`).join('')}
-      ${dayEvents.map(e=>{const summary=eventStaffingSummary(e),staffed=summary.staffed,needed=summary.minStaff,ok=summary.ok;return `<a href="#" data-cal-special-event="${e.id}" class="cal-event" style="background:${ok?'var(--green)':'var(--red)'}22;color:${ok?'var(--green)':'var(--red)'};border-left:3px solid ${ok?'var(--green)':'var(--red)'};" title="${escapeHtml(e.name+' — '+staffed+'/'+needed+' staffed')}">${escapeHtml(e.name)} (${staffed}/${needed})</a>${staffingBreakdownHtml(summary)}`;}).join('')}
-      ${working.map(a=>{
-        const shift = shifts.find(s=>s.id===a.shiftId);
-        const color = shift ? shiftColor(shift) : 'var(--blue)';
-        const label = SCHED_CAL_SHIFT==='all' ? `${personName(a.personId)} (${shift?shift.name:''})` : personName(a.personId);
-        return `<a href="#" data-cal-assign-event="${a.id}" class="cal-event" style="background:${color}22;color:${color};border-left:3px solid ${color};" title="${escapeHtml(label)}">${escapeHtml(label)}</a>`;
-      }).join('')}
-      ${excepted.map(({assignment:a,exception:ex})=>{
-        const code = exceptionCodeInfo(ex.code);
-        const label = `${personName(a.personId)} (${ex.code})`;
-        return `<a href="#" data-cal-exception-event="${ex.id}" class="cal-event" style="background:${code.color}22;color:${code.color};border-left:3px solid ${code.color};" title="${escapeHtml(personName(a.personId)+' — '+code.name)}">${escapeHtml(label)}</a>`;
-      }).join('')}
-      ${dayCoverages.map(c=>{
-        const shift = shifts.find(s=>s.id===c.shiftId);
-        const label = SCHED_CAL_SHIFT==='all' ? `${personName(c.personId)} (covering, ${shift?shift.name:''})` : `${personName(c.personId)} (covering)`;
-        return `<a href="#" data-cal-coverage-event="${c.id}" class="cal-event" style="background:${SWAP_COVERAGE_COLOR}22;color:${SWAP_COVERAGE_COLOR};border-left:3px solid ${SWAP_COVERAGE_COLOR};" title="${escapeHtml(personName(c.personId)+(c.swapRequestId?' is covering this shift via an approved swap':' is assigned to this one-off shift'))}">${escapeHtml(label)}</a>`;
-      }).join('')}
-    </div>`;
+      <button type="button" data-sched-day="${dateStr}" aria-label="View staffing for ${dateStr}: ${statusLabel}" style="width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:2px;cursor:pointer;">
+        <span style="font-size:10px;color:${calendarColor};font-weight:700;">${statusLabel}</span>
+        ${visibleChecks.slice(0,3).map(check=>`<span style="display:block;font-size:10px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(check.shift.name)}"><strong>${escapeHtml(check.shift.name)}</strong> ${check.staffed}/${check.minStaff}${check.preferredNeeded>0?' · +'+check.preferredNeeded+' ideal':''}</span>`).join('')}
+        ${visibleChecks.length>3?`<span style="font-size:10px;">+${visibleChecks.length-3} more shifts</span>`:''}
+        ${dayEvents.length?`<span style="display:block;font-size:10px;margin-top:5px;">${dayEvents.length} special event${dayEvents.length===1?'':'s'}</span>`:''}
+        <span style="display:block;font-size:10px;margin-top:6px;color:var(--text-dim);">View day details ›</span>
+      </button>
+    </div>`;;
   }
 
   body.innerHTML = `
@@ -4515,6 +4543,7 @@ function renderDutyCalendar(body){
     <div class="cal-grid-head">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div>
     <div class="cal-grid">${cells}</div>
   `;
+  body.querySelectorAll('[data-sched-day]').forEach(button=>button.addEventListener('click',()=>openSchedulingDayDetail(button.dataset.schedDay,shifts)));
   body.querySelector('#btnExitDraftPreview')?.addEventListener('click',()=>{SCHED_DRAFT_PREVIEW_ID=null;SCHED_CAL_SHIFT='all';renderDutyCalendar(body);});
   body.querySelectorAll('[data-sched-cal-nav]').forEach(b=>b.addEventListener('click', ()=>{
     const dir = b.dataset.schedCalNav;
@@ -4672,6 +4701,34 @@ function openShiftFormModal(existing){
   `;
   openModal();
   wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
+  // Reveal one step at a time without reparenting inputs or disturbing existing handlers.
+  const builderBody=document.querySelector('#modalBox .modal-body');
+  const headings=[...builderBody.querySelectorAll('.pm-builder-step')];
+  const staffingHeading=builderBody.querySelector('.pm-staff-builder');
+  const stepSections=[[],[],[]];let currentSection=0;
+  for(const child of [...builderBody.children]){
+    if(child===staffingHeading)currentSection=2;
+    else if(child.classList?.contains('pm-builder-step'))currentSection=headings.indexOf(child);
+    stepSections[Math.max(0,currentSection)].push(child);
+  }
+  let activeStep=0;
+  const showStep=n=>{
+    activeStep=Math.max(0,Math.min(2,n));
+    stepSections.forEach((nodes,index)=>nodes.forEach(node=>{node.hidden=index!==activeStep;node.style.display=index===activeStep?'':'none';}));
+    document.getElementById('pmStepProgress').textContent='Step '+(activeStep+1)+' of 3';
+    document.getElementById('pmStepBack').style.display=activeStep?'':'none';
+    document.getElementById('pmStepNext').style.display=activeStep===2?'none':'';
+    document.getElementById('mSave').style.display=activeStep===2?'':'none';
+    builderBody.scrollTop=0;
+  };
+  document.getElementById('pmStepBack').onclick=()=>showStep(activeStep-1);
+  document.getElementById('pmStepNext').onclick=()=>{
+    if(activeStep===0&&!document.getElementById('fShiftName').value.trim()){toast('Name this shift pattern before continuing.',true);document.getElementById('fShiftName').focus();return;}
+    if(activeStep===1&&document.getElementById('fShiftPatternType').value==='weekly'&&!document.querySelectorAll('.fShiftWeekday:checked,.fShiftAltWeekday:checked').length){toast('Choose at least one workday.',true);return;}
+    showStep(activeStep+1);
+  };
+  showStep(0);
+
   const overrideRoot=document.getElementById('fShiftOverrides');
   const syncOverrideCounts=()=>{
     const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({
@@ -4716,6 +4773,10 @@ function openShiftFormModal(existing){
     const altAnchorDate = document.getElementById('fShiftAltAnchor').value;
     if(selectedType==='weekly' && weekdays.length===0 && altWeekdays.length===0){ toast("Select at least one day of the week.", true); return; }
     if(selectedType==='weekly' && altWeekdays.length>0 && !altAnchorDate){ toast("Pick a reference date for the alternating day.", true); return; }
+    if(selectedType==='rotation'){
+      const on=Number(document.getElementById('fShiftDaysOn').value),off=Number(document.getElementById('fShiftDaysOff').value);
+      if(!Number.isSafeInteger(on)||on<1||on>365||!Number.isSafeInteger(off)||off<0||off>365){toast('Choose whole-number days on (1–365) and days off (0–365).',true);showStep(1);return;}
+    }
     const startDate = document.getElementById('fShiftStartDate').value;
     const endDate = document.getElementById('fShiftEndDate').value || null;
     if(!startDate){ toast("Enter an effective start date.", true); return; }
@@ -4725,7 +4786,7 @@ function openShiftFormModal(existing){
     const staffingRequirements=readStaffingNeeds('fShiftStaffNeeds');if(!staffingRequirements)return;
     const staffingOverrides=readStaffingOverrides('fShiftOverrides',staffingRequirements);if(!staffingOverrides)return;
     const data = {
-      name, workGroupId, staffingRequirements, staffingOverrides,
+      name, workGroupId, staffingRequirements, staffingOverrides, staffingTemplateName:document.getElementById('fShiftStaffNeedsTemplateName').value.trim(),
       patternType: selectedType,
       daysOn: Number(document.getElementById('fShiftDaysOn').value)||4,
       daysOff: Number(document.getElementById('fShiftDaysOff').value)||3,
