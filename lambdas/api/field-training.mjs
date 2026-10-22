@@ -101,7 +101,10 @@ async function ftLoadOrgScope(client, ctx) {
     "SELECT scope FROM suite_organizational_access WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3",
     [ctx.tenantId,ctx.agencyId,ctx.userId]
   );
-  return result.rows.length ? (result.rows[0].scope ?? {mode:'none'}) : null;
+  if(!result.rows.length)return null; // Preserve legacy behavior only for truly unconfigured accounts.
+  const scope=result.rows[0].scope ?? {mode:'none'};
+  // Agency-wide access is reserved for authenticated administrators.
+  return scope?.mode==='agency' ? {mode:'none'} : scope;
 }
 
 // Resolve authoritative personnel-to-unit membership from agency-stored records.
