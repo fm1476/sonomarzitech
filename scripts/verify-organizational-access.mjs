@@ -18,7 +18,9 @@ assert.equal(canAccessOrganizationalRecord(combined,{unitId:'dispatch-night'}),f
 assert.equal(canAccessOrganizationalRecord(combined,{workGroupId:'dispatch'}),true);
 assert.equal(canAccessOrganizationalRecord(combined,{unitId:'dispatch-night'},{unitDivisionMap:{'dispatch-night':'support'}}),true);
 assert.equal(canAccessOrganizationalRecord({mode:'selected',unitIds:['communications']},{unitId:'comms-2'},{unitDescendants:{communications:['comms-2']}}),true);
-assert.equal(effectiveOrganizationalScope({grants:[{mode:'selected',unitIds:['communications']},{mode:'agency'}]}).mode,'agency');
+assert.equal(effectiveOrganizationalScope({grants:[{mode:'selected',unitIds:['communications']},{mode:'agency'}]}).mode,'selected', 'Untrusted grants must not elevate a nonadministrator');
+assert.equal(effectiveOrganizationalScope({grants:[{mode:'agency'}]}).mode,'none', 'An agency grant alone must not convey agency authority');
+assert.equal(effectiveOrganizationalScope({administrator:true,grants:[{mode:'agency'}]}).mode,'agency');
 assert.equal(effectiveOrganizationalScope({administrator:true}).mode,'agency');
 assert.equal(effectiveOrganizationalScope({grants:[]}).mode,'none');
 assert.equal(effectiveAccessSummary({scope:combined,capabilities:['pm_records_view']}).capabilities[0],'pm_records_view');
