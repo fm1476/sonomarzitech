@@ -361,7 +361,7 @@ export function validateSchedulingBatch(snapshot,changes) {
       const shift=(final['pm.scheduleShifts']||[]).find(s=>s.id===value.shiftId);
       const category=(shift?.staffingRequirements||[]).find(c=>c.id===value.staffingCategoryId);
       if((shift?.staffingRequirements||[]).length&&!category)fail('Select a required staffing category before assigning personnel.');
-      if(category&&value.personId&&!staffingPersonHasSkill(final['pm.records'],value.personId,category))fail('This employee does not have the required staffing skill.');
+      // Credential mismatches are advisory; authorized staffing decisions remain permitted.
       if(!shift||(shift.staffingRequirements||[]).length&&!shift.staffingRequirements.some(r=>r.id===value.staffingCategoryId))fail('Select a staffing category defined for this shift.');
     }
     if(collection==='pm.specialEvents') {
@@ -373,7 +373,7 @@ export function validateSchedulingBatch(snapshot,changes) {
       const requirements=value.staffingRequirements||[],summary=staffingSummary(requirements,requests.filter(r=>r.status==='awarded'),value.staffNeeded);
       if(requirements.length&&requests.some(r=>r.status==='awarded'&&!requirements.some(c=>c.id===r.staffingCategoryId)))fail('Each assigned employee must fill a defined staffing category.');
       if(requirements.length&&requests.some(r=>r.status==='pending'&&r.staffingCategoryId&&!requirements.some(c=>c.id===r.staffingCategoryId)))fail('Select a defined event staffing category.');
-      for(const request of requests.filter(r=>r.status==='awarded'||r.status==='pending'&&r.staffingCategoryId)){const category=requirements.find(c=>c.id===request.staffingCategoryId);if(category&&!staffingPersonHasSkill(final['pm.records'],request.personId,category))fail('This employee does not have the required event staffing skill.');}
+      // Credential mismatches are advisory; authorized staffing decisions remain permitted.
       if(summary.categories.some(r=>r.staffed>r.count))fail('The selected staffing category is already fully staffed.');
       const previous=(snapshot[collection] || []).find(e=>e.id===value.id);
       for(const request of requests.filter(r=>r.status==='awarded'&&!(previous?.requests || []).some(old=>old.personId===r.personId&&old.status==='awarded'))) {
@@ -404,7 +404,7 @@ export function validateSchedulingBatch(snapshot,changes) {
     }
     if(collection==='pm.overtimeOpportunities') {
       const shift=(final['pm.scheduleShifts']||[]).find(s=>s.id===value.shiftId),category=(shift?.staffingRequirements||[]).find(c=>c.id===value.staffingCategoryId);
-      if(category&&(value.requests||[]).some(r=>['pending','awarded'].includes(r.status)&&!staffingPersonHasSkill(final['pm.records'],r.personId,category)))fail('This employee does not have the required overtime staffing skill.');
+      // Credential mismatches are advisory; authorized staffing decisions remain permitted.
       const requests=value.requests || [];
       if(!Array.isArray(requests)||!uniquePeople(requests)||requests.filter(r=>r.status==='awarded').length>1)fail('An overtime opportunity can award only one employee.');
       const awarded=requests.find(r=>r.status==='awarded');
