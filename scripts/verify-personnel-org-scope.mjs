@@ -65,6 +65,8 @@ const patrolRow={key:key('personnel','conflict'),value:{id:'person-dispatch',uni
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,enrollment),true);
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow,patrolRow]),member,enrollment),false,'Conflicting unit rows must block signed URL access');
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([{...dispatchRow,value:{personId:'person-dispatch',unitId:'patrol'}}]),member,enrollment),false);
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,{trainee_user:'trainee-user',trainee_person:'other-person'}),false,'A reassigned membership must not expose an old enrollment attachment');
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,{trainee_user:'trainee-user',trainee_person:'person-dispatch'}),true);
 console.log('Signed URL runtime organizational access checks passed.');
 
 assert.match(source,/return grants\.rows\.length \? \(grants\.rows\[0\]\.scope \?\? \{mode:'none'\}\) : null;/,'Configured null Personnel scope must deny');
