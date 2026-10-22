@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {activePersonAssignments,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY} from '../lambdas/api/lib/organization-assignments.mjs';
+import {activePersonAssignments,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,canonicalOrganizationReady} from '../lambdas/api/lib/organization-assignments.mjs';
 const t='tenant-a',a='agency-a',p='employee-a';
 const entry=(org,kind='unit',extra={})=>({tenant_id:t,agency_id:a,person_id:p,organization_id:org,node_kind:kind,node_active:true,active:true,...extra});
 const rows=[entry('patrol'),entry('dispatch'),entry('operations','division'),entry('dispatch-admin','work_group')];
@@ -25,3 +25,20 @@ assert.equal(authorizedPersonFromAssignments({mode:'self'},[],c),false);
 assert.equal(authorizedPersonFromAssignments({mode:'none'},rows,c),false);
 assert.match(PERSON_ORGANIZATION_QUERY,/a\.tenant_id=\$1 AND a\.agency_id=\$2 AND a\.person_id=\$3/);
 console.log('Canonical organizational assignment authorization checks passed.');
+
+const notInstalled={query:async()=>({rows:[{assignments:null,nodes:null,rollout:null}]})};
+assert.equal(await canonicalOrganizationReady(notInstalled,'tenant','agency'),false);
+const noActivation={query:async(sql)=>sql.includes('to_regclass')?
+ {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes',rollout:'suite_organization_rollout'}]}:
+ {rows:[{enabled:false}]}};
+assert.equal(await canonicalOrganizationReady(noActivation,'tenant','agency'),false,'Installed but unactivated tables cannot cut over');
+const activationCalls=[];
+const activated={query:async(sql,args=[])=>{
+ activationCalls.push({sql,args});
+ return sql.includes('to_regclass')?
+ {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes',rollout:'suite_organization_rollout'}]}:
+ {rows:[{enabled:true}]};
+}};
+assert.equal(await canonicalOrganizationReady(activated,'tenant','agency'),true);
+assert.deepEqual(activationCalls[1].args,['tenant','agency']);
+console.log('Agency rollout gate tests passed.');
