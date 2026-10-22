@@ -1,38 +1,56 @@
-# PR 163 controlled authorization test deployment
+# PR 163 authorization verification checkpoint
 
-Status: deployment preparation. The user removed the requirement to protect Lyle from shared deployment impact. No merge, rollout activation, or AWS deployment performed in this review. CI run 711 passed on e9beee3b4446b973ab79c0d99777269fd3b5af13.
+Date: October 22, 2026. PR remains open and unmerged. Agency-wide organizational rollout remains disabled.
 
-## Reviewed source
-Original head: 242c2e45ad5a0cb000a4e874060d4f6d8ca61f20.
-Fix: bulk Personnel ancestor traversal now stops at inactive parents, matching single-person and attachment resolution.
-Regression: bulk and individual hierarchy SQL must remain identical.
-Local scripts/verify-source.sh passed before and after the correction.
+## Deployed build and defects corrected
 
-## Deployment boundary
-The existing deploy-aws.yml updates sonomarzi-api-dev, sonomarzi-identity-admin-dev, a shared frontend S3 bucket, and CloudFront distribution EA4Z48KSEJBUU. It does not isolate Demo. The documented OIDC trust accepts main only. Do not dispatch this workflow from the PR, widen that trust, or merge to obtain deployment access.
+The operator deployed API commit b7526d629107b4da812a034d98edff89d4b87a23 and verified the Lambda package hash. API Gateway GET /workspace maps to sonomarzi-api-dev with index.handler.
 
-A shared AWS test deployment is now acceptable under the user's revised scope. Demo-only infrastructure is no longer a release prerequisite. Preserve current API/frontend artifacts and function configuration for rollback, verify the exact PR commit, and package that source through the existing validation and packaging steps. Use an already authorized AWS session, such as CloudShell, for a manual branch deployment because the documented GitHub OIDC role only trusts main. Do not widen IAM trust or merge merely to obtain deployment access. Confirm deployed artifact hashes before acceptance testing. Do not run migrations or change suite_organization_rollout. Keep all agency rollout flags disabled. No AWS CLI or authenticated AWS session is available in the current execution workspace; the GitHub connector does not expose workflow dispatch.
+Corrections:
+- Bulk Personnel ancestry now stops at inactive organization ancestors, matching item/attachment checks.
+- Nonadministrator templates no longer repopulate hidden Personnel, accounts or Field Training state.
+- resolveWorkspaceMembership now preserves authenticated auth.userId. Previously the undefined user ID missed a configured scope and fell back to legacy access.
+- A missing actor ID now denies Personnel scope access.
+- Explicit selected UUID grants use canonical assignments for that actor. Missing-grant defaults still depend on agency rollout. No rollout row was activated.
 
-## Authentication and fixture prerequisites
-Use real separate existing Dispatch Manager and Patrol accounts, not an administrator's role preview. Verify tenant, agency, active membership, person mapping, roles, organizational scope and legacy/canonical identifier mode for each. No admin bypass may apply to restricted test identities. Confirm test subjects and documents are fictional.
-Canonical UUID grants cannot prove legacy-unit isolation while canonical rollout is disabled. Exercise existing legacy configured scopes separately; canonical-cutover tests remain blocked pending explicit activation approval or an isolated non-live fixture environment.
+The actual membership-to-scope-to-Personnel pipeline has a connected regression. Local source checks passed. CI #714 passed for the deployed code. CI #719 passed for the later fixture harness source.
 
-## Acceptance matrix
-| Surface | Positive | Negative | Current evidence |
-| --- | --- | --- | --- |
-| Personnel | Assigned Dispatch/Patrol subjects | Opposite unit, blank/missing mapping, foreign agency, identity rebinding | Local verification passes; live restricted account test pending |
-| Field Training | Authorized trainee, reports, shifts | Hidden trainee/trainer, reassigned membership, aggregate counts | Local verification passes; admin page loads, restricted test pending |
-| Scheduling | Existing calendar visibility and management grants | Hidden calendars and unauthorized mutation | Local verification passes; live test pending |
-| Attachments | Authorized parent download/upload | Hidden parent, stale trainee, direct signed URL request | Local verification passes; live test pending |
-| Global search | Authorized subject | Hidden names, counts and metadata | Restricted live test pending |
-| Exports | Authorized rows only | Hidden subjects, totals and identifiers | Restricted live test pending |
+## Live identity and configuration evidence
 
-Record allowed/denied HTTP outcomes and response bodies through a supported authenticated test facility; UI absence alone is insufficient. Recheck after fixes. Never record authentication secrets. Current Cloud Browser session verified Demo PD and System Admin plus Platform Admin roles, so it is only an administrator baseline, not isolation evidence.
+SES Test (fred+ses@sonomarzi.com) is active, non-platform-admin, with custom Dispatch Manager role and selected canonical Dispatch unit and Work Group grants. The operator enabled Field Training participation and management capabilities for that role.
 
-## Live SES failure and connected regression
+aws test (test@test1.com) retains Officer role with selected Patrol grants. It can see scoped shared directory identities, but has no general Personnel HR-view permission. A positive HR-search assertion was corrected to honor the actual stored role permission; the correction did not grant additional access.
 
-Operator's IAM-controlled invocation of /workspace for the stored SES Cognito subject returned HTTP 200 with role_1792682993431, empty Personnel template arrays, but all shared and HR personnel rows including Patrol and ordering IDs. The stored membership was active, non-platform-admin, with selected canonical Dispatch UUID grants and rollout disabled. This proves remaining server-side disclosure after the template fix.
+## Results supplied by operator
 
-Root cause: resolveWorkspaceMembership omitted authenticated auth.userId. Personnel scope lookup received an undefined user ID, missed the configured grant and used pre-rollout legacy behavior. The fix preserves the authenticated actor ID and fails closed if absent. Explicit selected UUID grants now use canonical assignment evaluation for that actor while unconfigured account defaults continue to depend solely on agency rollout. No rollout record is modified.
+| Surface | Evidence | Result |
+| --- | --- | --- |
+| Dispatch shared directory and HR rows | One canonical Dispatch person returned; other-unit identities and ordering IDs absent; templates empty | Passed for fixture |
+| Patrol directory and HR capability | Three scoped directory people returned; zero HR rows; no admin bypass | Passed for fixture |
+| Direct handler search | Dispatch known hidden badges denied and allowed HR subject found; Patrol hidden Dispatch badge denied and HR role denial retained | Passed for fixture |
+| Field Training list filtering | Only scoped members/files/reports/shifts returned | Passed for existing and controlled fixtures |
+| Authorized trainee/report/attachment reads | Both actors saw their controlled fixture, not the opposite unit fixture | Passed |
+| Authorized attachment delivery | Signed URL returned and exact S3 fixture bytes downloaded for both actors | Passed |
+| Hidden attachment URL | Both actors received denial without signed URL for opposite-unit fixture | Passed |
+| Cross-unit evaluation edit | Both actors denied edits to opposite-unit disposable report | Passed |
+| Cleanup | Run-owned database fixtures and S3 objects removed; original trainee files retained; temporary files absent | Passed |
+| Agency rollout | Read before/after tests | Disabled |
 
-scripts/verify-workspace-identity-scope.mjs executes the actual membership resolver, scope loader, canonical evaluator and Personnel filter together, checking Dispatch allow, Patrol/unassigned deny, ordering suppression, missing-actor denial and separation of explicit UUID scopes from agency rollout. A rerun of the live SES response and browser/search/export/attachment/Field Training/Patrol tests remains required after deploying this fix. No release signoff.
+Read-only probe summary: failures=0, fixture gaps=4.
+Controlled fixture probe closed the trainee/attachment gaps: failures=0.
+Operator evidence directory: /home/cloudshell-user/sonomarzi-security-evidence/training-qa.EZtmyU.
+
+The controlled fixture run needed a temporary additional Patrol assignment for the Patrol test identity. That assignment was removed. Positive own-trainee behavior is demonstrated under that controlled mapping; the permanent test identity's canonical mapping is not yet reconciled.
+
+## Test boundary and remaining release gates
+
+These deployed-handler tests used operator IAM Lambda invocation with stored Cognito subjects. They exercise the live handler, membership, role, scope, RDS and S3 paths, but do not prove API Gateway JWT authorizer behavior, Cognito login, or browser rendering. The operator reported SES browser results looked correct after the fix; this is narrower than a fully recorded browser test matrix.
+
+Still required:
+1. Reconcile permanent canonical personnel assignments before real use or agency rollout, including the Patrol test identity; do not infer from display labels.
+2. Actual CSV export content verification and browser checks for Patrol, Field Training and attachments.
+3. Complete Scheduling live allow/deny mutation checks while preserving existing calendar permissions. Only a Dispatch browser visibility baseline has been observed; local scheduling regressions pass.
+4. API Gateway route inventory supplied by the operator has no POST /global-search although the frontend calls that endpoint. Configure and verify the route with the existing JWT authorizer and API integration; direct handler search tests do not close this deployment gap.
+5. Live cross-agency and hierarchy/multi-assignment scenarios remain outside these two-unit fixture results.
+
+No merge, agency activation, or production readiness signoff is authorized by this checkpoint.
