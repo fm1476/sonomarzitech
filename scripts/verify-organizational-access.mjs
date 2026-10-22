@@ -23,3 +23,15 @@ assert.equal(effectiveOrganizationalScope({administrator:true}).mode,'agency');
 assert.equal(effectiveOrganizationalScope({grants:[]}).mode,'none');
 assert.equal(effectiveAccessSummary({scope:combined,capabilities:['pm_records_view']}).capabilities[0],'pm_records_view');
 console.log('Organizational access policy checks passed.');
+
+// One manager may hold multiple independently granted organizational areas.
+const multi=effectiveOrganizationalScope({grants:[
+ {mode:'selected',unitIds:['dispatch-day','dispatch-night']},
+ {mode:'selected',unitIds:['patrol-special'],divisionIds:['support-services'],workGroupIds:['communications-admin']}
+]});
+for(const id of ['dispatch-day','dispatch-night','patrol-special'])assert.equal(canAccessOrganizationalRecord(multi,{unitId:id}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{unitId:'patrol-other'}),false);
+assert.equal(canAccessOrganizationalRecord(multi,{unitId:'forensics',divisionId:'support-services'}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'communications-admin'}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'fire-admin'}),false);
+console.log('Multiple independent organization grant combinations passed.');
