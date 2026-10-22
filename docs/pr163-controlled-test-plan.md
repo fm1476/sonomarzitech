@@ -54,3 +54,28 @@ Still required:
 5. Live cross-agency and hierarchy/multi-assignment scenarios remain outside these two-unit fixture results.
 
 No merge, agency activation, or production readiness signoff is authorized by this checkpoint.
+
+
+## October 22 follow-up: reviewed evidence and streamlined completion gate
+
+This section supersedes older "Still required" bullets where the operator has subsequently supplied passing evidence. It does not retroactively claim browser, Gateway, or cross-agency checks that were not performed.
+
+- Operator-confirmed completed: SES CSV export verification; Scheduling controlled CRUD/allow/deny, stale-save rejection, atomic rollback, and temporary fixture cleanup. SES browser was restricted to Dispatch with management; AWS Test browser was restricted to Patrol with view-only Scheduling rights.
+- Operator-confirmed repair: AWS Test membership `person_id=p17910562955703cr` was reconciled with its directory identity, retaining `role_officer`.
+- Source CI: run #725 completed successfully for PR head `afcbb12938b93681088922601f1fb9de008bdaa9`. Source CI does **not** prove authenticated Gateway/browser enforcement.
+- Canonical hierarchy and multiple-assignment source tests already exist in `verify-organization-assignments.mjs` and `verify-field-training-org-scope.mjs`, and run through `verify-source.sh`. Avoid re-performing those same unit/source checks manually unless behavior changes.
+
+### Remaining targeted release gates (no broad rerun)
+
+1. Browser authenticated Field Training attachments: allowed user can open the exact in-scope file; out-of-scope user cannot obtain attachment metadata, a signed URL, or file bytes. Verify account switching and direct-link denial through API Gateway, not merely IAM handler invocation.
+2. Authenticated live hierarchy/multi-assignment and cross-agency tests using disposable, explicitly tenant- and agency-bound fixtures. Record expected allow and deny for each action. Clean up fixtures after evidence is captured.
+3. Canonical assignment cleanup: reconcile unresolved memberships and legacy selected-scope strings with verified agency-local UUIDs; preserve unresolved records and never infer assignments from labels. Confirm agency rollout remains disabled before and after.
+4. Confirm JWT-authorized `/global-search` route existence and behavior, because the earlier Gateway route inventory flagged a missing route. If already repaired, attach route/configuration evidence instead of repeating tests.
+
+### Next-stage design, not a prerequisite to close these tests
+
+Role defaults must apply to every holder when a role is updated, with affected-user preview/confirmation; configurable organizational inheritance must permit unit-only, descendants, or selected descendants; allow carefully scoped individual exceptions. Maintain separate module abilities, Scheduling calendar controls, non-overridable tenant boundaries, and auditable decisions. Implement this in a follow-on change rather than broadening PR #163.
+
+### Hard stop
+
+**Do not merge PR #163, enable `suite_organization_rollout` for any agency, or claim full production signoff without explicit owner approval.** API deployment `b7526d629107b4da812a034d98edff89d4b87a23` remains the user-reported live package; CI head SHA is a different identifier and must not be represented as a fresh deployment.
