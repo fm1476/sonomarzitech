@@ -11,8 +11,11 @@ function validateStaffingRequirements(requirements=[]) {
 }
 function staffingPersonHasSkill(records,personId,requirement){
   if(!requirement)return true;
-  const skill=String(requirement.requiredSkill||requirement.name||'').trim().toLowerCase();
+  const required=String(requirement.requiredSkill||'').trim();
+  if(required==='any')return true;
   const record=(records||[]).find(r=>r.personId===personId);
+  if(required.startsWith('rank:'))return !!record&&String(record.rank||'').trim().toLowerCase()===required.slice(5).trim().toLowerCase();
+  const skill=required.toLowerCase();
   return !!skill&&Array.isArray(record?.specialSkills)&&record.specialSkills.some(value=>String(value).trim().toLowerCase()===skill);
 }
 function staffingSummary(requirements,rows,minimum=0,records){
