@@ -42,3 +42,12 @@ const activated={query:async(sql,args=[])=>{
 assert.equal(await canonicalOrganizationReady(activated,'tenant','agency'),true);
 assert.deepEqual(activationCalls[1].args,['tenant','agency']);
 console.log('Agency rollout gate tests passed.');
+
+const underDivision=[entry('dispatch','unit',{ancestor_division_ids:['communications-division']})];
+assert.equal(authorizedPersonFromAssignments({mode:'selected',divisionIds:['communications-division']},underDivision,c),true,'Division grant covers directly assigned unit descendants');
+assert.equal(authorizedPersonFromAssignments({mode:'selected',divisionIds:['other-division']},underDivision,c),false,'Unrelated division stays denied');
+assert.equal(authorizedPersonFromAssignments({mode:'selected',divisionIds:['communications-division']},[entry('dispatch','unit',{ancestor_division_ids:[],active:false})],c),false);
+assert.match(PERSON_ORGANIZATION_QUERY,/WITH RECURSIVE ancestor_chain/);
+assert.match(PERSON_ORGANIZATION_QUERY,/NOT parent.id=ANY\(child.visited\)/,'Organizational hierarchy traversal must reject cycles');
+assert.match(PERSON_ORGANIZATION_QUERY,/parent.active=true/,'Inactive ancestors must not confer inherited grants');
+console.log('Canonical parent-division inheritance tests passed.');
