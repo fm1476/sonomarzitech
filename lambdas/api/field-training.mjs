@@ -97,12 +97,12 @@ async function ftContext(client, auth, tenantId, agencyId) {
 async function ftLoadOrgScope(client, ctx) {
   if(ctx.admin) return null;
   const table=await client.query("SELECT to_regclass('suite_organizational_access') AS relation");
-  if(!table.rows[0]?.relation) return null;
+  if(!table.rows[0]?.relation)return await canonicalOrganizationReady(client,ctx.tenantId,ctx.agencyId) ? {mode:'none'} : null;
   const result=await client.query(
     "SELECT scope FROM suite_organizational_access WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3",
     [ctx.tenantId,ctx.agencyId,ctx.userId]
   );
-  if(!result.rows.length)return null; // Preserve legacy behavior only for truly unconfigured accounts.
+  if(!result.rows.length)return await canonicalOrganizationReady(client,ctx.tenantId,ctx.agencyId) ? {mode:'none'} : null; // Activated agencies deny missing grants.
   const scope=result.rows[0].scope ?? {mode:'none'};
   // Agency-wide access is reserved for authenticated administrators.
   return scope?.mode==='agency' ? {mode:'none'} : scope;
