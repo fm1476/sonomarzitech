@@ -646,7 +646,7 @@ function openCustomizeDashboardModal(){
         <span style="flex:1;font-size:13px;">${escapeHtml(w.label)}</span>
       </div>`).join('')}
     </div>
-    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">Save</button></div>
+    <div class="modal-foot"><span id="pmStepProgress" class="hint" aria-live="polite">Step 1 of 3</span><button class="btn btn-outline" id="mCancel">Cancel</button><button type="button" class="btn btn-outline" id="pmStepBack" style="display:none">Back</button><button type="button" class="btn btn-primary" id="pmStepNext">Continue</button><button class="btn btn-primary" id="mSave" style="display:none">Save</button></div>
   `;
   openModal();
   document.getElementById('mClose').onclick = closeModal;
@@ -2998,7 +2998,7 @@ function staffingSkillOptions(selected=''){
     `<optgroup label="No additional qualification"><option value="any" ${selected==='any'?'selected':''}>Any assigned employee</option></optgroup>`;
 }
 function staffingNeedsRow(row={}){
-  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><input data-staffing-count aria-label="Required number" type="number" min="1" step="1" value="${row.count||1}"><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
+  return `<div class="staffing-need-row" data-staffing-row data-category-id="${escapeHtml(row.id||'cat'+Date.now()+Math.random().toString(36).slice(2,8))}"><input data-staffing-name aria-label="Staffing category name" placeholder="e.g. Law Dispatcher" value="${escapeHtml(row.name||'')}"><select data-staffing-skill aria-label="Rank or qualification (informational)">${staffingSkillOptions(row.requiredSkill)}</select><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Minimum<input data-staffing-count aria-label="Minimum staffing" type="number" min="1" step="1" value="${row.count||1}"></label><label style="display:flex;flex-direction:column;gap:3px;font-size:12px">Preferred<input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" step="1" value="${row.preferredCount??row.count??1}"></label><button type="button" class="btn btn-sm btn-outline" data-remove-staffing aria-label="Remove staffing category">Remove</button></div>`;
 }
 function staffingNeedsEditor(id,record){
   const otherPatterns=(STATE.pm.scheduleShifts||[]).filter(s=>s.id!==record?.id&&(s.staffingRequirements||[]).length);
@@ -3010,12 +3010,12 @@ function staffingNeedsEditor(id,record){
       <button type="button" class="btn btn-outline" data-staffing-preset="fire" id="${id}Fire example</button>
     </div>
     <div class="form-row pm-builder-copy"><label for="${id}Copy">Copy requirements from another shift</label><select id="${id}Copy"><option value="">Choose an existing shift pattern...</option>${otherPatterns.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.staffingRequirements.reduce((n,r)=>n+Number(r.count||0),0)} positions)</option>`).join('')}</select></div>
-    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div>
+    <div id="${id}" class="pm-builder-rows">${(record?.staffingRequirements||[]).map(staffingNeedsRow).join('')}</div><div id="${id}Preview" role="status" aria-live="polite" style="margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2,var(--surface))"></div>
     <div class="pm-builder-foot"><button type="button" class="btn btn-outline" id="${id}Add">+ Add operational position</button><span class="hint">Qualifications are advisory. The scheduler can still assign someone if a skill is missing.</span></div>
   </section>`;
 }
 function readStaffingNeeds(id){
-  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value)}));
+  const rows=[...document.getElementById(id).querySelectorAll('[data-staffing-row]')].map(row=>({id:row.dataset.categoryId,name:row.querySelector('[data-staffing-name]').value.trim(),requiredSkill:row.querySelector('[data-staffing-skill]').value,count:Number(row.querySelector('[data-staffing-count]').value),preferredCount:Number(row.querySelector('[data-staffing-preferred]').value)}));
   try{validateStaffingRequirements(rows);return rows;}catch(error){toast(error.message,true);return null;}
 }
 function wireStaffingNeedsEditor(id,totalId){
@@ -3023,7 +3023,7 @@ function wireStaffingNeedsEditor(id,totalId){
   const update=()=>{const rows=[...container.querySelectorAll('[data-staffing-row]')];total.readOnly=rows.length>0;if(rows.length)total.value=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[data-staffing-count]').value)||0),0);};
   container.addEventListener('input',update);container.addEventListener('click',e=>{if(e.target.closest('[data-remove-staffing]')){e.target.closest('[data-staffing-row]').remove();update();}});
   const totalBadge=document.getElementById(id+'Total');
-  const refresh=()=>{update();if(totalBadge){const count=[...container.querySelectorAll('[data-staffing-count]')].reduce((n,field)=>n+(Number(field.value)||0),0);totalBadge.textContent=count+' position'+(count===1?'':'s');}};
+  const refresh=()=>{update();const rows=[...container.querySelectorAll('[data-staffing-row]')];let minimum=0,preferred=0;for(const row of rows){const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;minimum+=min;preferred+=pref;}if(totalBadge)totalBadge.textContent=minimum+' minimum · '+preferred+' preferred';const preview=document.getElementById(id+'Preview');if(preview)preview.innerHTML='<strong>Staffing at a glance</strong><p class="hint" style="margin:5px 0">Minimum keeps the shift operational. Preferred is the ideal number of people.</p>'+(rows.length?rows.map(row=>{const name=escapeHtml(row.querySelector('[data-staffing-name]').value||'New position');const min=Number(row.querySelector('[data-staffing-count]').value)||0;const pref=Number(row.querySelector('[data-staffing-preferred]').value)||0;return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+name+'</span><strong>'+min+' min / '+pref+' preferred</strong></div>';}).join(''):'<p class="hint">Add a position or choose an example to see the staffing plan.</p>')+(preferred<minimum?'<p style="color:var(--red)">Preferred staffing cannot be less than minimum staffing.</p>':'');};
   container.addEventListener('input',refresh);
   document.getElementById(id+'Add').onclick=()=>{container.insertAdjacentHTML('beforeend',staffingNeedsRow());refresh();};
   const catalog=STATE.pm.refData?.skillsCatalog||[];
@@ -4672,6 +4672,34 @@ function openShiftFormModal(existing){
   `;
   openModal();
   wireStaffingNeedsEditor('fShiftStaffNeeds','fShiftMinStaff');
+  // Reveal one step at a time without reparenting inputs or disturbing existing handlers.
+  const builderBody=document.querySelector('#modalBox .modal-body');
+  const headings=[...builderBody.querySelectorAll('.pm-builder-step')];
+  const staffingHeading=builderBody.querySelector('.pm-staff-builder');
+  const stepSections=[[],[],[]];let currentSection=0;
+  for(const child of [...builderBody.children]){
+    if(child===staffingHeading)currentSection=2;
+    else if(child.classList?.contains('pm-builder-step'))currentSection=headings.indexOf(child);
+    stepSections[Math.max(0,currentSection)].push(child);
+  }
+  let activeStep=0;
+  const showStep=n=>{
+    activeStep=Math.max(0,Math.min(2,n));
+    stepSections.forEach((nodes,index)=>nodes.forEach(node=>{node.hidden=index!==activeStep;node.style.display=index===activeStep?'':'none';}));
+    document.getElementById('pmStepProgress').textContent='Step '+(activeStep+1)+' of 3';
+    document.getElementById('pmStepBack').style.display=activeStep?'':'none';
+    document.getElementById('pmStepNext').style.display=activeStep===2?'none':'';
+    document.getElementById('mSave').style.display=activeStep===2?'':'none';
+    builderBody.scrollTop=0;
+  };
+  document.getElementById('pmStepBack').onclick=()=>showStep(activeStep-1);
+  document.getElementById('pmStepNext').onclick=()=>{
+    if(activeStep===0&&!document.getElementById('fShiftName').value.trim()){toast('Name this shift pattern before continuing.',true);document.getElementById('fShiftName').focus();return;}
+    if(activeStep===1&&document.getElementById('fShiftPatternType').value==='weekly'&&!document.querySelectorAll('.fShiftWeekday:checked,.fShiftAltWeekday:checked').length){toast('Choose at least one workday.',true);return;}
+    showStep(activeStep+1);
+  };
+  showStep(0);
+
   const overrideRoot=document.getElementById('fShiftOverrides');
   const syncOverrideCounts=()=>{
     const base=[...document.querySelectorAll('#fShiftStaffNeeds [data-staffing-row]')].map(row=>({
