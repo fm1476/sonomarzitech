@@ -1693,7 +1693,18 @@ function loggedInPersonHasRole(roleId){
 function visibleRolesFor(personId){
   return STATE.roles.filter(r=>!r.hidden || loggedInPersonHasRole(r.id) || (personId && (STATE.personnel.find(p=>p.id===personId)||{}).roleIds?.includes(r.id)));
 }
-function can(abilityId){ const r=currentRole(); return !!(r && r.abilities && r.abilities[abilityId]); }
+function can(abilityId){
+  const r=currentRole();
+  if(abilityId==='pm_sensitive_view'){
+    const ids=String(r?.id||'').startsWith('merged:')?String(r.id).slice(7).split(','):[r?.id];
+    return ids.some(id=>{
+      const role=STATE.roles.find(item=>item.id===id);
+      if(role?.abilities?.pm_sensitive_view!==undefined)return role.abilities.pm_sensitive_view===true;
+      return ['role_admin','role_platform_admin','role_pm_admin'].includes(id);
+    });
+  }
+  return !!(r && r.abilities && r.abilities[abilityId]);
+}
 function countAbilities(role){ return Object.values(role.abilities).filter(Boolean).length; }
 
 /* =========================================================================
