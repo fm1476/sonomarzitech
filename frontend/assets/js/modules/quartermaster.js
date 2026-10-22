@@ -1542,6 +1542,48 @@ function renderEquipmentDetailModal(id){
   renderEqDetailTabContent(item);
 }
 
+function qmStockLevel(item){
+ const n=Number(item.quantity)||0,t=item.minQuantity==null?null:Number(item.minQuantity);
+ return n<=0?["Out of stock","danger"]:t!=null&&t>0&&n<=Math.floor(t/2)?["Critical stock","danger"]:
+ t!=null&&n<=t?["Low stock","warning"]:["Stock available","success"];
+}
+function openIssueStockModal(itemId){
+ const item=equipmentById(itemId);
+ if(!can('qm_assign_checkout')||!item?.isConsumable||item.quantity<1){toast("This stock cannot be issued.",true);return;}
+ const choices={person:STATE.personnel.map(p=>[p.id,p.name]),
+ unit:STATE.qm.refData.units.map(u=>[u.id,u.name]),location:STATE.qm.refData.locations.map(l=>[l,l])};
+ const opts=t=>choices[t].map(([id,n])=>'<option value="'+escapeHtml(id)+'">'+escapeHtml(n)+'</option>').join('');
+ const box=document.getElementById('modalBox');box.className='modal modal-wide';
+ box.innerHTML='<div class="modal-head"><h3>Issue Stock: '+escapeHtml(item.name)+'</h3><button class="modal-close" id="mClose">&times;</button></div>'+
+ '<div class="modal-body"><p><strong>'+item.quantity+' units available</strong>. Record who received the stock.</p>'+
+ '<div class="form-2col"><div class="form-row"><label>Quantity</label><input type="number" id="qmIssueQty" min="1" max="'+item.quantity+'" step="1" value="1"></div>'+
+ '<div class="form-row"><label>Recipient type</label><select id="qmIssueType"><option value="person">Person</option><option value="unit">Unit / Patrol</option><option value="location">Location / Station</option></select></div></div>'+
+ '<div class="form-row"><label>Issued to</label><select id="qmIssueTarget">'+opts('person')+'</select></div>'+
+ '<div class="form-row"><label>Purpose / notes</label><textarea id="qmIssueNotes" maxlength="500" placeholder="Optional: patrol resupply, station issue..."></textarea></div></div>'+
+ '<div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="qmIssueSave">Issue Stock</button></div>';
+ openModal();
+ document.getElementById('mClose').onclick=closeModal;
+ document.getElementById('mCancel').onclick=closeModal;
+ document.getElementById('qmIssueType').onchange=e=>document.getElementById('qmIssueTarget').innerHTML=opts(e.target.value);
+ document.getElementById('qmIssueSave').onclick=()=>{
+  const current=equipmentById(itemId);
+  const n=Number(document.getElementById('qmIssueQty').value);
+  const type=document.getElementById('qmIssueType').value,target=document.getElementById('qmIssueTarget').value;
+  const note=document.getElementById('qmIssueNotes').value.trim();
+  if(!can('qm_assign_checkout')||!current?.isConsumable||!Number.isSafeInteger(n)||n<1||n>current.quantity){toast("Enter a valid whole quantity within available stock.",true);return;}
+  if(!choices[type]?.some(([id])=>id===target)){toast("Choose a valid recipient.",true);return;}
+  const recipient=targetName(type,target),before=current.quantity;
+  current.quantity-=n;
+  STATE.qm.consumptionLog.push({id:"cl"+Date.now(),equipmentId:itemId,date:fmt(new Date()),qtyChange:-n,
+   reason:note||"Issued stock",roleId:primaryRoleId(),recipientType:type,recipientId:target,recipientName:recipient,
+   transactionType:"Issue",quantityBefore:before,quantityAfter:current.quantity});
+  logActivity(n+" units of "+current.name+" issued to "+recipient+(note?" ("+note+")":"")+". "+current.quantity+" remaining.","consumption",itemId);
+  persist();closeModal();toast("Stock issued to "+recipient+".");
+  renderEquipmentDetailModal(itemId);
+  if(ACTIVE_VIEW==='qm-inventory')renderInventory();
+  if(ACTIVE_VIEW==='qm-dashboard')renderDashboard();
+ };
+}
 function renderEqDetailTabContent(item){
   const body = document.getElementById('eqDetailBody');
   const canOOS = can('qm_maint_outofservice');
@@ -1600,6 +1642,8 @@ function renderEqDetailTabContent(item){
           </div>
         </div>
       ` : ''}
+      ${item.isConsumable?(()=>{const [label,tone]=qmStockLevel(item);return '<div class="qm-stock-'+tone+'" style="border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:0 0 14px;font-weight:750;"><span>'+label+'</span> · '+item.quantity+' units on hand'+(item.minQuantity!=null?' · Reorder threshold '+item.minQuantity:'')+'</div>';})():''}
+      ${item.isConsumable&&can('qm_assign_checkout')?'<div style="margin-bottom:15px;"><button class="btn btn-primary" id="btnIssueStock" '+(item.quantity<=0?'disabled':'')+'>Issue Stock</button><span style="margin-left:12px;font-size:12px;color:var(--text-dim)">Document distribution to a person, patrol unit or station</span></div>':''}
       ${item.isConsumable ? `
         <div class="panel" style="box-shadow:none;">
           <div class="panel-head"><h2>Quantity On Hand</h2>${item.minQuantity!=null && item.quantity<=item.minQuantity ? `<span class="badge badge-overdue">Below threshold of ${item.minQuantity}</span>`:''}</div>
@@ -1629,6 +1673,7 @@ function renderEqDetailTabContent(item){
       if(ACTIVE_VIEW==='qm-inventory') renderInventory();
       if(ACTIVE_VIEW==='qm-dashboard') renderDashboard();
     }));
+    document.getElementById('btnIssueStock')?.addEventListener('click',()=>openIssueStockModal(item.id));
     const oosBtn = document.getElementById('btnMarkOOS');
     if(oosBtn) oosBtn.addEventListener('click', ()=>{
       item.status = 'Maintenance';
@@ -1695,7 +1740,7 @@ function renderEqDetailTabContent(item){
       <tr>
         <td>${c.date}</td>
         <td style="color:${c.qtyChange<0?'var(--red)':'var(--green)'};font-weight:700;">${c.qtyChange>0?'+':''}${c.qtyChange}</td>
-        <td>${escapeHtml(c.reason||'')}</td>
+        <td>${escapeHtml(c.reason||'')}${c.recipientName?'<div style="font-size:11px;color:var(--text-dim)">Issued to: '+escapeHtml(c.recipientName)+'</div>':''}</td>
       </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No usage recorded yet. Adjust quantity from the Overview tab to log usage.</td></tr>`;
     body.innerHTML = `
       <div style="margin-bottom:10px;font-size:13px;"><strong>${totalUsed}</strong> units used all-time.</div>
@@ -3728,3 +3773,5 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-detail-modern-sty
   style.textContent="/* Quartermaster equipment detail: compact, readable, responsive workspace. */\n.qm-detail-header{padding:20px 24px!important}.qm-identity{display:flex;align-items:center;gap:15px}.qm-identity-icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft,rgba(50,115,215,.14));color:var(--accent,#4d8cf3);flex:none}.qm-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim)}.qm-identity h3{font-size:24px;margin:3px 0}.qm-detail-id{font-size:12px;color:var(--text-dim)}.qm-detail-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}.qm-detail-status,.qm-detail-actions-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.qm-detail-context{font-size:12px;color:var(--text-dim)}.qm-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px}.qm-metric,.qm-detail-card{padding:17px;border:1px solid var(--border);border-radius:13px;background:var(--surface,rgba(130,145,170,.04));min-width:0}.qm-metric-label,.qm-detail-facts span{display:block;color:var(--text-dim);font-size:11px;font-weight:650;margin-bottom:7px}.qm-metric-value{font-size:17px;font-weight:750;overflow-wrap:anywhere}.qm-metric-sub{font-size:11px;color:var(--text-dim);margin-top:7px}.qm-detail-layout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.qm-detail-card-title{font-weight:800;font-size:14px;margin-bottom:15px}.qm-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.qm-detail-facts strong{font-size:13px;font-weight:650;overflow-wrap:anywhere}.qm-detail-barcode{margin:14px 0 18px;border:1px solid var(--border);border-radius:12px;padding:13px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.qm-detail-barcode svg{flex:0 1 200px}.qm-detail-barcode strong{font-size:12px}.qm-detail-barcode .mono{font-size:12px;color:var(--text-dim);margin-top:5px}.qm-detail-notice{border:1px solid var(--border);padding:12px 15px;border-radius:10px;margin-bottom:15px;font-size:12px;color:var(--text-dim)}@media(max-width:850px){.qm-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:570px){.qm-detail-metrics,.qm-detail-layout{grid-template-columns:1fr}.qm-detail-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.qm-detail-header{padding:14px!important}.qm-identity h3{font-size:20px}}";
   document.head.appendChild(style);
 }
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-stock-alert-styles')){const st=document.createElement('style');st.id='qm-stock-alert-styles';st.textContent='.qm-stock-success{background:rgba(28,167,111,.12);color:#43d59b}.qm-stock-warning{background:rgba(242,161,37,.14);color:#f7b44a}.qm-stock-danger{background:rgba(230,74,74,.14);color:#ff8585}';document.head.appendChild(st);}
