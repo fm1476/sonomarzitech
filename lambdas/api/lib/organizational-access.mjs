@@ -41,6 +41,14 @@ export function canAccessOrganizationalRecord(scopeInput, record, { actorPersonI
     (groupId && scope.workGroupIds.includes(groupId)));
 }
 
+/** Evaluate explicit, independently validated assignments without treating conflicting
+ * legacy single-unit fields as proof of additional membership. */
+export function canAccessAssignedOrganizationalRecord(scope, personId, assignments, options = {}) {
+  if (!personId || !Array.isArray(assignments) || !assignments.length) return false;
+  return assignments.some(a => a && a.personId === personId &&
+    canAccessOrganizationalRecord(scope, a, options));
+}
+
 export function effectiveAccessSummary({ scope, capabilities = [] } = {}) {
   const s = normalizeOrganizationalScope(scope);
   return { scope: s, capabilities: asIds(capabilities), explanation: s.mode === 'agency'
