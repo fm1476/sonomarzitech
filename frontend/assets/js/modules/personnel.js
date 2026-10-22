@@ -4449,7 +4449,9 @@ function openSchedulingDayDetail(date,shifts){
   openModal();
   document.getElementById('modalBox').querySelectorAll('[data-sched-review-assignment]').forEach(button=>button.addEventListener('click',()=>{const item=STATE.pm.scheduleAssignments.find(a=>a.id===button.dataset.schedReviewAssignment);if(item&&canManageScheduleShift(STATE.pm.scheduleShifts.find(sh=>sh.id===item.shiftId))){document.getElementById('modalBox').style.cssText='';openAssignmentFormModal(item);const selected=document.getElementById('fAssignCategory');if(selected){selected.value=button.dataset.schedProposedCategory;selected.dispatchEvent(new Event('change',{bubbles:true}));}}}));
   document.getElementById('mClose').onclick=closeModal;
-  document.getElementById('mCancel').onclick=closeModal;\n  document.getElementById('mClose').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});\n  document.getElementById('mCancel').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
+  document.getElementById('mCancel').onclick=closeModal;
+  document.getElementById('mClose').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
+  document.getElementById('mCancel').addEventListener('click',()=>{document.getElementById('modalBox').style.cssText='';});
 }
 function renderDutyCalendar(body){
   const allGroups=visibleScheduleWorkGroups();
