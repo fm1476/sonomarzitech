@@ -4950,13 +4950,20 @@ function openAssignmentFormModal(existing){
   advisory.className='pm-qualification-advisory';
   advisory.setAttribute('role','status');
   document.getElementById('fAssignPerson').closest('.form-row')?.after(advisory);
+  const saveButton=document.getElementById('mSave');
   const updateAdvisory=()=>{
     const shift=STATE.pm.scheduleShifts.find(x=>x.id===document.getElementById('fAssignShift').value);
     const category=(shift?.staffingRequirements||[]).find(x=>x.id===document.getElementById('fAssignCategory').value);
     const personId=document.getElementById('fAssignPerson').value;
     const issue=!!category&&!!personId&&!staffingPersonHasSkill(STATE.pm.records,personId,category);
-    advisory.textContent=issue?'Advisory: qualification not verified for this position. Authorized scheduling staff may assign this employee; the exception is logged.':'Qualifications are informational; assignments remain at scheduler discretion.';
+    const required=[];
+    if(category?.requiredRank)required.push('Rank: '+category.requiredRank);
+    if(category?.requiredSkill?.startsWith('rank:'))required.push('Rank: '+category.requiredSkill.slice(5));
+    else if(category?.requiredSkill&&category.requiredSkill!=='any')required.push('Skill: '+category.requiredSkill);
+    advisory.textContent=issue?'Cannot assign '+personName(personId)+'. This slot requires '+required.join(' AND ')+'. Update the employee’s Personnel record or choose a qualified employee.':'Employee meets the selected staffing requirements.';
     advisory.classList.toggle('pm-qualification-warning',issue);
+    saveButton.disabled=issue;
+    saveButton.title=issue?'Select an employee who meets the required rank and skill.':'';
   };
   ['fAssignShift','fAssignCategory','fAssignPerson'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>queueMicrotask(updateAdvisory)));
   updateAdvisory();
@@ -4976,7 +4983,9 @@ function openAssignmentFormModal(existing){
     if(!data.personId){toast('Select an employee.',true);return;}
     const requirement=(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId);
     if(requirement&&!staffingPersonHasSkill(STATE.pm.records,data.personId,requirement)){
-      logActivity('Advisory: '+personName(data.personId)+' assigned to '+requirement.name+' with an unverified or missing qualification.','schedule');
+      updateAdvisory();
+      toast('Assignment blocked: '+personName(data.personId)+' does not meet the Rank and/or Skill required for '+requirement.name+'.',true);
+      return;
     }
     if(!canManageScheduleShift(selectedShift))return;
     if(editing){
