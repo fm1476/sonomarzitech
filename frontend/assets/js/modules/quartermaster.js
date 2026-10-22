@@ -1353,6 +1353,84 @@ function openEquipmentModal(id){
     </div>
   `;
   openModal();
+  // Reorganize the existing form controls without replacing input IDs or
+  // their original save/validation handlers. Keeps new and edit flows in sync.
+  const equipmentBody=document.querySelector('#modalBox .modal-body');
+  if(equipmentBody){
+    equipmentBody.classList.add('qm-edit-workspace');
+    const rows=[...equipmentBody.children];
+    const identity=document.createElement('section');
+    identity.className='qm-edit-section';
+    identity.innerHTML='<h4>01 · Equipment identity</h4><p>What is this item and how is it identified?</p>';
+    const tracking=document.createElement('section');
+    tracking.className='qm-edit-section';
+    tracking.innerHTML='<h4>02 · Inventory & tracking</h4><p>Manage serialized equipment or quantity-based consumables.</p>';
+    const assignment=document.createElement('section');
+    assignment.className='qm-edit-section';
+    assignment.innerHTML='<h4>03 · Assignment & visibility</h4><p>Where this item belongs and which agencies can see it.</p>';
+    const purchasing=document.createElement('section');
+    purchasing.className='qm-edit-section';
+    purchasing.innerHTML='<h4>04 · Procurement & lifecycle</h4><p>Cost, purchasing details and replacement planning.</p>';
+    const supporting=document.createElement('section');
+    supporting.className='qm-edit-section';
+    supporting.innerHTML='<h4>05 · Additional details</h4><p>Images, notes and disposal information.</p>';
+    // Split Asset ID and Value so unrelated information no longer shares a row.
+    const idRow=rows[0];
+    const costInput=idRow?.querySelector('#fValue')?.closest('.form-row');
+    if(costInput)costInput.remove();
+    if(idRow)identity.append(idRow);
+    [1,2].forEach(i=>rows[i]&&identity.append(rows[i]));
+    [12,13,14,3,4].forEach(i=>rows[i]&&tracking.append(rows[i]));
+    [5,6,7].forEach(i=>rows[i]&&assignment.append(rows[i]));
+    if(costInput){const costRow=document.createElement('div');costRow.className='form-row';costRow.append(costInput);purchasing.append(costRow);}
+    [8,9,10,11].forEach(i=>rows[i]&&purchasing.append(rows[i]));
+    [15,16,17].forEach(i=>rows[i]&&supporting.append(rows[i]));
+    equipmentBody.append(identity,tracking,assignment,purchasing,supporting);
+    const trackingCheckbox=equipmentBody.querySelector('#fIsConsumable');
+    const stockHint=document.createElement('div');
+    stockHint.className='qm-edit-tracking-hint';
+    trackingCheckbox?.closest('.form-row')?.after(stockHint);
+    const refreshTrackingHint=()=>{
+      const consumable=trackingCheckbox?.checked;
+      stockHint.textContent=consumable
+        ?'Consumable: issue stock by quantity from the equipment record. Set the reorder threshold to activate low-stock warnings.'
+        :'Serialized asset: use Assign Item to record checkout to a person, unit or location.';
+      stockHint.dataset.mode=consumable?'consumable':'serialized';
+    };
+    trackingCheckbox?.addEventListener('change',refreshTrackingHint);
+    refreshTrackingHint();
+    const homeUnitLabel=equipmentBody.querySelector('#fHomeUnit')?.closest('.form-row')?.querySelector('label');
+    if(homeUnitLabel){
+      homeUnitLabel.textContent='Home Unit';
+      const hint=document.createElement('small');
+      hint.className='qm-edit-field-hint';
+      hint.textContent='Optional. Used to scope equipment visibility by unit.';
+      homeUnitLabel.after(hint);
+    }
+    const sharedLabel=equipmentBody.querySelector('#fIsShared')?.closest('label');
+    if(sharedLabel){
+      const checkbox=sharedLabel.querySelector('input');
+      sharedLabel.textContent='Shared task-force asset';
+      sharedLabel.prepend(checkbox);
+      const hint=document.createElement('small');
+      hint.className='qm-edit-field-hint';
+      hint.textContent='Visible across agencies regardless of unit scope.';
+      sharedLabel.after(hint);
+    }
+    const heading=document.querySelector('#modalBox .modal-head h3');
+    if(heading)heading.textContent=(editing?'Edit':'Add')+' Equipment · '+(item.name||'New item');
+    const footer=document.querySelector('#modalBox .modal-foot');
+    if(footer&&!editing){
+      const saveAssign=document.createElement('button');
+      saveAssign.type='button';saveAssign.className='btn btn-outline';
+      saveAssign.id='qmSaveAndAssign';
+      saveAssign.textContent='Save & Assign';
+      saveAssign.hidden=item.isConsumable||!can('qm_assign_checkout');
+      trackingCheckbox?.addEventListener('change',()=>saveAssign.hidden=trackingCheckbox.checked);
+      footer.insertBefore(saveAssign,footer.querySelector('#mSave'));
+      saveAssign.addEventListener('click',()=>{const save=footer.querySelector('#mSave');save.dataset.assignAfterSave='true';save.click();});
+    }
+  }
   let pendingPhotoDataUrl = item.photoDataUrl || null;
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1441,6 +1519,16 @@ function openEquipmentModal(id){
         reason: document.getElementById('fDisposalReason').value.trim(),
       } : null,
     };
+    // Stock on hand and reorder thresholds must be whole, nonnegative units.
+    if(isConsumable && (!Number.isSafeInteger(data.quantity)||data.quantity<0||
+       (data.minQuantity!=null&&(!Number.isSafeInteger(data.minQuantity)||data.minQuantity<0)))){
+      toast("Enter valid whole-number stock quantities and reorder thresholds.",true);return;
+    }
+    if(editing && item.isConsumable && data.quantity!==item.quantity &&
+       STATE.qm.consumptionLog.some(log=>log.equipmentId===item.id)){
+      // Existing edits can still correct inventory, but never silently change recorded issues.
+      logActivity(item.name+" stock reconciled from "+item.quantity+" to "+data.quantity+" through equipment editing.","consumption",item.id);
+    }
     if(editing){
       const photoChanged = item.photoDataUrl!==data.photoDataUrl;
       const changes = Object.keys(data).filter(key=>key!=='photoDataUrl' && JSON.stringify(item[key] ?? null)!==JSON.stringify(data[key] ?? null));
@@ -1463,9 +1551,12 @@ function openEquipmentModal(id){
       logActivity(`${newItem.name} (${newItem.assetId}) added to inventory.`, "equipment", newItem.id);
       toast("Equipment added to inventory.");
     }
+    const nextId=editing?item.id:STATE.qm.equipment[STATE.qm.equipment.length-1]?.id;
+    const assignAfterSave=!editing&&!isConsumable&&document.getElementById('mSave')?.dataset.assignAfterSave==='true'&&status==='Available';
     persist();
     closeModal();
     renderInventory();
+    if(assignAfterSave&&nextId)openCheckoutModal(nextId);
   };
 }
 
@@ -1542,6 +1633,48 @@ function renderEquipmentDetailModal(id){
   renderEqDetailTabContent(item);
 }
 
+function qmStockLevel(item){
+ const n=Number(item.quantity)||0,t=item.minQuantity==null?null:Number(item.minQuantity);
+ return n<=0?["Out of stock","danger"]:t!=null&&t>0&&n<=Math.floor(t/2)?["Critical stock","danger"]:
+ t!=null&&n<=t?["Low stock","warning"]:["Stock available","success"];
+}
+function openIssueStockModal(itemId){
+ const item=equipmentById(itemId);
+ if(!can('qm_assign_checkout')||!item?.isConsumable||item.quantity<1){toast("This stock cannot be issued.",true);return;}
+ const choices={person:STATE.personnel.map(p=>[p.id,p.name]),
+ unit:STATE.qm.refData.units.map(u=>[u.id,u.name]),location:STATE.qm.refData.locations.map(l=>[l,l])};
+ const opts=t=>choices[t].map(([id,n])=>'<option value="'+escapeHtml(id)+'">'+escapeHtml(n)+'</option>').join('');
+ const box=document.getElementById('modalBox');box.className='modal modal-wide';
+ box.innerHTML='<div class="modal-head"><h3>Issue Stock: '+escapeHtml(item.name)+'</h3><button class="modal-close" id="mClose">&times;</button></div>'+
+ '<div class="modal-body"><p><strong>'+item.quantity+' units available</strong>. Record who received the stock.</p>'+
+ '<div class="form-2col"><div class="form-row"><label>Quantity</label><input type="number" id="qmIssueQty" min="1" max="'+item.quantity+'" step="1" value="1"></div>'+
+ '<div class="form-row"><label>Recipient type</label><select id="qmIssueType"><option value="person">Person</option><option value="unit">Unit / Patrol</option><option value="location">Location / Station</option></select></div></div>'+
+ '<div class="form-row"><label>Issued to</label><select id="qmIssueTarget">'+opts('person')+'</select></div>'+
+ '<div class="form-row"><label>Purpose / notes</label><textarea id="qmIssueNotes" maxlength="500" placeholder="Optional: patrol resupply, station issue..."></textarea></div></div>'+
+ '<div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="qmIssueSave">Issue Stock</button></div>';
+ openModal();
+ document.getElementById('mClose').onclick=closeModal;
+ document.getElementById('mCancel').onclick=closeModal;
+ document.getElementById('qmIssueType').onchange=e=>document.getElementById('qmIssueTarget').innerHTML=opts(e.target.value);
+ document.getElementById('qmIssueSave').onclick=()=>{
+  const current=equipmentById(itemId);
+  const n=Number(document.getElementById('qmIssueQty').value);
+  const type=document.getElementById('qmIssueType').value,target=document.getElementById('qmIssueTarget').value;
+  const note=document.getElementById('qmIssueNotes').value.trim();
+  if(!can('qm_assign_checkout')||!current?.isConsumable||!Number.isSafeInteger(n)||n<1||n>current.quantity){toast("Enter a valid whole quantity within available stock.",true);return;}
+  if(!choices[type]?.some(([id])=>id===target)){toast("Choose a valid recipient.",true);return;}
+  const recipient=targetName(type,target),before=current.quantity;
+  current.quantity-=n;
+  STATE.qm.consumptionLog.push({id:"cl"+Date.now(),equipmentId:itemId,date:fmt(new Date()),qtyChange:-n,
+   reason:note||"Issued stock",roleId:primaryRoleId(),recipientType:type,recipientId:target,recipientName:recipient,
+   transactionType:"Issue",quantityBefore:before,quantityAfter:current.quantity});
+  logActivity(n+" units of "+current.name+" issued to "+recipient+(note?" ("+note+")":"")+". "+current.quantity+" remaining.","consumption",itemId);
+  persist();closeModal();toast("Stock issued to "+recipient+".");
+  renderEquipmentDetailModal(itemId);
+  if(ACTIVE_VIEW==='qm-inventory')renderInventory();
+  if(ACTIVE_VIEW==='qm-dashboard')renderDashboard();
+ };
+}
 function renderEqDetailTabContent(item){
   const body = document.getElementById('eqDetailBody');
   const canOOS = can('qm_maint_outofservice');
@@ -1600,6 +1733,8 @@ function renderEqDetailTabContent(item){
           </div>
         </div>
       ` : ''}
+      ${item.isConsumable?(()=>{const [label,tone]=qmStockLevel(item);return '<div class="qm-stock-'+tone+'" style="border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:0 0 14px;font-weight:750;"><span>'+label+'</span> · '+item.quantity+' units on hand'+(item.minQuantity!=null?' · Reorder threshold '+item.minQuantity:'')+'</div>';})():''}
+      ${item.isConsumable&&can('qm_assign_checkout')?'<div style="margin-bottom:15px;"><button class="btn btn-primary" id="btnIssueStock" '+(item.quantity<=0?'disabled':'')+'>Issue Stock</button><span style="margin-left:12px;font-size:12px;color:var(--text-dim)">Document distribution to a person, patrol unit or station</span></div>':''}
       ${item.isConsumable ? `
         <div class="panel" style="box-shadow:none;">
           <div class="panel-head"><h2>Quantity On Hand</h2>${item.minQuantity!=null && item.quantity<=item.minQuantity ? `<span class="badge badge-overdue">Below threshold of ${item.minQuantity}</span>`:''}</div>
@@ -1629,6 +1764,7 @@ function renderEqDetailTabContent(item){
       if(ACTIVE_VIEW==='qm-inventory') renderInventory();
       if(ACTIVE_VIEW==='qm-dashboard') renderDashboard();
     }));
+    document.getElementById('btnIssueStock')?.addEventListener('click',()=>openIssueStockModal(item.id));
     const oosBtn = document.getElementById('btnMarkOOS');
     if(oosBtn) oosBtn.addEventListener('click', ()=>{
       item.status = 'Maintenance';
@@ -1695,7 +1831,7 @@ function renderEqDetailTabContent(item){
       <tr>
         <td>${c.date}</td>
         <td style="color:${c.qtyChange<0?'var(--red)':'var(--green)'};font-weight:700;">${c.qtyChange>0?'+':''}${c.qtyChange}</td>
-        <td>${escapeHtml(c.reason||'')}</td>
+        <td>${escapeHtml(c.reason||'')}${c.recipientName?'<div style="font-size:11px;color:var(--text-dim)">Issued to: '+escapeHtml(c.recipientName)+'</div>':''}</td>
       </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px;">No usage recorded yet. Adjust quantity from the Overview tab to log usage.</td></tr>`;
     body.innerHTML = `
       <div style="margin-bottom:10px;font-size:13px;"><strong>${totalUsed}</strong> units used all-time.</div>
@@ -3727,4 +3863,12 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-detail-modern-sty
   style.id='qm-detail-modern-style';
   style.textContent="/* Quartermaster equipment detail: compact, readable, responsive workspace. */\n.qm-detail-header{padding:20px 24px!important}.qm-identity{display:flex;align-items:center;gap:15px}.qm-identity-icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft,rgba(50,115,215,.14));color:var(--accent,#4d8cf3);flex:none}.qm-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim)}.qm-identity h3{font-size:24px;margin:3px 0}.qm-detail-id{font-size:12px;color:var(--text-dim)}.qm-detail-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}.qm-detail-status,.qm-detail-actions-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.qm-detail-context{font-size:12px;color:var(--text-dim)}.qm-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px}.qm-metric,.qm-detail-card{padding:17px;border:1px solid var(--border);border-radius:13px;background:var(--surface,rgba(130,145,170,.04));min-width:0}.qm-metric-label,.qm-detail-facts span{display:block;color:var(--text-dim);font-size:11px;font-weight:650;margin-bottom:7px}.qm-metric-value{font-size:17px;font-weight:750;overflow-wrap:anywhere}.qm-metric-sub{font-size:11px;color:var(--text-dim);margin-top:7px}.qm-detail-layout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.qm-detail-card-title{font-weight:800;font-size:14px;margin-bottom:15px}.qm-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.qm-detail-facts strong{font-size:13px;font-weight:650;overflow-wrap:anywhere}.qm-detail-barcode{margin:14px 0 18px;border:1px solid var(--border);border-radius:12px;padding:13px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.qm-detail-barcode svg{flex:0 1 200px}.qm-detail-barcode strong{font-size:12px}.qm-detail-barcode .mono{font-size:12px;color:var(--text-dim);margin-top:5px}.qm-detail-notice{border:1px solid var(--border);padding:12px 15px;border-radius:10px;margin-bottom:15px;font-size:12px;color:var(--text-dim)}@media(max-width:850px){.qm-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:570px){.qm-detail-metrics,.qm-detail-layout{grid-template-columns:1fr}.qm-detail-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.qm-detail-header{padding:14px!important}.qm-identity h3{font-size:20px}}";
   document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-stock-alert-styles')){const st=document.createElement('style');st.id='qm-stock-alert-styles';st.textContent='.qm-stock-success{background:rgba(28,167,111,.12);color:#43d59b}.qm-stock-warning{background:rgba(242,161,37,.14);color:#f7b44a}.qm-stock-danger{background:rgba(230,74,74,.14);color:#ff8585}';document.head.appendChild(st);}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-form-modern-style')){
+ const style=document.createElement('style');style.id='qm-form-modern-style';
+ style.textContent='.qm-edit-workspace{max-width:1120px;margin:0 auto;padding:20px 24px!important;display:grid;gap:18px}.qm-edit-section{padding:20px;border:1px solid var(--border);border-radius:14px;background:rgba(112,140,180,.045);min-width:0}.qm-edit-section h4{font-weight:800;font-size:15px;margin:0 0 5px;color:var(--heading)}.qm-edit-section>p{font-size:12px;color:var(--text-dim);margin:0 0 18px}.qm-edit-tracking-hint{background:rgba(56,120,220,.09);border-left:3px solid #4f8fea;padding:11px 14px;margin:6px 0 16px;border-radius:5px;font-size:12px;color:var(--text)}.qm-edit-tracking-hint[data-mode=consumable]{border-left-color:#2fbf95;background:rgba(35,177,125,.1)}.qm-edit-field-hint{display:block;color:var(--text-dim);font-size:11px;margin:2px 0 10px}.qm-edit-section>.form-row:last-child,.qm-edit-section>.form-2col:last-child{margin-bottom:0}@media(max-width:650px){.qm-edit-workspace{padding:12px!important;gap:12px}.qm-edit-section{padding:14px}}';
+ document.head.append(style);
 }
