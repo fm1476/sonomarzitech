@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Privileged IAM-controlled handler probes, NOT an API Gateway JWT/auth test.
-# Reads existing fixtures only. Never prints Cognito subjects or signed URLs.
+# Creates only run-owned shift fixtures and removes them during cleanup.
 set -euo pipefail
 export AWS_REGION=us-east-2 AWS_PAGER=""
 umask 077
@@ -83,7 +83,15 @@ try:
  require('Patrol retains view-only role and calendar grants',not ability(patrol,'pm_schedule_manage') and all(patrol['person_id'] not in g.get('managerIds',[]) for g in [dg,pg]))
  for label,actor,allowed,hidden in [('Dispatch',dispatch,dg,pg),('Patrol',patrol,pg,dg)]:
   status,ws=call(actor,'/workspace');visible={g['id'] for g in entries(ws.get('records',[]),'pm.scheduleWorkGroups')}
-  require(label+' intended calendar visible and other calendar hidden',status==200 and ws.get('success') is True and allowed['id'] in visible and hidden['id'] not in visible)
+  require(label+' workspace loads',status==200 and ws.get('success') is True)
+  person=getrow(json.dumps([['personnel'],actor['person_id']],separators=(',',':')))
+  value=person['value'] if person and not person['deleted'] else {}
+  unit=str(value.get('unit') or value.get('department') or '').strip().lower()
+  unit_match=bool(unit) and unit in [str(u).strip().lower() for u in allowed.get('unitNames',[])]
+  print('CONFIG | '+label+' | calendar_visibility='+str(allowed.get('visibility'))+' | explicit_viewer='+str(actor['person_id'] in allowed.get('viewerIds',[]))+' | assigned_manager='+str(actor['person_id'] in allowed.get('managerIds',[]))+' | unit_match='+str(unit_match)+' | pm_schedule_view='+str(ability(actor,'pm_schedule_view'))+' | pm_reports_view='+str(ability(actor,'pm_reports_view'))+' | returned_calendars='+json.dumps([g.get('name') or g['id'] for g in entries(ws.get('records',[]),'pm.scheduleWorkGroups')]),flush=True)
+  # A read failure remains a failure, but must not prevent independent write
+  # denial tests against the disposable fixtures below.
+  report(label+' intended calendar visible and other calendar hidden',allowed['id'] in visible and hidden['id'] not in visible)
  dk,dv=shift('dispatch',dg['id']);pk,pv=shift('patrol',pg['id']);xk,xv=shift('denied_dispatch_to_patrol',pg['id']);yk,yv=shift('denied_patrol_create',pg['id'])
  require('Fixture keys unused',all(getrow(k) is None for k in keys))
  status,_=write(admin,[change(pk,pv)]);require('Administrator creates disposable Patrol fixture',status==200 and getrow(pk)['value']==pv)
@@ -119,9 +127,9 @@ finally:
    sql('BEGIN; SELECT pg_advisory_xact_lock(hashtext('+lit(tid+':'+aid+':scheduling')+')); '+guard+'DELETE FROM suite_records WHERE '+scope+' AND key=ANY('+array+'); COMMIT;')
    require('Run-owned fixtures and tombstones removed',all(getrow(k) is None for k in keys))
   if config_before is not None:report('Calendar grants and roles unchanged by probe',current_config()==config_before)
-  rollout=read('SELECT COALESCE(bool_or(enabled),false) FROM suite_organization_rollout WHERE tenant_id='+lit(tid)+'::uuid AND agency_id='+lit(aid)+'::uuid')
+  rollout=read('SELECT to_jsonb(COALESCE(bool_or(enabled),false)) FROM suite_organization_rollout WHERE tenant_id='+lit(tid)+'::uuid AND agency_id='+lit(aid)+'::uuid')
   report('Agency-wide rollout remains disabled',rollout is False)
-  cleanup_complete=True;print('CLEANUP | Run-owned Scheduling fixtures removed; existing shifts preserved.',flush=True)
+  cleanup_complete=True;print('CLEANUP | '+('Run-owned Scheduling fixtures removed; existing shifts preserved.' if keys else 'No Scheduling fixtures were created.'),flush=True)
  except Exception as error:
   failures+=1;print('FAIL | Cleanup incomplete | '+str(error)+' | retain manifest '+str(root/'manifest.json'),flush=True)
  manifest();(root/'summary.json').write_text(json.dumps({'failures':failures,'cleanup_complete':cleanup_complete,'run_id':run_id},indent=2))
