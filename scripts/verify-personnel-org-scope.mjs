@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {canAccessOrganizationalRecord} from '../lambdas/api/lib/organizational-access.mjs';
+import {authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY} from '../lambdas/api/lib/organization-assignments.mjs';
 const source=readFileSync(new URL('../lambdas/api/core.mjs',import.meta.url),'utf8');
 for(const fragment of [
  'loadPersonnelScope(client,workspaceAuth)',
@@ -54,14 +55,14 @@ assert.ok(attachmentStart>=0 && attachmentEnd>attachmentStart);
 const attachmentSandbox={
   loadPersonnelScope:async()=>dispatchScope,
   collectionFromRecordKey:key=>{const decoded=JSON.parse(key);return {collection:decoded[0].join('.'),itemId:decoded[1]};},
-  canAccessOrganizationalRecord
+  canAccessOrganizationalRecord,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY
 };
 vm.createContext(attachmentSandbox);
 vm.runInContext(source.slice(attachmentStart,attachmentEnd),attachmentSandbox);
 const key=(collection,id)=>JSON.stringify([collection.split('.'),id]);
 const member={tenantId:'tenant',agencyId:'agency',personId:'manager'};
 const enrollment={trainee_user:'trainee-user'};
-const attachmentClient=async records=>({query:async(query)=>query.includes('suite_memberships')?{rows:[{person_id:'person-dispatch'}]}:{rows:records}});
+const attachmentClient=async records=>({query:async(query)=>query.includes('suite_memberships')?{rows:[{person_id:'person-dispatch'}]}:query.includes('to_regclass')?{rows:[{assignments:null,nodes:null}]}:{rows:records}});
 const dispatchRow={key:key('pm.records','dispatch'),value:{personId:'person-dispatch',unitId:'dispatch'}};
 const patrolRow={key:key('personnel','conflict'),value:{id:'person-dispatch',unitId:'patrol'}};
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(await attachmentClient([dispatchRow]),member,enrollment),true);
@@ -93,3 +94,22 @@ const bounded=await resolveScope([{scope:{mode:'none'}}]);
 assert.deepEqual(Array.from(bounded.calls[1].args),['tenant-a','agency-a','user-a'],'Scope lookup must be tenant, agency, and actor bounded');
 assert.equal((await loadSandbox.loadPersonnelScope({query:async()=>{throw Error('DB unavailable');}},access).catch(e=>e.message)),'DB unavailable','Database errors must not silently permit legacy access');
 console.log('Personnel grant loading tenant isolation and fail-closed behavior passed.');
+
+const canonicalAttachmentClient={query:async(sql,args=[])=>{
+  if(sql.includes('suite_memberships'))return {rows:[{person_id:'person-dispatch'}]};
+  if(sql.includes('to_regclass'))return {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes'}]};
+  if(sql===PERSON_ORGANIZATION_QUERY)return {rows:[{
+    tenant_id:'tenant',agency_id:'agency',person_id:'person-dispatch',
+    organization_id:'dispatch',node_kind:'unit',active:true,node_active:true
+  }]};
+  throw Error('Canonical signed URL guard must not use legacy records');
+}};
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(canonicalAttachmentClient,member,{trainee_user:'trainee-user',trainee_person:'person-dispatch'}),true);
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(canonicalAttachmentClient,member,{trainee_user:'trainee-user',trainee_person:'person-patrol'}),false);
+const canonicalEmpty={query:async(sql,args=[])=>{
+  if(sql.includes('suite_memberships'))return {rows:[{person_id:'person-dispatch'}]};
+  if(sql.includes('to_regclass'))return {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes'}]};
+  return {rows:[]};
+}};
+assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(canonicalEmpty,member,enrollment),false,'No canonical assignment must deny signed URL');
+console.log('Canonical Field Training attachment negative tests passed.');
