@@ -13,3 +13,12 @@ for (const pattern of [
 assert.match(block,/\['none','self','selected'\]/,'Do not permit custom administrators to grant unrestricted agency mode');
 assert.doesNotMatch(block,/\['none','self','selected','agency'\]/);
 console.log('Organizational administration API structural checks passed.');
+
+// Selected IDs must be resolved from records in the requested agency, not trusted from request input.
+assert.match(block,/SELECT key,value FROM suite_records WHERE tenant_id=\$1 AND agency_id=\$2 AND deleted=false/);
+assert.match(block,/collection==='pm\.records'/);
+assert.match(block,/collection==='pm\.divisions'/);
+assert.match(block,/collection==='pm\.scheduleWorkGroups'/);
+assert.match(block,/clean\[kind\]\.filter\(id=>!known\[kind\]\.has\(id\)\)/);
+assert.match(block,/if\(unknown\.length\) return response\(400/);
+console.log('Organizational grant ID catalog validation checks passed.');
