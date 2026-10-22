@@ -37,6 +37,7 @@ async function tryGrant(selectedScope,catalogRows=catalogs,agencyFound=true,memb
     if(sql.includes('SELECT id FROM suite_agencies'))return {rows:agencyFound?[{id:'agency-id'}]:[]};
     if(sql.includes('CREATE TABLE IF NOT EXISTS'))return {rows:[]};
     if(sql.includes('SELECT 1 FROM suite_memberships'))return {rows:memberFound?[{exists:1}]:[]};
+    if(sql.includes("to_regclass('suite_organization_nodes')"))return {rows:[{nodes:null}]};
     if(sql.includes('SELECT key,value FROM suite_records'))return {rows:catalogRows};
     if(sql.includes('INSERT INTO suite_organizational_access'))return {rows:[]};
     throw Error('Unexpected SQL: '+sql);
@@ -62,3 +63,10 @@ assert.equal((await tryGrant({...scope,unitIds:[],divisionIds:['missing-division
 assert.equal((await tryGrant({...scope,unitIds:[],workGroupIds:['missing-workgroup']})).outcome.status,400);
 assert.equal((await tryGrant({...scope,unitIds:[],workGroupIds:['group-1']})).outcome.status,200);
 console.log('Organizational assignment API executable negative tests passed.');
+
+// Catalog availability must be independent of activation; admins need to
+// assign canonical UUID grants while rollout remains safely disabled.
+assert.match(block,/canonicalCatalogAvailable=Boolean\(canonicalTable\.rows\[0\]\?\.nodes\)/);
+assert.match(block,/catalogs:canonicalCatalogAvailable\?/);
+assert.match(block,/clean\.mode==='selected' && canonicalCatalogAvailable/);
+console.log('Pre-activation canonical catalog checks passed.');
