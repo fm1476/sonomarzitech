@@ -4718,7 +4718,7 @@ function openShiftFormModal(existing){
         <div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">Leave the end date blank if this pattern doesn't have a known end yet. Once a pattern's end date passes, it drops off the list here automatically (there's a toggle to still see it).</div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save Changes':'Create'}</button></div>
+    <div class="modal-foot"><span id="pmStepProgress" class="hint" aria-live="polite">Step 1 of 3</span><button class="btn btn-outline" id="mCancel">Cancel</button><button type="button" class="btn btn-outline" id="pmStepBack" style="display:none">Back</button><button type="button" class="btn btn-primary" id="pmStepNext">Continue</button><button class="btn btn-primary" id="mSave" style="display:none">${editing?'Save Changes':'Create'}</button></div>
   `;
   openModal();
   // Wire dismissal immediately, before any optional editor setup can fail.
