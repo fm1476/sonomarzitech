@@ -2039,7 +2039,7 @@ function startK9Module(){
   renderNav();
   switchView('k9-dashboard');
 }
-window.K9 = { start: startK9Module, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openK9Detail, k9For, monthlyTrainingHours, k9TrainingRequirement() };
+window.K9 = { start: startK9Module, buildData, migrateData, recalcNotifications, NAV_ITEMS, switchView, renderView, refresh: ()=>renderView(ACTIVE_VIEW), openK9Detail, k9For, monthlyTrainingHours, get MONTHLY_TRAINING_HOURS_STANDARD(){return k9TrainingRequirement();} };
 
 })();
 
