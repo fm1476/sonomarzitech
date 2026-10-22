@@ -3063,7 +3063,7 @@ function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
 }
 function staffingCategoryName(record,id){return (record?.staffingRequirements||[]).find(row=>row.id===id)?.name||'Unclassified';}
 function staffingBreakdownHtml(summary){
-  return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
+  return summary.categories.map(row=>`<span class="badge" style="margin:2px 4px 2px 0;color:${row.needed?'var(--red)':'var(--green)'};">${escapeHtml(row.name)}: ${row.staffed}/${row.count} min${row.preferredCount>row.count?' · '+row.preferredCount+' preferred':''}</span>`).join('')+(summary.categories.length&&summary.unclassified?`<span class="hint">${summary.unclassified} unclassified</span>`:'');
 }
 function effectiveStaffingRequirements(shift,date){
   const base=shift.staffingRequirements||[];
