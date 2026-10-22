@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {activePersonAssignments,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,canonicalOrganizationReady} from '../lambdas/api/lib/organization-assignments.mjs';
+import {activePersonAssignments,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,AGENCY_PERSON_ORGANIZATION_QUERY,canonicalOrganizationReady} from '../lambdas/api/lib/organization-assignments.mjs';
 const t='tenant-a',a='agency-a',p='employee-a';
 const entry=(org,kind='unit',extra={})=>({tenant_id:t,agency_id:a,person_id:p,organization_id:org,node_kind:kind,node_active:true,active:true,...extra});
 const rows=[entry('patrol'),entry('dispatch'),entry('operations','division'),entry('dispatch-admin','work_group')];
@@ -99,3 +99,10 @@ const testScopes=async(source,fnName,endMarker,authInput)=>{
 await testScopes(core,'loadPersonnelScope','function personnelScopeAllows(');
 await testScopes(ft,'ftLoadOrgScope','async function ftOrgMembers(');
 console.log('Executable missing-grant activation boundaries passed for Personnel and Field Training.');
+
+// A bulk Personnel list and a single-person/attachment lookup must traverse
+// exactly the same active hierarchy, or a list can expose a denied subject.
+const hierarchySql = query => query.slice(query.indexOf('WITH RECURSIVE ancestor_chain'), query.indexOf('AS ancestor_division_ids'));
+assert.equal(hierarchySql(AGENCY_PERSON_ORGANIZATION_QUERY), hierarchySql(PERSON_ORGANIZATION_QUERY),
+  'Bulk and single-person authorization must use identical active ancestor traversal');
+console.log('Bulk Personnel and single-person hierarchy authorization parity passed.');
