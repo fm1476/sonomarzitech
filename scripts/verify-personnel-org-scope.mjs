@@ -43,6 +43,8 @@ const auth={personId:'dispatch-supervisor'};
 assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'dispatch'},auth,new Map([['dispatcher','dispatch']])),true);
 assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'patrol-officer',unitId:'patrol'},auth,new Map([['patrol-officer','patrol']])),false);
 assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'dispatch'},auth,new Map([['dispatcher',null]])),false,'Conflicting unit mapping must deny even when record claims Dispatch');
+assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'patrol-officer',unitId:'dispatch'},auth,new Map([['patrol-officer','patrol']])),false,'Related record must not override authoritative Patrol assignment with Dispatch');
+assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'patrol'},auth,new Map([['dispatcher','dispatch']])),true,'Authoritative Dispatch assignment takes precedence over stale linked record');
 console.log('Runtime Personnel scope predicate negative cases passed.');
 
 // Execute the signed-URL organizational guard, not just a source-pattern assertion.
