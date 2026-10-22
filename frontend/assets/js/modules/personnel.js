@@ -4160,6 +4160,33 @@ function openRequestTimeOffModal(requestableCodes, me){
   };
 }
 function dateRangeText(startDate,endDate){ return startDate===endDate ? startDate : `${startDate} to ${endDate}`; }
+function previewLeaveStaffingImpact(request){
+  // Simulate an approved time-off exception in memory only. The preview
+  // deliberately does not save or change the leave decision.
+  const exceptions=STATE.pm.scheduleExceptions||(STATE.pm.scheduleExceptions=[]);
+  const shifts=STATE.pm.scheduleShifts.filter(shift=>shift.published!==false&&canViewScheduleShift(shift));
+  const start=new Date(request.startDate+'T12:00:00');
+  const end=new Date(request.endDate+'T12:00:00');
+  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<start)return {changes:[],truncated:false};
+  const dates=[];
+  for(let d=new Date(start);d<=end&&dates.length<62;d=addDays(d,1))dates.push(fmt(d));
+  const candidate=shifts.flatMap(shift=>dates.map(date=>({shift,date})));
+  const before=candidate.map(({shift,date})=>shiftStaffingSummary(shift,date));
+  const temporary={id:'preview-only',personId:request.personId,code:request.code,startDate:request.startDate,endDate:request.endDate};
+  exceptions.push(temporary);
+  let after;
+  try{after=candidate.map(({shift,date})=>shiftStaffingSummary(shift,date));}
+  finally{exceptions.pop();}
+  const changes=[];
+  candidate.forEach(({shift,date},i)=>{
+    const earlier=before[i],later=after[i];
+    const categoryWorse=(later.categories||[]).some(row=>row.needed>(earlier.categories||[]).find(x=>x.id===row.id)?.needed||false);
+    if((earlier.ok&&!later.ok)||categoryWorse){
+      changes.push({date,shift:shift.name||'Unnamed shift'});
+    }
+  });
+  return {changes,truncated:dates.length===62&&dates[61]<request.endDate};
+}
 function decideLeaveRequest(id, decision){
   const req = STATE.pm.leaveRequests.find(r=>r.id===id);
   if(!req || req.status!=='pending'||!canManagePersonSchedule(req.personId,req,'pm_leave_request_approve')||!['approved','denied'].includes(decision)) return;
@@ -4172,6 +4199,16 @@ function decideLeaveRequest(id, decision){
     logActivity(`Denied a ${req.code} request for ${personName(req.personId)}.`, "schedule");
     toast('Request denied.');
   } else {
+    const impact=previewLeaveStaffingImpact(req);
+    if(impact.changes.length){
+      const affected=impact.changes.slice(0,7).map(x=>x.date+' · '+x.shift).join('\\n');
+      const message='STAFFING ADVISORY: approving this leave may create or deepen '+impact.changes.length+' coverage gaps.\\n'+affected+
+        (impact.changes.length>7?'\\n...and '+(impact.changes.length-7)+' more.':'')+
+        (impact.truncated?'\\nPreview limited to first 62 days.':'')+
+        '\\n\\nYou may still approve this request. Continue?';
+      if(!confirm(message))return;
+      logActivity('Staffing-impact advisory reviewed for '+personName(req.personId)+': '+impact.changes.length+' affected shift dates.','schedule');
+    }
     const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(req.personId,req.startDate,req.endDate)||[];
     if(courtConflicts.length){
       const summary=courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate+(s.courtTime?' at '+s.courtTime:'')).join('; ');
