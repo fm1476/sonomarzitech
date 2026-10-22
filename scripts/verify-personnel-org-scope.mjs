@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {canAccessOrganizationalRecord} from '../lambdas/api/lib/organizational-access.mjs';
-import {authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY} from '../lambdas/api/lib/organization-assignments.mjs';
+import {authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,AGENCY_PERSON_ORGANIZATION_QUERY} from '../lambdas/api/lib/organization-assignments.mjs';
 const source=readFileSync(new URL('../lambdas/api/core.mjs',import.meta.url),'utf8');
 for(const fragment of [
  'loadPersonnelScope(client,workspaceAuth)',
@@ -113,3 +113,22 @@ const canonicalEmpty={query:async(sql,args=[])=>{
 }};
 assert.equal(await attachmentSandbox.fieldTrainingAttachmentScopeAllowed(canonicalEmpty,member,enrollment),false,'No canonical assignment must deny signed URL');
 console.log('Canonical Field Training attachment negative tests passed.');
+
+const canonicalStart=source.indexOf('async function canonicalPersonnelScope(');
+const canonicalEnd=source.indexOf('async function filterOfficerWorkspaceRecords(',canonicalStart);
+assert.ok(canonicalStart>0 && canonicalEnd>canonicalStart);
+const canonicalSandbox={authorizedPersonFromAssignments,AGENCY_PERSON_ORGANIZATION_QUERY};
+vm.createContext(canonicalSandbox);
+vm.runInContext(source.slice(canonicalStart,canonicalEnd),canonicalSandbox);
+const canonicalScope={mode:'selected',unitIds:['dispatch']};
+const canonClient={query:async(sql,args=[])=>sql.includes('to_regclass')?
+  {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes'}]}:
+  {rows:[{tenant_id:'tenant-a',agency_id:'agency-a',person_id:'dispatch-person',organization_id:'dispatch',node_kind:'unit',active:true,node_active:true},
+         {tenant_id:'tenant-a',agency_id:'agency-a',person_id:'patrol-person',organization_id:'patrol',node_kind:'unit',active:true,node_active:true}]}};
+const canonFilter=await canonicalSandbox.canonicalPersonnelScope(canonClient,{tenantId:'tenant-a',agencyId:'agency-a',personId:'manager'},canonicalScope);
+assert.equal(canonFilter({personId:'dispatch-person',unitId:'patrol'}),true,'Canonical dispatch assignment overrides stale unit label');
+assert.equal(canonFilter({personId:'patrol-person',unitId:'dispatch'}),false,'Client-controlled legacy unit cannot grant access');
+assert.equal(canonFilter({personId:'missing-person',unitId:'dispatch'}),false,'Missing canonical assignment must deny');
+assert.equal(canonFilter({unitId:'dispatch'}),false,'No person identity must deny');
+assert.match(source,/const allowed=value=>canonicalAllows \? canonicalAllows\(value\) : personnelScopeAllows\(scope,value,workspaceAuth\)/,'Both before and after writes use canonical identity checks');
+console.log('Personnel canonical source-of-truth read/write guards passed.');
