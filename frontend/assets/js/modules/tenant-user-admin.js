@@ -50,11 +50,14 @@ const TenantUserAdmin=(()=>{
     const agency=agencies.find(a=>a.id===user.agency_id);
     if(!agency){toast('Agency information is unavailable.',true);return;}
     if(TenantPlatform.current?.agencyId!==user.agency_id){toast('Switch to this agency context before editing its organizational assignments.',true);return;}
+    let accessData;
+    try { accessData=await invoke('list_organizational_access',{tenantId:selectedTenantId,agencyId:user.agency_id}); }
+    catch(error){toast(error.message||'Could not load organizational access.',true);return;}
     const box=document.getElementById('modalBox');box.className='modal modal-xl';
-    const units=[...new Map((STATE.pm?.records||[]).filter(r=>r.unitId).map(r=>[String(r.unitId),{id:String(r.unitId),name:String(r.unitName||r.unitId)}])).values()];
-    const groups=(STATE.pm?.scheduleWorkGroups||[]).filter(g=>g.active!==false).map(g=>({id:String(g.id),name:String(g.name)}));
+    const units=accessData.canonicalActive ? (accessData.catalogs?.unitIds||[]) : [...new Map((STATE.pm?.records||[]).filter(r=>r.unitId).map(r=>[String(r.unitId),{id:String(r.unitId),name:String(r.unitName||r.unitId)}])).values()];
+    const groups=accessData.canonicalActive ? (accessData.catalogs?.workGroupIds||[]) : (STATE.pm?.scheduleWorkGroups||[]).filter(g=>g.active!==false).map(g=>({id:String(g.id),name:String(g.name)}));
     // Only propose stable configured division identifiers; never infer an ID from a display label.
-    const divisions=(STATE.pm?.divisions||[]).filter(d=>d&&d.id).map(d=>({id:String(d.id),name:String(d.name||d.id)}));
+    const divisions=accessData.canonicalActive ? (accessData.catalogs?.divisionIds||[]) : (STATE.pm?.divisions||[]).filter(d=>d&&d.id).map(d=>({id:String(d.id),name:String(d.name||d.id)}));
     box.innerHTML=`<div class="modal-head"><div><h3>Organizational Access · ${escape(user.name)}</h3><p class="hint">${escape(agency.name||'Agency')} · Multiple selections allowed</p></div><button class="modal-close" id="orgClose">×</button></div>
       <div class="modal-body">
         <div class="callout" style="margin-bottom:14px"><strong>Organizational restrictions are enforced for supported Personnel and Field Training paths. Other modules and legacy accounts may still use existing access rules.</strong> These selections are saved for future server-side access controls. Existing Scheduling calendar permissions remain unchanged.</div>
@@ -75,7 +78,7 @@ const TenantUserAdmin=(()=>{
     };
     mode.onchange=preview;box.querySelectorAll('[data-org-kind]').forEach(x=>x.onchange=preview);
     try {
-      const data=await invoke('list_organizational_access',{tenantId:selectedTenantId,agencyId:user.agency_id});
+      const data=accessData;
       const existing=(data.assignments||[]).find(a=>a.user_id===user.user_id)?.scope||{mode:'none'};
       mode.value=['none','self','selected'].includes(existing.mode)?existing.mode:'none';
       box.querySelectorAll('[data-org-kind]').forEach(input=>{input.checked=(existing[input.dataset.orgKind]||[]).includes(input.value)});
