@@ -84,6 +84,7 @@ async function resolveScope(rows, relation='suite_organizational_access') {
 assert.equal((await resolveScope([])).value,null,'Absent configured grants preserve legacy access');
 assert.equal((await resolveScope([{scope:null}])).value.mode,'none','Null configured grant must deny');
 assert.equal((await resolveScope([{scope:{mode:'selected',unitIds:['dispatch']}}])).value.mode,'selected');
+assert.equal(sandbox.personnelScopeAllows((await resolveScope([{scope:{mode:'agency'}}])).value,{personId:'dispatcher',unitId:'dispatch'},auth),false,'A nonadministrator cannot use a stored agency grant to read Personnel records');
 const bounded=await resolveScope([{scope:{mode:'none'}}]);
 assert.deepEqual(bounded.calls[1].args,['tenant-a','agency-a','user-a'],'Scope lookup must be tenant, agency, and actor bounded');
 assert.equal((await loadSandbox.loadPersonnelScope({query:async()=>{throw Error('DB unavailable');}},access).catch(e=>e.message)),'DB unavailable','Database errors must not silently permit legacy access');
