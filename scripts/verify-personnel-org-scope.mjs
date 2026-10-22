@@ -20,3 +20,6 @@ console.log('Field Training signed URL scope checks passed.');
 for(const name of ['pm.trainingRecords','pm.trainingRequests','pm.disciplinaryActions','pm.inquiries','pm.instructors'])assert.ok(source.includes("'"+name+"'"),name);
 assert.match(source,/PERSONNEL_SCOPED_COLLECTIONS\.has\(collection\)/);
 console.log('Related employee collection organizational checks passed.');
+
+const gated=source.slice(source.indexOf('const { collection, itemId } = parsed;',source.indexOf('const personnelScope=await loadPersonnelScope')),source.indexOf('if(personnelScope && PERSONNEL_SCOPED_COLLECTIONS.has(collection))'));
+assert.match(gated,/moduleLicensed\(workspaceAuth\.enabledModules, collection\)/,'Licensed modules must be checked before scoped aggregate projections');
