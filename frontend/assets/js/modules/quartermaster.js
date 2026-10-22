@@ -2121,56 +2121,67 @@ function openCheckoutModal(presetEquipId){
     </div>
   `;
   openModal();
+  // Keep the proven checkout form fields in the DOM. PR #140 moved
+  // the original nodes into generated sections, which left the body blank
+  // in the deployed modal. Enhance in place instead.
   const checkoutBox=document.getElementById('modalBox');
   const checkoutBody=checkoutBox.querySelector('.modal-body');
-  const sourceRows=[...checkoutBody.children];
-  checkoutBody.classList.add('qm-checkout-body');
-  const group=(title,subtitle,items)=>{
-    const el=document.createElement('section');el.className='qm-checkout-section';
-    const heading=document.createElement('div');heading.className='qm-checkout-section-heading';
-    const h=document.createElement('h4');h.textContent=title;heading.appendChild(h);
-    if(subtitle){const p=document.createElement('p');p.textContent=subtitle;heading.appendChild(p);}
-    el.appendChild(heading);items.filter(Boolean).forEach(node=>el.appendChild(node));
-    return el;
-  };
-  // Keep all original inputs intact so checkout uses the established data path.
-  const equipmentGroup=group('1. Equipment','Select the available item to assign.',[sourceRows[0]]);
-  const recipientGroup=group('2. Assign to','Choose the custodian or destination.',[sourceRows[1],sourceRows[2]]);
-  const timingGroup=group('3. Checkout details','Record when and where this handoff occurs.',[sourceRows[3],sourceRows[4]]);
-  const notesGroup=group('4. Notes','Optional details for the assignment history.',[sourceRows[5]]);
-  const choiceBar=document.createElement('div');choiceBar.className='qm-checkout-choice-bar';
-  choiceBar.setAttribute('role','group');choiceBar.setAttribute('aria-label','Assignment recipient type');
+  checkoutBody.classList.add('qm-checkout-safe-body');
+  const headerLabels=[
+    ['fEquip','1. Equipment','Select an available item'],
+    ['fTargetType','2. Assign to','Choose the custodian'],
+    ['fCoDate','3. Checkout timing','Record the handoff'],
+    ['fCoNotes','4. Notes','Optional details']
+  ];
+  headerLabels.forEach(([id,title,subtitle])=>{
+    const field=checkoutBody.querySelector('#'+id)?.closest('.form-row, .form-2col');
+    if(!field)return;
+    const heading=document.createElement('div');
+    heading.className='qm-checkout-inline-heading';
+    heading.innerHTML='<strong>'+title+'</strong><small>'+subtitle+'</small>';
+    field.before(heading);
+  });
   const targetSelect=checkoutBox.querySelector('#fTargetType');
-  for(const [key,label] of [['person','Person'],['unit','Unit / Vehicle'],['location','Station / Location']]){
-    const btn=document.createElement('button');btn.type='button';btn.dataset.checkoutTarget=key;
-    btn.textContent=label;btn.className='qm-checkout-choice';
-    btn.onclick=()=>{targetSelect.value=key;targetSelect.dispatchEvent(new Event('change',{bubbles:true}));updateCheckout();};
-    choiceBar.appendChild(btn);
-  }
-  targetSelect.closest('.form-row').classList.add('qm-checkout-type-field');
-  recipientGroup.insertBefore(choiceBar,targetSelect.closest('.form-row'));
-  const summary=document.createElement('div');summary.id='qmCheckoutSummary';summary.className='qm-checkout-summary';
+  const selectorBar=document.createElement('div');
+  selectorBar.className='qm-checkout-choice-bar';
+  selectorBar.setAttribute('role','group');
+  selectorBar.setAttribute('aria-label','Assign to');
+  [['person','Person'],['unit','Unit / Vehicle'],['location','Station / Location']].forEach(([type,label])=>{
+    const button=document.createElement('button');
+    button.type='button';button.className='qm-checkout-choice';
+    button.textContent=label;button.dataset.checkoutTarget=type;
+    button.addEventListener('click',()=>{
+      targetSelect.value=type;
+      targetSelect.dispatchEvent(new Event('change',{bubbles:true}));
+      refreshCheckout();
+    });
+    selectorBar.appendChild(button);
+  });
+  targetSelect.closest('.form-row')?.before(selectorBar);
+  targetSelect.closest('.form-row')?.classList.add('qm-checkout-original-select');
+  const summary=document.createElement('div');
+  summary.className='qm-checkout-summary';summary.id='qmCheckoutSummary';
   summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
-  checkoutBody.append(equipmentGroup,recipientGroup,timingGroup,notesGroup,summary);
-  function updateCheckout(){
+  checkoutBody.appendChild(summary);
+  function refreshCheckout(){
     checkoutBox.querySelectorAll('[data-checkout-target]').forEach(btn=>{
       const active=btn.dataset.checkoutTarget===targetSelect.value;
-      btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active));
+      btn.classList.toggle('active',active);
+      btn.setAttribute('aria-pressed',String(active));
     });
-    const eq=equipmentById(checkoutBox.querySelector('#fEquip').value);
-    const recipient=checkoutBox.querySelector('#fTarget')?.selectedOptions[0]?.textContent?.trim()||'a recipient';
-    const date=checkoutBox.querySelector('#fCoDate').value;
-    const time=checkoutBox.querySelector('#fCoTime').value;
-    const due=checkoutBox.querySelector('#fDueDate').value;
-    const location=checkoutBox.querySelector('#fCoLocation').value;
-    summary.textContent=(eq?.name||'Equipment')+' will be checked out to '+recipient+'. Checkout: '+(date||'Not set')+' '+(time||'')+'. Due: '+(due||'Not set')+'. Location: '+(location||'Not set')+'.';
-    const valid=!!eq&&!!checkoutBox.querySelector('#fTarget')?.value&&!!date&&!!due&&due>=date&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time);
+    const equipment=equipmentById(checkoutBox.querySelector('#fEquip')?.value);
+    const person=checkoutBox.querySelector('#fTarget')?.selectedOptions[0]?.textContent?.trim()||'a recipient';
+    const date=checkoutBox.querySelector('#fCoDate')?.value||'';
+    const time=checkoutBox.querySelector('#fCoTime')?.value?.trim()||'';
+    const due=checkoutBox.querySelector('#fDueDate')?.value||'';
+    const location=checkoutBox.querySelector('#fCoLocation')?.value||'';
+    summary.textContent=(equipment?.name||'Equipment')+' will be checked out to '+person+'. Checkout: '+(date||'Not set')+' '+time+'. Due: '+(due||'Not set')+'. Location: '+(location||'Not set')+'.';
+    const valid=!!equipment&&!!checkoutBox.querySelector('#fTarget')?.value&&!!date&&!!due&&due>=date&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time);
     checkoutBox.querySelector('#mSave').disabled=!valid;
   }
-  checkoutBox.addEventListener('change',event=>{if(event.target.matches('select,input'))updateCheckout();});
-  checkoutBox.addEventListener('input',event=>{if(event.target.matches('input'))updateCheckout();});
-  checkoutBox.addEventListener('change',event=>{if(event.target.id==='fTargetType')queueMicrotask(updateCheckout);});
-  updateCheckout();
+  checkoutBox.addEventListener('change',()=>queueMicrotask(refreshCheckout));
+  checkoutBox.addEventListener('input',refreshCheckout);
+  refreshCheckout();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('fTargetType').addEventListener('change', (e)=>{
@@ -3992,5 +4003,11 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-last-mile-polish'
 if(typeof document!=='undefined'&&!document.getElementById('qm-checkout-modern-style')){
  const style=document.createElement('style');style.id='qm-checkout-modern-style';
  style.textContent='.qm-checkout-modal{max-width:850px!important;width:min(850px,calc(100vw - 28px))!important}.qm-checkout-header small{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text-dim)}.qm-checkout-header h3{margin:5px 0!important;font-size:23px}.qm-checkout-header span{font-size:12px;color:var(--text-dim)}.qm-checkout-body{display:flex;flex-direction:column;gap:16px;padding:20px 24px!important}.qm-checkout-section{border:1px solid var(--border);border-radius:13px;padding:17px;background:rgba(110,141,187,.045)}.qm-checkout-section-heading{margin-bottom:13px}.qm-checkout-section-heading h4{margin:0 0 4px;font-size:14px;color:var(--heading)}.qm-checkout-section-heading p{margin:0;font-size:12px;color:var(--text-dim)}.qm-checkout-section .form-row:last-child,.qm-checkout-section .form-2col:last-child{margin-bottom:0}.qm-checkout-choice-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.qm-checkout-choice{border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);padding:11px 14px;cursor:pointer;font-size:12px;font-weight:700}.qm-checkout-choice.active{background:rgba(54,118,224,.17);border-color:#4b86d7;color:#98c2ff}.qm-checkout-choice:focus-visible{outline:2px solid #85b7ff;outline-offset:2px}.qm-checkout-type-field{display:none!important}.qm-checkout-section textarea{display:block;width:100%;min-width:0;box-sizing:border-box;min-height:78px}.qm-checkout-summary{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px 16px;border-radius:9px;font-size:13px;line-height:1.55}.qm-checkout-modal .modal-foot .btn{border-radius:10px!important;min-height:41px}@media(max-width:640px){.qm-checkout-body{padding:12px!important;gap:12px}.qm-checkout-section{padding:13px}.qm-checkout-choice{flex:1}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-checkout-regression-style')){
+ const style=document.createElement('style');style.id='qm-checkout-regression-style';
+ style.textContent='.qm-checkout-modal .qm-checkout-safe-body{display:block!important;padding:22px 25px!important;overflow-y:auto!important}.qm-checkout-safe-body>.form-row,.qm-checkout-safe-body>.form-2col{margin-bottom:15px}.qm-checkout-inline-heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:22px 0 10px}.qm-checkout-inline-heading:first-child{margin-top:0}.qm-checkout-inline-heading strong{font-size:14px;color:var(--heading);font-weight:800}.qm-checkout-inline-heading small{font-size:11px;color:var(--text-dim)}.qm-checkout-original-select{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important}.qm-checkout-choice-bar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}.qm-checkout-choice{border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--text);padding:11px 14px;font-weight:700;cursor:pointer}.qm-checkout-choice.active{border-color:#4b86d7;background:rgba(54,118,224,.17);color:#98c2ff}.qm-checkout-safe-body textarea{display:block!important;width:100%!important;box-sizing:border-box!important;min-height:84px}.qm-checkout-safe-body .qm-checkout-summary{margin-top:17px}';
  document.head.appendChild(style);
 }
