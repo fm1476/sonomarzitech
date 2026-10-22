@@ -1263,6 +1263,8 @@ function renderVehDetailTabContent(v){
       <div class="fleet-detail-toolbar">
         <span class="badge ${statusBadgeClass(v.status)}">${escapeHtml(v.status)}</span>
         <div class="fleet-detail-buttons">
+          ${can('fleet_inspection_conduct')?'<button type="button" class="btn btn-sm btn-primary" id="fleetStartInspection">New Inspection</button>':''}
+          ${canEdit?'<button type="button" class="btn btn-sm btn-outline" id="fleetAssignFromDetail">Assign Vehicle</button>':''}
           <button type="button" class="btn btn-sm btn-outline" id="fleetGoInspections">Inspection History</button>
           <button type="button" class="btn btn-sm btn-outline" id="fleetGoMaintenance">Maintenance</button>
           ${canEdit? `<button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Vehicle</button>`:''}
@@ -1317,6 +1319,13 @@ function renderVehDetailTabContent(v){
       toast('Vehicle marked out of service.');
       renderVehicleDetailModal(v.id);
       if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
+    });
+    document.getElementById('fleetStartInspection')?.addEventListener('click',()=>openNewInspectionModal(v.id));
+    document.getElementById('fleetAssignFromDetail')?.addEventListener('click',()=>{
+      openVehicleModal(v.id);
+      const picker=document.getElementById('fAssignType');
+      picker?.focus();
+      picker?.scrollIntoView({block:'center'});
     });
     document.getElementById('fleetGoInspections')?.addEventListener('click',()=>{VEH_DETAIL_TAB='inspections';renderVehicleDetailModal(v.id);});
     document.getElementById('fleetGoMaintenance')?.addEventListener('click',()=>{VEH_DETAIL_TAB='maintenance';renderVehicleDetailModal(v.id);});
