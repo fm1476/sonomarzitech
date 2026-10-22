@@ -4911,6 +4911,8 @@ async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enroll
   );
   const personId=String(membership.rows[0]?.person_id||'');
   if(!personId)return false;
+  // Historical enrollment must still belong to this membership's person identity.
+  if(enrollment.trainee_person && String(enrollment.trainee_person)!==personId)return false;
   const rows=await client.query(
     `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
       AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
