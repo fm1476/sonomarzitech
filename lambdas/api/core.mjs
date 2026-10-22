@@ -1,5 +1,5 @@
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
-import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, AGENCY_PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -1667,6 +1667,28 @@ function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
   return canAccessOrganizationalRecord(scope,{personId,unitId,divisionId:value.divisionId||''},{actorPersonId:auth.personId});
 }
 
+// Canonical assignments override legacy unit claims whenever both tables exist.
+async function canonicalPersonnelScope(client, auth, scope) {
+  if (!scope) return null;
+  const tables=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
+    to_regclass('suite_organization_nodes') AS nodes`);
+  if(!tables.rows[0]?.assignments || !tables.rows[0]?.nodes)return null;
+  const result=await client.query(AGENCY_PERSON_ORGANIZATION_QUERY,[auth.tenantId,auth.agencyId]);
+  const byPerson=new Map();
+  for(const row of result.rows) {
+    const id=String(row.person_id||'');
+    if(!id)continue;
+    if(!byPerson.has(id))byPerson.set(id,[]);
+    byPerson.get(id).push(row);
+  }
+  return value => {
+    const personId=String(value?.personId||value?.id||'');
+    return Boolean(personId && authorizedPersonFromAssignments(scope,byPerson.get(personId)||[],{
+      tenantId:auth.tenantId,agencyId:auth.agencyId,personId,actorPersonId:auth.personId
+    }));
+  };
+}
+
 async function filterOfficerWorkspaceRecords(
   client,
   workspaceAuth,
@@ -1787,6 +1809,7 @@ async function filterOfficerWorkspaceRecords(
   }
 
   const personnelScope=await loadPersonnelScope(client,workspaceAuth);
+  const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,personnelScope);
   const personnelUnits=new Map();
   for (const row of records) {
     try {
@@ -1829,7 +1852,7 @@ async function filterOfficerWorkspaceRecords(
       if(itemId==='$value') {
         if(collection==='pm.records'&&!roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view'))continue;
         if(!Array.isArray(record.value))continue;
-        const scoped=record.value.filter(value=>personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
+        const scoped=record.value.filter(value=>canonicalAllows ? canonicalAllows(value) : personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
         // Retain the standard module permission gate for linked HR collections.
         if(collection!=='personnel'&&collection!=='pm.records'&&
            !pmRecordReadable(workspaceAuth,abilityMap,collection,itemId,record.value))continue;
@@ -1838,7 +1861,7 @@ async function filterOfficerWorkspaceRecords(
         visible.push({...record,value:safeValue});
         continue;
       }
-      if(!personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits))continue;
+      if(!(canonicalAllows ? canonicalAllows(record.value) : personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits)))continue;
     }
 
 
@@ -4638,9 +4661,11 @@ async function authorizePersonnelSharedChange(
 
   if(PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
     const scope=await loadPersonnelScope(client,workspaceAuth);
-    if(scope && (!personnelScopeAllows(scope,afterValue||beforeValue,workspaceAuth) ||
-      (beforeValue && !personnelScopeAllows(scope,beforeValue,workspaceAuth)) ||
-      (afterValue && !personnelScopeAllows(scope,afterValue,workspaceAuth)))) {
+    const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,scope);
+    const allowed=value=>canonicalAllows ? canonicalAllows(value) : personnelScopeAllows(scope,value,workspaceAuth);
+    if(scope && (!allowed(afterValue||beforeValue) ||
+      (beforeValue && !allowed(beforeValue)) ||
+      (afterValue && !allowed(afterValue)))) {
       return {allowed:false,error:'The record is outside your authorized organizational scope.'};
     }
   }
