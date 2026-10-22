@@ -4879,6 +4879,36 @@ function attachmentKeyAllowed(
   );
 }
 
+async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enrollment) {
+  const scope=await loadPersonnelScope(client,workspaceAuth);
+  if(!scope)return true;
+  const membership=await client.query(
+    `SELECT person_id FROM suite_memberships
+      WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND status='active'`,
+    [workspaceAuth.tenantId,workspaceAuth.agencyId,enrollment.trainee_user]
+  );
+  const personId=String(membership.rows[0]?.person_id||'');
+  if(!personId)return false;
+  const rows=await client.query(
+    `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+      AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
+    [workspaceAuth.tenantId,workspaceAuth.agencyId]
+  );
+  let unitId='';
+  for(const row of rows.rows){
+    try {
+      const parsed=collectionFromRecordKey(row.key);
+      if(!['personnel','pm.records'].includes(parsed.collection)||parsed.itemId==='$order')continue;
+      const values=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+      for(const value of values){
+        if(String(value?.personId||value?.id||'')===personId && (value?.unitId||value?.unit))
+          unitId=String(value.unitId||value.unit);
+      }
+    }catch {}
+  }
+  return canAccessOrganizationalRecord(scope,{personId,unitId},{actorPersonId:workspaceAuth.personId});
+}
+
 async function attachmentReadAllowed(
   client,
   auth,
@@ -4970,6 +5000,10 @@ async function attachmentReadAllowed(
       ? state.enrollments.find(item => item?.id === report.enrollment_id)
       : null;
     if (!enrollment) continue;
+
+    // Signed download URLs must enforce the same organizational boundary as
+    // Field Training list/read and mutation APIs.
+    if(!await fieldTrainingAttachmentScopeAllowed(client,workspaceAuth,enrollment))continue;
 
     if (
       fieldTrainingManager ||
