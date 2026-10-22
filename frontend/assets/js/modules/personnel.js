@@ -669,7 +669,13 @@ function renderDashboard(){
   const settings=STATE.pm.personnelSettings||(STATE.pm.personnelSettings={authorizedStaffingEnabled:false,authorizedPositionsByUnit:{}});
   const unitCounts={};active.forEach(r=>{if(r.unitId)unitCounts[r.unitId]=(unitCounts[r.unitId]||0)+1;});
   const unassigned=active.filter(r=>!r.unitId||!String(r.unitId).trim()).length;
-  const expiring=STATE.pm.notifications.filter(n=>n.type==='training_expiring'||n.type==='medical_due');
+  const expiring=STATE.pm.notifications.filter(n=>n.type==='training_expiring'||(can('pm_sensitive_view')&&can('pm_medical_view')&&n.type==='medical_due'));
+  const rosterIds=new Set(STATE.personnel.map(p=>p.id));
+  const unlinkedRecords=records.filter(r=>!rosterIds.has(r.personId)).length;
+  const linkedCount=new Map();
+  records.forEach(r=>linkedCount.set(r.personId,(linkedCount.get(r.personId)||0)+1));
+  const duplicateLinks=[...linkedCount.values()].filter(n=>n>1).length;
+  const identityIssues=unlinkedRecords+duplicateLinks;
   const staffingRows=STATE.pm.refData.units.map(u=>({unit:u,assigned:unitCounts[u]||0,authorized:settings.authorizedPositionsByUnit[u]}));
   const vacancyCount=staffingRows.reduce((n,x)=>x.authorized==null||x.authorized===''?n:n+Math.max(0,Number(x.authorized)-x.assigned),0);
   const hub=[
@@ -684,8 +690,9 @@ function renderDashboard(){
   const attention=[
     [expiring.filter(n=>n.type==='training_expiring').length,'Qualifications expiring (next 30 days)','alert'],
     [unassigned,'Unassigned personnel','users'],
+    [identityIssues,'Identity records needing reconciliation','alert'],
     [STATE.pm.trainingRequests.filter(r=>r.status==='Pending').length,'Training requests awaiting decision','award'],
-    [STATE.pm.disciplinaryActions.filter(d=>d.status!=='Closed').length,'Open disciplinary actions','alert']
+    [can('pm_sensitive_view')&&can('pm_discipline_view')?STATE.pm.disciplinaryActions.filter(d=>d.status!=='Closed').length:'Restricted','Open disciplinary actions','alert']
   ];
   const recent=(STATE.pm.activity||[]).slice().reverse().slice(0,5);
   root.innerHTML=`
@@ -974,6 +981,12 @@ function openRecordEditModal(personId){
   editBox.classList.add('pm-modern-editor');
   const editBody=editBox.querySelector('.modal-body');
   editBody?.classList.add('pm-modern-editor-body');
+  if(!can('pm_sensitive_view')){
+    ['fSex','fDlNumber'].forEach(id=>{
+      const section=editBody?.querySelector('#'+id)?.closest('.panel');
+      if(section)section.hidden=true;
+    });
+  }
   editBody?.querySelectorAll(':scope > .panel').forEach((panel,index)=>{
     panel.classList.add('pm-modern-section');
     const title=panel.querySelector('.panel-head h2');
@@ -1016,6 +1029,9 @@ function openRecordEditModal(personId){
       driversLicense: { number: document.getElementById('fDlNumber').value.trim(), licenseClass: document.getElementById('fDlClass').value, state: r.driversLicense.state||'NV', expiration: document.getElementById('fDlExpiration').value },
       specialSkills: Array.from(document.querySelectorAll('.fSkill:checked')).map(el=>el.value),
     };
+    if(!can('pm_sensitive_view')){
+      ['sex','race','maritalStatus','bloodType','phones','address','driversLicense'].forEach(key=>delete nextValues[key]);
+    }
     const publicFields = ['agency','employeeId','unitId','assignment','rank','badgeNumber','employmentStatus','supervisorIds','hireDate','swornDate','terminationDate','specialSkills'];
     const restrictedFields = ['sex','race','maritalStatus','bloodType','phones','address','driversLicense','photoDataUrl'];
     const formatAuditValue = value=>value==null || value==='' ? '(empty)' : Array.isArray(value) ? value.join(', ') || '(empty)' : String(value).slice(0,120);
@@ -1027,6 +1043,7 @@ function openRecordEditModal(personId){
       logActivity(`Updated ${field} for ${personName(personId)}: "${formatAuditValue(previousValues[field])}" to "${formatAuditValue(nextValues[field])}".`, "personnel_record", personId);
     });
     restrictedFields.forEach(field=>{
+      if(!Object.prototype.hasOwnProperty.call(nextValues,field))return;
       if(JSON.stringify(previousValues[field] ?? null)===JSON.stringify(nextValues[field] ?? null)) return;
       updatedFields.push(field);
       logActivity(`Updated restricted personnel field ${field} for ${personName(personId)} (values withheld).`, "personnel_record", personId);
@@ -1070,10 +1087,13 @@ function renderRecordDetailModal(){
   const personId = RECORD_DETAIL_PERSON_ID;
   const r = recordFor(personId);
   if(!r){ closeModal(); return; }
-  const canLodd = can('pm_lodd_view');
+  const canSensitive = can('pm_sensitive_view');
+  const canLodd = canSensitive && can('pm_lodd_view');
   const tabs = [
-    ['overview','Overview'], ['promotions','Promotion History'], ['disciplinary','Disciplinary'],
-    ['medical','Medical'], ['training','Training'], ['inquiries','Inquiries'], ['documents','Documents'],
+    ['overview','Overview'], ['promotions','Promotion History'],
+    ...(canSensitive&&can('pm_discipline_view')?[['disciplinary','Disciplinary']]:[]),
+    ...(canSensitive&&can('pm_medical_view')?[['medical','Medical']]:[]),
+    ['training','Training'], ['inquiries','Inquiries'], ['documents','Documents'],
   ];
   if(canLodd) tabs.push(['lodd','LODD']);
   tabs.push(['history','Change History']);
@@ -1110,6 +1130,11 @@ function renderRecordDetailTabContent(r){
   const canDocs = can('pm_documents_manage');
   const canLoddEdit = can('pm_lodd_manage');
   const canDiscManage = can('pm_discipline_manage');
+  const sensitiveAllowed=can('pm_sensitive_view');
+  if(['medical','disciplinary','lodd'].includes(RECORD_DETAIL_TAB)&&!sensitiveAllowed){
+    body.innerHTML=permissionBlockedView('Sensitive personnel access is required.');
+    return;
+  }
   const canMedManage = can('pm_medical_manage');
   const canInqManage = can('pm_inquiries_manage');
 
@@ -1248,7 +1273,7 @@ function renderRecordDetailTabContent(r){
     const list = STATE.pm.trainingRecords.filter(t=>t.personId===personId).slice().sort((a,b)=>b.date.localeCompare(a.date));
     const rows = list.map(t=>`
       <tr><td>${escapeHtml(t.description)}</td><td>${t.date}</td><td>${t.hours}</td><td>${t.passed===null?'—':(t.passed?'Passed':'Failed')}${t.score!=null?' ('+t.score+'%)':''}</td>
-      <td>${t.recertDate||'—'}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No training records on file.</td></tr>`;
+      <td>${t.recertDate?'<span class="badge '+(t.recertDate<fmt(new Date())?'badge-missing':t.recertDate<=fmt(addDays(new Date(),30))?'badge-maintenance':'badge-available')+'">'+escapeHtml(t.recertDate)+(t.recertDate<fmt(new Date())?' · expired':t.recertDate<=fmt(addDays(new Date(),30))?' · due soon':'')+'</span>':'—'}</td></tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No training records on file.</td></tr>`;
     body.innerHTML = `<table><thead><tr><th>Course</th><th>Date</th><th>Hours</th><th>Result</th><th>Recert Due</th></tr></thead><tbody>${rows}</tbody></table>`;
     if(FieldTraining.available()){const link=document.createElement('button');link.type='button';link.className='btn btn-outline btn-sm';link.style.marginBottom='12px';link.textContent='Open Field Training file';link.onclick=()=>FieldTraining.openPerson(personId);body.prepend(link);}
 
@@ -1760,7 +1785,7 @@ function renderTrainingRecordsSub(body, lockedPersonId){
     <tr>
       ${lockedPersonId ? '' : `<td>${recordLink(t.personId)}</td>`}
       <td>${escapeHtml(t.description)}</td><td>${t.date}</td><td>${t.hours}</td><td>${money(t.cost)}</td>
-      <td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.attendedStatus)}</td>
+      <td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.credentialNumber||'—')}${t.verificationStatus==='Verified'?'<span class="badge badge-available" style="margin-left:6px;">Verified</span>':''}</td><td>${escapeHtml(t.attendedStatus)}</td>
       <td>${t.score!=null?t.score+'%':(t.passed===null?'—':(t.passed?'Passed':'Failed'))}</td>
       <td>${t.recertDate||'—'}</td>
       ${canManage && !lockedPersonId ? `<td><button class="btn btn-sm btn-outline" data-edit-training="${t.id}">${ICONS.edit}</button></td>` : '<td></td>'}
@@ -1770,7 +1795,7 @@ function renderTrainingRecordsSub(body, lockedPersonId){
     ${canManage ? `<button class="btn btn-primary btn-sm" style="margin-bottom:12px;" id="btnAddTraining">${ICONS.plus} Log Training Record</button>` : ''}
     <table><thead><tr>
       ${lockedPersonId ? '' : '<th>Employee</th>'}
-      <th>Course</th><th>Date</th><th>Hours</th><th>Cost</th><th>Provider</th><th>Attendance</th><th>Result</th><th>Recert Due</th><th></th>
+      <th>Course</th><th>Date</th><th>Hours</th><th>Cost</th><th>Provider</th><th>Credential</th><th>Attendance</th><th>Result</th><th>Recert Due</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table>
   `;
   const addBtn = document.getElementById('btnAddTraining');
@@ -1813,7 +1838,15 @@ function openTrainingRecordFormModal(existingId){
       <div class="form-row">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="fTrRecertRequired" ${t.recertRequired?'checked':''} style="width:auto;">Recertification required</label>
       </div>
-      <div class="form-row" id="fTrRecertDateWrap" style="${t.recertRequired?'':'display:none;'}"><label>Date of Recertification</label><input type="date" id="fTrRecertDate" value="${t.recertDate||''}"></div>
+      <div class="form-row" id="fTrRecertDateWrap" style="${t.recertRequired?'':'display:none;'}"><label>Recertification due date</label><input type="date" id="fTrRecertDate" value="${t.recertDate||''}"></div>
+      <div class="pm-credential-group"><h4>Credential / Certification (optional)</h4>
+        <div class="form-2col">
+          <div class="form-row"><label for="fTrCredential">Certificate or License Number</label><input type="text" id="fTrCredential" maxlength="120" value="${escapeHtml(t.credentialNumber||'')}" placeholder="Certificate identifier"></div>
+          <div class="form-row"><label for="fTrIssuer">Issuing Authority</label><input type="text" id="fTrIssuer" maxlength="120" value="${escapeHtml(t.issuingAuthority||'')}" placeholder="POST, State Fire Marshal, agency..."></div>
+        </div>
+        <div class="form-row"><label for="fTrVerified">Verification status</label><select id="fTrVerified"><option value="Unverified" ${t.verificationStatus!=='Verified'?'selected':''}>Not yet verified</option><option value="Verified" ${t.verificationStatus==='Verified'?'selected':''}>Verified by training administrator</option></select></div>
+        <p class="hint">Credentials inform assignment readiness. Missing, expired or unverified credentials never automatically block a scheduler.</p>
+      </div>
       <div class="form-row"><label>Narrative / Comments</label><textarea id="fTrNarrative" rows="2">${escapeHtml(t.narrative||'')}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="mSave">${editing?'Save':'Log Record'}</button></div>
@@ -1835,6 +1868,11 @@ function openTrainingRecordFormModal(existingId){
       passed: passedVal==='' ? null : passedVal==='true',
       recertRequired: document.getElementById('fTrRecertRequired').checked,
       recertDate: document.getElementById('fTrRecertRequired').checked ? document.getElementById('fTrRecertDate').value : null,
+      credentialNumber: document.getElementById('fTrCredential').value.trim(),
+      issuingAuthority: document.getElementById('fTrIssuer').value.trim(),
+      verificationStatus: document.getElementById('fTrVerified').value,
+      verifiedBy: document.getElementById('fTrVerified').value==='Verified'?CURRENT_USER_ID:null,
+      verifiedAt: document.getElementById('fTrVerified').value==='Verified'?new Date().toISOString():null,
       narrative: document.getElementById('fTrNarrative').value.trim(),
     };
     if(editing){ Object.assign(t, data); logActivity(`Updated training record (${course.name}) for ${personName(data.personId)}.`, "training", t.id); }
@@ -2813,7 +2851,30 @@ function renderScheduling(){
     return;
   }
   if(!visibleTabs.some(t=>t.key===SCHED_SUBTAB)) SCHED_SUBTAB = visibleTabs[0].key;
+  const day=fmt(new Date());
+  const coverageGaps=can('pm_schedule_view')?computeCoverageGaps(7).filter(g=>canViewScheduleShift(g.shift)):[];
+  const upcomingTraining=STATE.pm.trainingRecords.filter(t=>t.recertRequired&&t.recertDate&&t.recertDate<=fmt(addDays(new Date(),30)));
+  const settings=STATE.pm.personnelSettings||{};
+  const authorized=settings.authorizedPositionsByUnit||{};
+  const activeByUnit={};
+  STATE.pm.records.filter(r=>r.employmentStatus==='Active').forEach(r=>{if(r.unitId)activeByUnit[r.unitId]=(activeByUnit[r.unitId]||0)+1;});
+  const unfilled=Object.entries(authorized).reduce((total,[unit,n])=>total+Math.max(0,(Number(n)||0)-(activeByUnit[unit]||0)),0);
+  const pendingLeave=can('pm_leave_request_approve')?(STATE.pm.leaveRequests||[]).filter(r=>r.status==='pending'&&canManagePersonSchedule(r.personId,r,'pm_leave_request_approve')).length:null;
+  const rollcallCount=can('pm_rollcall_view')?(STATE.pm.rollCalls||[]).filter(r=>r.date===day).length:null;
+  const callbackCount=can('pm_overtime_view')?(STATE.pm.otCallbackOptIns||[]).length:null;
   document.getElementById('view-pm-scheduling').innerHTML = `
+    <section class="pm-readiness-brief">
+      <div class="pm-readiness-title"><div><small>PERSONNEL / STAFFING INTELLIGENCE</small><h2>Operational readiness</h2><p>Coverage, qualifications and work rules inform staffing decisions. They do not block authorized schedulers.</p></div><span>Next 7 days</span></div>
+      <div class="pm-readiness-cards">
+        <div><small>Coverage gaps</small><strong>${coverageGaps.length}</strong><span>Unfilled shift requirements</span></div>
+        <div><small>Authorized vacancies</small><strong>${settings.authorizedStaffingEnabled?unfilled:'—'}</strong><span>${settings.authorizedStaffingEnabled?'Positions without active assignments':'Configure in Personnel Admin'}</span></div>
+        <div><small>Qualification advisories</small><strong>${upcomingTraining.length}</strong><span>Expired or expiring credentials</span></div>
+        <div><small>Leave decisions</small><strong>${pendingLeave===null?'—':pendingLeave}</strong><span>${pendingLeave===null?'Approval permission required':'Awaiting review'}</span></div>
+        <div><small>Today's roll calls</small><strong>${rollcallCount===null?'—':rollcallCount}</strong><span>Recorded vs planned rosters</span></div>
+        <div><small>Callback volunteers</small><strong>${callbackCount===null?'—':callbackCount}</strong><span>Opted into callback opportunities</span></div>
+      </div>
+      ${coverageGaps.length?'<p class="pm-readiness-alert">'+coverageGaps.length+' staffing coverage gaps identified across upcoming shifts. Review the roster or callback lists for eligible available personnel.</p>':''}
+    </section>
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
       ${visibleTabs.map(t=>`<button class="btn btn-sm ${SCHED_SUBTAB===t.key?'btn-primary':'btn-outline'}" data-sched-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
@@ -2953,8 +3014,9 @@ function staffingCategoryOptions(record,selected=''){
 function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
   const shiftSelect=document.getElementById(shiftId),categorySelect=document.getElementById(categoryId),personSelect=document.getElementById(personId);
   const update=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftSelect.value),category=(shift?.staffingRequirements||[]).find(c=>c.id===categorySelect.value),selected=personSelect.value;
-    const people=STATE.personnel.filter(p=>(!(shift?.staffingRequirements||[]).length||category)&&staffingPersonHasSkill(STATE.pm.records,p.id,category));
-    personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+    const people=STATE.personnel;
+    const eligible=person=>staffingPersonHasSkill(STATE.pm.records,person.id,category);
+    personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}${eligible(p)?'':' · qualification review'}</option>`).join('');
   };
   categorySelect.addEventListener('change',update);shiftSelect.addEventListener('change',update);update();
 }
@@ -2982,7 +3044,7 @@ function openEventStaffingNeedsModal(event){
     if(!Number.isSafeInteger(staffNeeded)||staffNeeded<1){toast('Enter a positive whole-number staffing requirement.',true);return;}
     const requests=(event.requests||[]).map(r=>r.status==='awarded'?{...r,staffingCategoryId:document.querySelector('[data-existing-event-category="'+r.personId+'"]').value}:r);
     const awards=requests.filter(r=>r.status==='awarded'),summary=staffingSummary(requirements,awards,staffNeeded,STATE.pm.records);
-    if(awards.some(r=>{const category=requirements.find(c=>c.id===r.staffingCategoryId);return category&&!staffingPersonHasSkill(STATE.pm.records,r.personId,category);})){toast('An assigned employee lacks the required skill. Update their personnel record or choose a matching staffing category.',true);return;}
+    awards.filter(r=>{const category=requirements.find(c=>c.id===r.staffingCategoryId);return category&&!staffingPersonHasSkill(STATE.pm.records,r.personId,category);}).forEach(r=>logActivity('Advisory: '+personName(r.personId)+' assigned with an unverified qualification.','schedule'));
     if(awards.length>staffNeeded||requirements.length&&awards.some(r=>!requirements.some(c=>c.id===r.staffingCategoryId))||summary.categories.some(r=>r.staffed>r.count)){toast('Existing assignments must fit the revised staffing categories and counts. Keep assigned categories or increase their requirements.',true);return;}
     Object.assign(event,{staffingRequirements:requirements,staffNeeded,requests});persist();openSpecialEventDetail(event);renderSpecialEventsSub();
   };
@@ -3163,7 +3225,7 @@ function planSpecialEventAssignments(event,personIds,reassign=false,manual=true,
   const now=new Date().toISOString();
   for(const personId of personIds){
     if(!personEligibleForSpecialEvent(personId,event))throw new Error("An employee is outside the event's eligible Work Groups.");
-    if(category&&!staffingPersonHasSkill(STATE.pm.records,personId,category))throw new Error(personName(personId)+' does not have the required skill for '+category.name+'.');
+    if(category&&!staffingPersonHasSkill(STATE.pm.records,personId,category))logActivity('Advisory: '+personName(personId)+' selected for '+category.name+' without verified qualification.','schedule');
     const existing=requests.find(r=>r.personId===personId);
     if(existing?.status==='awarded')throw new Error('An employee is already assigned to this event.');
     const conflict=specialEventConflicts(personId,event);
@@ -3194,7 +3256,7 @@ function openSpecialEventAssignmentModal(event){
   document.getElementById('modalBox').className='modal modal-lg';
   document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Assign Personnel: ${escapeHtml(event.name)}</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p class="hint">${remaining} staffing slot(s) remaining. Select one or several people; a volunteer request is not required.</p><div class="form-row"><label>Staffing Category to Fill</label><select id="fEventAssignCategory">${staffingCategoryOptions(event)}</select></div><div>${staffingBreakdownHtml(eventStaffingSummary(event))}</div><div class="form-row"><label>Find Personnel</label><input id="fEventPersonnelSearch" placeholder="Name or Unit"></div><div class="access-person-list">${people.map(p=>{const conflict=specialEventConflicts(p.id,event);return `<label data-event-person-row="${p.id}" data-search="${escapeHtml((p.name+' '+(p.unit||'')).toLowerCase())}"><input type="checkbox" data-event-person="${p.id}" data-blocked="${conflict.blocking?'true':'false'}" ${conflict.blocking?'disabled':''}><span>${escapeHtml(p.name)} <span class="hint">${escapeHtml(p.unit||'')}</span>${conflict.blocking?`<br><span class="hint" style="color:var(--red);">${escapeHtml(conflict.blocking)}</span>`:conflict.regularDuty?'<br><span class="hint">Regular duty; reassignment required</span>':''}</span></label>`;}).join('')||'<p class="hint">No eligible unassigned personnel.</p>'}</div><div class="form-row" style="margin-top:12px;"><label style="display:flex;gap:10px;align-items:center;"><input type="checkbox" id="fEventReassign" style="width:18px;height:18px;"> Reassign selected personnel from regular duty for these dates</label><div class="hint">Preserves their normal shift pattern and adds an event exception for this date range. Time off, overtime, and other special assignments must be resolved first.</div></div></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Back</button><button class="btn btn-primary" id="mAssign" ${remaining?'':'disabled'}>Assign Selected Personnel</button></div>`;
   openModal();document.getElementById('mClose').onclick=()=>openSpecialEventDetail(event);document.getElementById('mCancel').onclick=()=>openSpecialEventDetail(event);
-  const syncEventPeople=()=>{const category=(event.staffingRequirements||[]).find(c=>c.id===document.getElementById('fEventAssignCategory').value),q=document.getElementById('fEventPersonnelSearch').value.trim().toLowerCase();document.querySelectorAll('[data-event-person-row]').forEach(row=>{const input=row.querySelector('[data-event-person]'),matches=staffingPersonHasSkill(STATE.pm.records,input.dataset.eventPerson,category);input.disabled=input.dataset.blocked==='true'||!matches||((event.staffingRequirements||[]).length>0&&!category);if(input.disabled)input.checked=false;row.style.display=matches&&row.dataset.search.includes(q)?'grid':'none';});};
+  const syncEventPeople=()=>{const category=(event.staffingRequirements||[]).find(c=>c.id===document.getElementById('fEventAssignCategory').value),q=document.getElementById('fEventPersonnelSearch').value.trim().toLowerCase();document.querySelectorAll('[data-event-person-row]').forEach(row=>{const input=row.querySelector('[data-event-person]'),matches=staffingPersonHasSkill(STATE.pm.records,input.dataset.eventPerson,category);input.disabled=input.dataset.blocked==='true'||((event.staffingRequirements||[]).length>0&&!category);row.title=matches?'':'Qualification review recommended; authorized schedulers may proceed';if(input.disabled)input.checked=false;row.style.display=matches&&row.dataset.search.includes(q)?'grid':'none';});};
   document.getElementById('fEventPersonnelSearch').oninput=syncEventPeople;document.getElementById('fEventAssignCategory').onchange=syncEventPeople;syncEventPeople();
   document.getElementById('mAssign').onclick=()=>applySpecialEventAssignments(event,[...document.querySelectorAll('[data-event-person]:checked')].map(x=>x.dataset.eventPerson),document.getElementById('fEventReassign').checked,true,document.getElementById('fEventAssignCategory').value);
 }
@@ -3501,10 +3563,13 @@ function otHoursSince(personId, sinceDateStr){
 // This is the standard "equalization" rule most agencies actually run callback lists by --
 // straight seniority order would let senior officers hoard overtime indefinitely.
 function rankedCallbackList(){
-  const since = fmt(addDays(new Date(), -90));
+  const policy=STATE.pm.schedulingSettings||{};
+  const since=fmt(addDays(new Date(), -Math.min(365,Math.max(1,Number(policy.callbackLookbackDays)||90))));
   return (STATE.pm.otCallbackOptIns||[]).map(personId=>({
     personId, hours: otHoursSince(personId, since), seniority: seniorityDate(personId),
-  })).sort((a,b)=> a.hours-b.hours || a.seniority.localeCompare(b.seniority));
+  })).sort((a,b)=>(STATE.pm.schedulingSettings?.callbackPriority==='seniority-first'
+    ? a.seniority.localeCompare(b.seniority)||a.hours-b.hours
+    : a.hours-b.hours||a.seniority.localeCompare(b.seniority)));
 }
 
 function renderOvertimeSub(){
@@ -3531,7 +3596,7 @@ function openOvertimeOpportunity(id){
  const o=STATE.pm.overtimeOpportunities.find(x=>x.id===id),shift=STATE.pm.scheduleShifts.find(s=>s.id===o?.shiftId);if(!o||!shift||!canManageOvertimeShift(shift)||o.status==='closed')return;
  const req=(o.requests||[]).map(r=>`<tr><td>${recordLink(r.personId)}</td><td>${otHoursSince(r.personId,fmt(addDays(new Date(),-90))).toFixed(1)}</td><td>${escapeHtml(seniorityDate(r.personId))}</td><td>${escapeHtml(r.status)}</td><td>${r.status==='pending'?'<button class="btn btn-sm btn-primary" data-award-ot="'+r.personId+'">Award</button>':''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-dim);">No requests yet.</td></tr>';
  document.getElementById('modalBox').className='modal modal-lg';document.getElementById('modalBox').innerHTML=`<div class="modal-head"><h3>Overtime Requests</h3><button class="modal-close" id="mClose">&times;</button></div><div class="modal-body"><p>${escapeHtml(shift.name)} · ${escapeHtml(o.date)}</p><table><thead><tr><th>Employee</th><th>OT Hours (90d)</th><th>Seniority</th><th>Status</th><th></th></tr></thead><tbody>${req}</tbody></table></div><div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button></div>`;openModal();document.getElementById('mClose').onclick=closeModal;document.getElementById('mCancel').onclick=closeModal;
- document.querySelectorAll('[data-award-ot]').forEach(b=>b.onclick=()=>{if(personScheduledOnDate(b.dataset.awardOt,o.date)){toast('This employee has a schedule conflict.',true);return;}const r=o.requests.find(x=>x.personId===b.dataset.awardOt);if(!staffingPersonHasSkill(STATE.pm.records,r.personId,(shift.staffingRequirements||[]).find(c=>c.id===o.staffingCategoryId))){toast('This employee does not have the required skill.',true);return;}r.status='awarded';o.requests.filter(x=>x!==r&&x.status==='pending').forEach(x=>x.status='not_awarded');STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId:r.personId,shiftId:o.shiftId,unit:shift.name,location:'',date:o.date,source:'overtime',hours:shiftHours(shift),staffingCategoryId:o.staffingCategoryId||'',overtimeOpportunityId:o.id});o.status='closed';logActivity(`Awarded overtime to ${personName(r.personId)} for ${shift.name} on ${o.date}.`,'schedule');persist();closeModal();renderOvertimeSub();});wireRecordLinks();
+ document.querySelectorAll('[data-award-ot]').forEach(b=>b.onclick=()=>{if(personScheduledOnDate(b.dataset.awardOt,o.date)){toast('This employee has a schedule conflict.',true);return;}const r=o.requests.find(x=>x.personId===b.dataset.awardOt);if(!staffingPersonHasSkill(STATE.pm.records,r.personId,(shift.staffingRequirements||[]).find(c=>c.id===o.staffingCategoryId)))logActivity('Advisory: overtime awarded to '+personName(r.personId)+' without verified qualification.','schedule');r.status='awarded';o.requests.filter(x=>x!==r&&x.status==='pending').forEach(x=>x.status='not_awarded');STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId:r.personId,shiftId:o.shiftId,unit:shift.name,location:'',date:o.date,source:'overtime',hours:shiftHours(shift),staffingCategoryId:o.staffingCategoryId||'',overtimeOpportunityId:o.id});o.status='closed';logActivity(`Awarded overtime to ${personName(r.personId)} for ${shift.name} on ${o.date}.`,'schedule');persist();closeModal();renderOvertimeSub();});wireRecordLinks();
 }
 
 function openFillGapModal(date, shiftId){
@@ -3554,14 +3619,14 @@ function openFillGapModal(date, shiftId){
     <div class="modal-foot"><button class="btn btn-outline" id="mCancel">Close</button>${StaffNotices.canCompose()?'<button class="btn btn-primary" id="mOfferSms">Notify eligible staff</button>':''}</div>
   `;
   openModal();
-  const syncCallbackSkills=()=>{const category=(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value);document.querySelectorAll('[data-confirm-fill]').forEach(button=>button.closest('tr').style.display=staffingPersonHasSkill(STATE.pm.records,button.dataset.confirmFill,category)?'':'none');};
+  const syncCallbackSkills=()=>{const category=(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value);document.querySelectorAll('[data-confirm-fill]').forEach(button=>button.closest('tr').title=staffingPersonHasSkill(STATE.pm.records,button.dataset.confirmFill,category)?'':'Qualification review recommended; scheduling can proceed');};
   document.getElementById('fCallbackCategory').onchange=syncCallbackSkills;syncCallbackSkills();
   document.getElementById('mOfferSms')?.addEventListener('click',()=>StaffNotices.offer(ranked.map(row=>row.personId),shift,date));
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.querySelectorAll('[data-confirm-fill]').forEach(b=>b.addEventListener('click', ()=>{
     const personId = b.dataset.confirmFill;
-    if(!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value))){toast('This employee does not have the required skill.',true);return;}
+    if(!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fCallbackCategory').value)))logActivity('Advisory: callback filled by '+personName(personId)+' without verified qualification.','schedule');
     STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId, shiftId, unit:shift.name, location:'', date, source:'overtime', staffingCategoryId:document.getElementById('fCallbackCategory').value, hours:shiftHours(shift)});
     logActivity(`Logged overtime callback: ${personName(personId)} to cover ${shift.name} on ${date}.`, "schedule");
     persist();
@@ -4128,6 +4193,33 @@ function openRequestTimeOffModal(requestableCodes, me){
   };
 }
 function dateRangeText(startDate,endDate){ return startDate===endDate ? startDate : `${startDate} to ${endDate}`; }
+function previewLeaveStaffingImpact(request){
+  // Simulate an approved time-off exception in memory only. The preview
+  // deliberately does not save or change the leave decision.
+  const exceptions=STATE.pm.scheduleExceptions||(STATE.pm.scheduleExceptions=[]);
+  const shifts=STATE.pm.scheduleShifts.filter(shift=>shift.published!==false&&canViewScheduleShift(shift));
+  const start=new Date(request.startDate+'T12:00:00');
+  const end=new Date(request.endDate+'T12:00:00');
+  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<start)return {changes:[],truncated:false};
+  const dates=[];
+  for(let d=new Date(start);d<=end&&dates.length<62;d=addDays(d,1))dates.push(fmt(d));
+  const candidate=shifts.flatMap(shift=>dates.map(date=>({shift,date})));
+  const before=candidate.map(({shift,date})=>shiftStaffingSummary(shift,date));
+  const temporary={id:'preview-only',personId:request.personId,code:request.code,startDate:request.startDate,endDate:request.endDate};
+  exceptions.push(temporary);
+  let after;
+  try{after=candidate.map(({shift,date})=>shiftStaffingSummary(shift,date));}
+  finally{exceptions.pop();}
+  const changes=[];
+  candidate.forEach(({shift,date},i)=>{
+    const earlier=before[i],later=after[i];
+    const categoryWorse=(later.categories||[]).some(row=>row.needed>((earlier.categories||[]).find(x=>x.id===row.id)?.needed||0));
+    if((earlier.ok&&!later.ok)||categoryWorse){
+      changes.push({date,shift:shift.name||'Unnamed shift'});
+    }
+  });
+  return {changes,truncated:dates.length===62&&dates[61]<request.endDate};
+}
 function decideLeaveRequest(id, decision){
   const req = STATE.pm.leaveRequests.find(r=>r.id===id);
   if(!req || req.status!=='pending'||!canManagePersonSchedule(req.personId,req,'pm_leave_request_approve')||!['approved','denied'].includes(decision)) return;
@@ -4140,6 +4232,16 @@ function decideLeaveRequest(id, decision){
     logActivity(`Denied a ${req.code} request for ${personName(req.personId)}.`, "schedule");
     toast('Request denied.');
   } else {
+    const impact=previewLeaveStaffingImpact(req);
+    if(impact.changes.length){
+      const affected=impact.changes.slice(0,7).map(x=>x.date+' · '+x.shift).join('\\n');
+      const message='STAFFING ADVISORY: approving this leave may create or deepen '+impact.changes.length+' coverage gaps.\\n'+affected+
+        (impact.changes.length>7?'\\n...and '+(impact.changes.length-7)+' more.':'')+
+        (impact.truncated?'\\nPreview limited to first 62 days.':'')+
+        '\\n\\nYou may still approve this request. Continue?';
+      if(!confirm(message))return;
+      logActivity('Staffing-impact advisory reviewed for '+personName(req.personId)+': '+impact.changes.length+' affected shift dates.','schedule');
+    }
     const courtConflicts=window.SonoMarziCourtLeaveConflicts?.subpoenasForLeave(req.personId,req.startDate,req.endDate)||[];
     if(courtConflicts.length){
       const summary=courtConflicts.map(s=>s.caseNumber+' on '+s.courtDate+(s.courtTime?' at '+s.courtTime:'')).join('; ');
@@ -4192,6 +4294,9 @@ function renderRollCallSub(){
     return {personId, beat:'', unit: shift?shift.name:'', vehicleId:'', status: ex?'excused':'present', notes: ex?`${ex.code} on file`:''};
   });
 
+  const actualPresent=rc?entries.filter(e=>['present','late'].includes(e.status)).length:null;
+  const actualAbsent=rc?entries.filter(e=>['absent','excused'].includes(e.status)).length:null;
+  const plannedCount=rosterIds.length;
   const rows = entries.map((e,i)=>`<tr>
     <td>${escapeHtml(personName(e.personId))}</td>
     <td><input type="text" data-rc-field="beat" data-rc-idx="${i}" value="${escapeHtml(e.beat||'')}" placeholder="Beat / zone" ${canManage?'':'disabled'} style="width:110px;"></td>
@@ -4202,6 +4307,12 @@ function renderRollCallSub(){
   </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No one is on the duty roster for this shift on this date.</td></tr>`;
 
   document.getElementById('schedSubBody').innerHTML = `
+    <div class="pm-rollcall-stats">
+      <div><small>Scheduled for duty</small><strong>${plannedCount}</strong><span>Planned shift roster</span></div>
+      <div><small>Confirmed present</small><strong>${actualPresent===null?'—':actualPresent}</strong><span>${rc?'Including late arrivals':'Roll call not saved yet'}</span></div>
+      <div><small>Absent / excused</small><strong>${actualAbsent===null?'—':actualAbsent}</strong><span>${rc?'Recorded roll call status':'Not yet verified'}</span></div>
+      <div><small>Difference</small><strong>${actualPresent===null?'—':plannedCount-actualPresent}</strong><span>Planned less confirmed</span></div>
+    </div>
     <div class="panel" style="margin-bottom:16px;">
       <div class="panel-head">
         <h2>Roll Call</h2>
@@ -4549,7 +4660,8 @@ function openOneOffCoverageModal(){
     const duplicate=(STATE.pm.scheduleCoverages||[]).some(x=>x.personId===personId&&x.shiftId===shiftId&&x.date===date);
     if(duplicate){toast("That person is already added to this shift on this date.",true);return;}
     const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftId);
-    if(!personId||!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fOneOffCategory').value))){toast('Select personnel with the required skill.',true);return;}
+    if(!personId){toast('Select personnel.',true);return;}
+    if(!staffingPersonHasSkill(STATE.pm.records,personId,(shift.staffingRequirements||[]).find(c=>c.id===document.getElementById('fOneOffCategory').value)))logActivity('Advisory: one-off staffing assigned to '+personName(personId)+' without verified qualification.','schedule');
     if(onDutyRoster(shift,date).includes(personId)){toast("That person is already scheduled to work this shift on this date.",true);return;}
     if(activeExceptionFor(personId,date)){toast("That person has time off or another schedule exception on this date. Adjust the exception before adding one-off staffing.",true);return;}
     STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(),personId,shiftId,date,source,staffingCategoryId:document.getElementById('fOneOffCategory').value,hours:shiftHours(shift),notes,createdBy:CURRENT_USER_ID,createdAt:new Date().toISOString()});
@@ -4581,6 +4693,21 @@ function openAssignmentFormModal(existing){
   openModal();
   const syncCategory=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===document.getElementById('fAssignShift').value);document.getElementById('fAssignCategory').innerHTML=staffingCategoryOptions(shift,existing?.staffingCategoryId||'');};
   document.getElementById('fAssignShift').addEventListener('change',syncCategory);syncCategory();wireStaffingPersonPicker('fAssignShift','fAssignCategory','fAssignPerson',existing);
+  const advisory=document.createElement('div');
+  advisory.id='pmQualificationAdvisory';
+  advisory.className='pm-qualification-advisory';
+  advisory.setAttribute('role','status');
+  document.getElementById('fAssignPerson').closest('.form-row')?.after(advisory);
+  const updateAdvisory=()=>{
+    const shift=STATE.pm.scheduleShifts.find(x=>x.id===document.getElementById('fAssignShift').value);
+    const category=(shift?.staffingRequirements||[]).find(x=>x.id===document.getElementById('fAssignCategory').value);
+    const personId=document.getElementById('fAssignPerson').value;
+    const issue=!!category&&!!personId&&!staffingPersonHasSkill(STATE.pm.records,personId,category);
+    advisory.textContent=issue?'Advisory: qualification not verified for this position. Authorized scheduling staff may assign this employee; the exception is logged.':'Qualifications are informational; assignments remain at scheduler discretion.';
+    advisory.classList.toggle('pm-qualification-warning',issue);
+  };
+  ['fAssignShift','fAssignCategory','fAssignPerson'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>queueMicrotask(updateAdvisory)));
+  updateAdvisory();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
@@ -4594,7 +4721,11 @@ function openAssignmentFormModal(existing){
     };
     const selectedShift=STATE.pm.scheduleShifts.find(s=>s.id===data.shiftId);
     if((selectedShift?.staffingRequirements||[]).length&&!data.staffingCategoryId){toast('Select the staffing category this employee will fill.',true);return;}
-    if(!data.personId||!staffingPersonHasSkill(STATE.pm.records,data.personId,(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId))){toast('Select personnel with the required skill.',true);return;}
+    if(!data.personId){toast('Select an employee.',true);return;}
+    const requirement=(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId);
+    if(requirement&&!staffingPersonHasSkill(STATE.pm.records,data.personId,requirement)){
+      logActivity('Advisory: '+personName(data.personId)+' assigned to '+requirement.name+' with an unverified or missing qualification.','schedule');
+    }
     if(!canManageScheduleShift(selectedShift))return;
     if(editing){
       Object.assign(existing, data);
@@ -4715,7 +4846,7 @@ function approveSwapRequest(id){
   const requesterAssignment = STATE.pm.scheduleAssignments.find(a=>a.personId===req.requesterId && isOnDutyOnDate(a, STATE.pm.scheduleShifts.find(s=>s.id===a.shiftId), req.date));
   if(!requesterAssignment){toast("This swap can no longer be approved because the requester's scheduled assignment for that date was not found. Review the schedule and submit a new swap if needed.",true);return;}
   const swapShift=STATE.pm.scheduleShifts.find(s=>s.id===requesterAssignment.shiftId);
-  if(!staffingPersonHasSkill(STATE.pm.records,req.coveringId,(swapShift?.staffingRequirements||[]).find(c=>c.id===requesterAssignment.staffingCategoryId))){toast('The covering employee does not have the required staffing skill.',true);return;}
+  if(!staffingPersonHasSkill(STATE.pm.records,req.coveringId,(swapShift?.staffingRequirements||[]).find(c=>c.id===requesterAssignment.staffingCategoryId)))logActivity('Advisory: shift swap coverage for '+personName(req.coveringId)+' has unverified skills.','schedule');
   // Mark the requester off that day, same mechanism as any other logged exception.
   STATE.pm.scheduleExceptions.push({id:'exc'+Date.now(), personId:req.requesterId, code:'SWP', startDate:req.date, endDate:req.date, notes:`Covered by ${personName(req.coveringId)}`, swapRequestId:req.id});
   STATE.pm.scheduleCoverages.push({id:'cov'+Date.now(), personId:req.coveringId, shiftId:requesterAssignment.shiftId, unit:requesterAssignment.unit, location:requesterAssignment.location, date:req.date, staffingCategoryId:requesterAssignment.staffingCategoryId||'', swapRequestId:req.id});
@@ -5272,6 +5403,11 @@ function renderSchedulingSettingsTab(body){
           <input type="number" min="1" step="0.5" id="fFatigueThreshold" value="${settings.fatigueThresholdHours}">
         </div>
         <p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Extra Duty flags a signup when a person's regular on-duty hours plus extra-duty hours that day would exceed this number. It's a warning shown to whoever approves the signup, not a hard block.</p>
+        <div class="form-2col" style="margin-top:18px;">
+          <div class="form-row"><label for="fCallbackLookback">Callback ranking lookback (days)</label><input id="fCallbackLookback" type="number" min="1" max="365" step="1" value="${settings.callbackLookbackDays||90}"></div>
+          <div class="form-row"><label for="fCallbackPriority">Callback priority</label><select id="fCallbackPriority"><option value="fewest-hours" ${settings.callbackPriority!=='seniority-first'?'selected':''}>Fewest recent overtime hours, then seniority</option><option value="seniority-first" ${settings.callbackPriority==='seniority-first'?'selected':''}>Seniority first, then fewest hours</option></select></div>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Agency callback ranking preferences. These priorities guide the list; supervisors retain discretion. Labor agreements and local policy still govern decisions.</p>
         <button class="btn btn-primary btn-sm" id="btnSaveSchedulingSettings">Save</button>
       </div>
     </div>
@@ -5279,8 +5415,12 @@ function renderSchedulingSettingsTab(body){
   document.getElementById('btnSaveSchedulingSettings').addEventListener('click', ()=>{
     const val = Number(document.getElementById('fFatigueThreshold').value);
     if(!val || val<=0){ toast("Enter a positive number of hours.", true); return; }
+    const lookback=Number(document.getElementById('fCallbackLookback').value);
+    if(!Number.isSafeInteger(lookback)||lookback<1||lookback>365){toast('Enter 1 to 365 days for callback ranking.',true);return;}
     settings.fatigueThresholdHours = val;
-    logActivity(`Set the fatigue threshold to ${val} combined hours per day.`, "admin");
+    settings.callbackLookbackDays=lookback;
+    settings.callbackPriority=document.getElementById('fCallbackPriority').value;
+    logActivity('Updated scheduling fatigue and callback-ranking policy.',"admin");
     persist();
     toast("Scheduling settings saved.");
   });
@@ -5359,4 +5499,26 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-roster-modern-sty
  const st=document.createElement('style');st.id='pm-roster-modern-style';
  st.textContent='.pm-roster-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:15px}.pm-roster-intro small{font-size:10px;letter-spacing:.11em;color:var(--text-dim);font-weight:800}.pm-roster-intro h2{font-size:23px;margin:4px 0}.pm-roster-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-roster-counter{background:rgba(59,134,215,.1);border-radius:13px;padding:14px 20px;display:flex;flex-direction:column;min-width:130px}.pm-roster-counter strong{font-size:24px}.pm-roster-counter span{font-size:11px;color:var(--text-dim)}.pm-roster-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}.pm-roster-metrics>div{background:rgba(100,140,190,.05);border:1px solid var(--border);border-radius:12px;padding:14px 17px}.pm-roster-metrics small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-roster-metrics strong{font-size:20px}.pm-roster-toolbar{border:1px solid var(--border);background:rgba(85,126,173,.04);border-radius:12px;padding:12px!important}.pm-roster-toolbar .btn{border-radius:9px}@media(max-width:600px){.pm-roster-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.pm-roster-metrics>div{padding:11px}.pm-roster-intro h2{font-size:19px}}';
  document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-eligibility-advisory-style')){
+ const st=document.createElement('style');st.id='pm-eligibility-advisory-style';
+ st.textContent='.pm-qualification-advisory{font-size:12px;line-height:1.5;border-radius:10px;border-left:3px solid #4b86d7;background:rgba(75,134,215,.09);padding:12px 14px;margin:12px 0}.pm-qualification-warning{border-left-color:#dfa137;background:rgba(223,161,55,.13)}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-readiness-brief-style')){
+ const st=document.createElement('style');st.id='pm-readiness-brief-style';
+ st.textContent='.pm-readiness-brief{border:1px solid var(--border);background:rgba(101,142,191,.04);border-radius:16px;padding:19px;margin-bottom:18px}.pm-readiness-title{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:17px}.pm-readiness-title small{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}.pm-readiness-title h2{font-size:21px;margin:6px 0}.pm-readiness-title p{font-size:12px;color:var(--text-dim);margin:0}.pm-readiness-title>span{font-size:11px;font-weight:700;color:var(--text-dim)}.pm-readiness-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pm-readiness-cards>div{padding:15px;background:var(--panel);border:1px solid var(--border);border-radius:12px;min-width:0}.pm-readiness-cards small{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-cards strong{display:block;font-size:27px;font-weight:800;margin:8px 0 5px}.pm-readiness-cards span{display:block;font-size:11px;color:var(--text-dim)}.pm-readiness-alert{font-size:12px;border-radius:9px;padding:12px 14px;border-left:3px solid #dca03e;background:rgba(220,160,62,.1);margin:16px 0 0}@media(max-width:760px){.pm-readiness-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.pm-readiness-cards{grid-template-columns:1fr}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-rollcall-stats-style')){
+ const st=document.createElement('style');st.id='pm-rollcall-stats-style';
+ st.textContent='.pm-rollcall-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.pm-rollcall-stats>div{border:1px solid var(--border);border-radius:12px;padding:15px;background:rgba(80,131,190,.055)}.pm-rollcall-stats small,.pm-rollcall-stats span{display:block;font-size:11px;color:var(--text-dim)}.pm-rollcall-stats strong{display:block;font-size:27px;font-weight:800;margin:7px 0}@media(max-width:690px){.pm-rollcall-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-credential-form-style')){
+ const st=document.createElement('style');st.id='pm-credential-form-style';st.textContent='.pm-credential-group{margin:18px 0;border:1px solid var(--border);border-radius:12px;background:rgba(70,125,205,.065);padding:16px}.pm-credential-group h4{font-size:14px;font-weight:800;margin:0 0 12px}.pm-credential-group .hint{font-size:12px;color:var(--text-dim);margin-bottom:0}';document.head.append(st);
 }

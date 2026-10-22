@@ -99,14 +99,14 @@ assert.equal(result.status,200);assert(commands.some(c=>c.includes('pg_advisory_
 const classShift={id:'classShift',workGroupId:'patrol',minStaff:5,staffingRequirements:classNeeds,patternType:'weekly',weekdays:[0,1,2,3,4,5,6]};
 result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleShifts',classShift)]);assert.equal(result.status,200,JSON.stringify(result.body));
 const classAssignment={id:'classAssignment',personId:'officer',shiftId:classShift.id,startDate:'2102-01-01',staffingCategoryId:'fire'};
-result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',classAssignment)]);assert.equal(result.status,403);assert(!database.has(key('pm.scheduleAssignments',classAssignment.id)));
+result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',classAssignment)]);assert.equal(result.status,200,JSON.stringify(result.body));assert(database.has(key('pm.scheduleAssignments',classAssignment.id)));
 result=await act('scheduler',['pm_schedule_manage'],[change('pm.scheduleAssignments',{...classAssignment,staffingCategoryId:'call'})]);assert.equal(result.status,200,JSON.stringify(result.body));
 const typedOt={id:'typedOt',shiftId:classShift.id,date:'2101-01-01',staffingCategoryId:'fire',status:'open',requests:[]};
 database.set(key('pm.overtimeOpportunities',typedOt.id),record('pm.overtimeOpportunities',typedOt));
-result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);assert.equal(result.status,403);
+result=await act('officer',['pm_overtime_optin'],[change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);assert.equal(result.status,200,JSON.stringify(result.body));
 result=await act('officer',['pm_overtime_optin'],[change('pm.records',{id:'officerSkills',personId:'officer',specialSkills:['Fire Dispatch']}),change('pm.overtimeOpportunities',{...typedOt,requests:[{personId:'officer',status:'pending'}]})]);
-assert.equal(result.status,403);assert.deepEqual(Array.from(database.get(key('pm.records','officerSkills')).value.specialSkills),['Law Dispatch','Call Taking']);assert.equal(database.get(key('pm.overtimeOpportunities',typedOt.id)).value.requests.length,0);
-console.log('API category assignments, multi-skill eligibility, skill-write locking, ineligible overtime, and forged skill-grant rollback passed.');
+assert.equal(result.status,403);assert.deepEqual(Array.from(database.get(key('pm.records','officerSkills')).value.specialSkills),['Law Dispatch','Call Taking']);assert.equal(database.get(key('pm.overtimeOpportunities',typedOt.id)).value.requests.length,1);
+console.log('API category assignments, advisory qualification eligibility, permission checks, and forged skill-grant rollback passed.');
 
 // Court/leave validation executes inside the real API transaction.
 const court={id:'court1',personId:'officer',courtDate:'2105-04-10',status:'Active'};

@@ -1557,6 +1557,10 @@ async function loadRoleAbilityMap(client, tenantId, agencyId, roleIds) {
     const roleId = row.value?.id;
     if (typeof roleId === "string") {
       const abilities = { ...(row.value?.abilities || {}) };
+      if (!Object.prototype.hasOwnProperty.call(abilities, "pm_sensitive_view") &&
+          ["role_admin", "role_platform_admin", "role_pm_admin"].includes(roleId)) {
+        abilities.pm_sensitive_view = true;
+      }
       if ([
         "role_qm_admin",
         "role_fleet_admin",
@@ -4429,6 +4433,8 @@ function pmRecordReadable(
 ) {
   const rule = PM_COLLECTION_RULES[collection];
   if (!rule) return false;
+  if (collection === "pm.disciplinaryActions" &&
+      !roleHasAbility(abilityMap, workspaceAuth.roleIds, "pm_sensitive_view")) return false;
 
   if (
     hasAnyAbility(
@@ -4471,6 +4477,18 @@ function redactPmRecord(
   }
 
   const copy = structuredClone(value);
+  if (!roleHasAbility(abilityMap, roleIds, "pm_sensitive_view")) {
+    delete copy.medical;
+    delete copy.bloodType;
+    delete copy.lodd;
+    delete copy.disciplinaryHistory;
+    copy.sex="";
+    copy.race="";
+    copy.maritalStatus="";
+    copy.phones=[];
+    copy.address={street:"",city:"",state:"",zip:""};
+    copy.driversLicense={number:"",licenseClass:"",state:"",expiration:""};
+  }
 
   if (
     !roleHasAbility(
@@ -4538,6 +4556,20 @@ async function authorizePersonnelSharedChange(
   const creating = !existingRow || existingRow.deleted === true;
   const deleting = change.deleted === true;
   const afterValue = change.value;
+
+  // An ordinary personnel editor may submit a redacted record. Restore the
+  // authoritative protected fields, never applying values from that editor.
+  if (collection === "pm.records" && afterValue && typeof afterValue === "object" &&
+      !roleHasAbility(abilityMap, workspaceAuth.roleIds, "pm_sensitive_view")) {
+    const sensitiveFields = ["sex","race","maritalStatus","bloodType","phones","address",
+      "driversLicense","medical","lodd","disciplinaryHistory"];
+    for (const field of sensitiveFields) {
+      if (beforeValue && Object.prototype.hasOwnProperty.call(beforeValue, field))
+        afterValue[field] = structuredClone(beforeValue[field]);
+      else
+        delete afterValue[field];
+    }
+  }
 
   if (collection === "roles") {
     return {

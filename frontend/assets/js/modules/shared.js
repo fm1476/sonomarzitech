@@ -1693,7 +1693,18 @@ function loggedInPersonHasRole(roleId){
 function visibleRolesFor(personId){
   return STATE.roles.filter(r=>!r.hidden || loggedInPersonHasRole(r.id) || (personId && (STATE.personnel.find(p=>p.id===personId)||{}).roleIds?.includes(r.id)));
 }
-function can(abilityId){ const r=currentRole(); return !!(r && r.abilities && r.abilities[abilityId]); }
+function can(abilityId){
+  const r=currentRole();
+  if(abilityId==='pm_sensitive_view'){
+    const ids=String(r?.id||'').startsWith('merged:')?String(r.id).slice(7).split(','):[r?.id];
+    return ids.some(id=>{
+      const role=STATE.roles.find(item=>item.id===id);
+      if(role?.abilities?.pm_sensitive_view!==undefined)return role.abilities.pm_sensitive_view===true;
+      return ['role_admin','role_platform_admin','role_pm_admin'].includes(id);
+    });
+  }
+  return !!(r && r.abilities && r.abilities[abilityId]);
+}
 function countAbilities(role){ return Object.values(role.abilities).filter(Boolean).length; }
 
 /* =========================================================================
@@ -1843,6 +1854,7 @@ const ABILITY_CATALOG = {
   ],
   "Personnel Mgmt: Records": [
     ["pm_records_view","View personnel HR records"],
+    ["pm_sensitive_view","View sensitive personnel information (medical, disciplinary and LODD)"],
     ["pm_records_edit","Edit personnel HR records"],
     ["pm_records_delete","Delete personnel HR records"],
     ["pm_documents_manage","Attach photos & documents to a record"],
@@ -2075,7 +2087,7 @@ const FLEET_SUPERVISOR_ABILITIES = ["fleet_vehicle_view","fleet_vehicle_add","fl
 const FLEET_OFFICER_ABILITIES = ["fleet_vehicle_view","fleet_inspection_conduct"];
 const FLEET_AUDITOR_ABILITIES = ["fleet_vehicle_view","fleet_inspection_view_all","fleet_reports_view"];
 const PM_SCHEDULE_ADMIN_ABILITIES = ["pm_schedule_view","pm_schedule_manage","pm_schedule_publish","pm_leave_request_submit","pm_leave_request_approve","pm_overtime_view","pm_overtime_optin","pm_overtime_manage","pm_bidding_view","pm_bidding_submit","pm_bidding_manage","pm_rollcall_view","pm_rollcall_manage","pm_reports_view","pm_reports_export"];
-const PM_ADMIN_ABILITIES = ["personnel_bulk_import","pm_training_bulk_import","pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
+const PM_ADMIN_ABILITIES = ["pm_sensitive_view","personnel_bulk_import","pm_training_bulk_import","pm_reference_bulk_import","pm_records_view","pm_records_edit","pm_records_delete","pm_documents_manage",
   "pm_discipline_view","pm_discipline_manage","pm_medical_view","pm_medical_manage",
   "pm_inquiries_view","pm_inquiries_manage","pm_lodd_view","pm_lodd_manage",
   "pm_schedule_view","pm_schedule_manage","pm_schedule_publish","pm_leave_request_submit","pm_leave_request_approve","pm_training_view_own","pm_training_manage","pm_training_request","pm_training_checkin_submit","pm_instructor_manage",
@@ -2196,6 +2208,7 @@ const DEFAULT_ROLES = [
       "module_quartermaster","module_fleet","module_personnel","module_k9","module_drone","module_eod","module_subpoena","module_grants","module_civil","module_permits","fleet_dashboard_inspections_overdue"])},
 ];
 DEFAULT_ROLES.forEach(r=>{
+  if(['role_admin','role_platform_admin','role_pm_admin'].includes(r.id))r.abilities.pm_sensitive_view=true;
   if(!['role_admin','role_platform_admin'].includes(r.id)) r.abilities.admin_roles=false;
   r.abilities.workflow_use=r.id!=='role_auditor';
   r.abilities.workflow_approve=['role_supervisor','role_admin','role_platform_admin'].includes(r.id);
