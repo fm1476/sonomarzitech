@@ -1648,7 +1648,7 @@ async function loadPersonnelScope(client, auth) {
       WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3`,
     [auth.tenantId,auth.agencyId,auth.userId]
   );
-  return grants.rows.length ? grants.rows[0].scope : null;
+  return grants.rows.length ? (grants.rows[0].scope ?? {mode:'none'}) : null;
 }
 function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
   if (!scope) return true; // Existing unconfigured accounts retain legacy behavior.
