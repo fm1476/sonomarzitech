@@ -50,14 +50,17 @@ const TenantUserAdmin=(()=>{
     const agency=agencies.find(a=>a.id===user.agency_id);
     if(!agency){toast('Agency information is unavailable.',true);return;}
     if(TenantPlatform.current?.agencyId!==user.agency_id){toast('Switch to this agency context before editing its organizational assignments.',true);return;}
+    let accessData;
+    try { accessData=await invoke('list_organizational_access',{tenantId:selectedTenantId,agencyId:user.agency_id}); }
+    catch(error){toast(error.message||'Could not load organizational access.',true);return;}
     const box=document.getElementById('modalBox');box.className='modal modal-xl';
-    const units=[...new Map((STATE.pm?.records||[]).filter(r=>r.unitId).map(r=>[String(r.unitId),{id:String(r.unitId),name:String(r.unitName||r.unitId)}])).values()];
-    const groups=(STATE.pm?.scheduleWorkGroups||[]).filter(g=>g.active!==false).map(g=>({id:String(g.id),name:String(g.name)}));
+    const units=accessData.canonicalCatalogAvailable ? (accessData.catalogs?.unitIds||[]) : [...new Map((STATE.pm?.records||[]).filter(r=>r.unitId).map(r=>[String(r.unitId),{id:String(r.unitId),name:String(r.unitName||r.unitId)}])).values()];
+    const groups=accessData.canonicalCatalogAvailable ? (accessData.catalogs?.workGroupIds||[]) : (STATE.pm?.scheduleWorkGroups||[]).filter(g=>g.active!==false).map(g=>({id:String(g.id),name:String(g.name)}));
     // Only propose stable configured division identifiers; never infer an ID from a display label.
-    const divisions=(STATE.pm?.divisions||[]).filter(d=>d&&d.id).map(d=>({id:String(d.id),name:String(d.name||d.id)}));
+    const divisions=accessData.canonicalCatalogAvailable ? (accessData.catalogs?.divisionIds||[]) : (STATE.pm?.divisions||[]).filter(d=>d&&d.id).map(d=>({id:String(d.id),name:String(d.name||d.id)}));
     box.innerHTML=`<div class="modal-head"><div><h3>Organizational Access · ${escape(user.name)}</h3><p class="hint">${escape(agency.name||'Agency')} · Multiple selections allowed</p></div><button class="modal-close" id="orgClose">×</button></div>
       <div class="modal-body">
-        <div class="callout" style="margin-bottom:14px"><strong>Configuration only — not yet enforced in Personnel or Field Training.</strong> These selections are saved for future server-side access controls. Existing Scheduling calendar permissions remain unchanged.</div>
+        <div class="callout" style="margin-bottom:14px"><strong>Organizational restrictions are enforced for supported Personnel and Field Training paths. Other modules and legacy accounts may still use existing access rules.</strong> These selections are saved for future server-side access controls. Existing Scheduling calendar permissions remain unchanged.</div>
         <div class="form-row"><label for="orgMode">Scope</label><select id="orgMode"><option value="none">No additional organizational access</option><option value="self">Own records only</option><option value="selected">Selected divisions, units and Work Groups</option></select></div>
         <div id="orgSelections" style="display:none">
           ${[[ 'Divisions',divisions,'divisionIds'],['Units',units,'unitIds'],['Work Groups',groups,'workGroupIds']].map(([title,items,key])=>`<div class="form-row"><strong>${title}</strong><div class="module-select-grid" style="margin-top:8px">${items.map(item=>`<label class="module-choice"><input type="checkbox" data-org-kind="${key}" value="${escape(item.id)}"><span><strong>${escape(item.name)}</strong></span></label>`).join('')||'<span class="hint">No configured entries found.</span>'}</div></div>`).join('')}
@@ -71,11 +74,11 @@ const TenantUserAdmin=(()=>{
       const parts=['divisionIds','unitIds','workGroupIds'].map(k=>selected(k).length);
       box.querySelector('#orgPreview').textContent=mode.value==='selected'
         ? `Selected scope: ${parts[0]} divisions, ${parts[1]} units, ${parts[2]} Work Groups. Actions still depend on assigned roles.`
-        : mode.value==='self'?'Own records only (when enforced).':'No additional organizational record scope.';
+        : mode.value==='self'?'Own records only, where organizational controls are supported.':'No additional organizational record scope.';
     };
     mode.onchange=preview;box.querySelectorAll('[data-org-kind]').forEach(x=>x.onchange=preview);
     try {
-      const data=await invoke('list_organizational_access',{tenantId:selectedTenantId,agencyId:user.agency_id});
+      const data=accessData;
       const existing=(data.assignments||[]).find(a=>a.user_id===user.user_id)?.scope||{mode:'none'};
       mode.value=['none','self','selected'].includes(existing.mode)?existing.mode:'none';
       box.querySelectorAll('[data-org-kind]').forEach(input=>{input.checked=(existing[input.dataset.orgKind]||[]).includes(input.value)});
@@ -89,7 +92,7 @@ const TenantUserAdmin=(()=>{
       try{
         const scope={mode:mode.value,divisionIds:selected('divisionIds'),unitIds:selected('unitIds'),workGroupIds:selected('workGroupIds')};
         await invoke('set_organizational_access',{tenantId:selectedTenantId,agencyId:user.agency_id,userId:user.user_id,scope});
-        SuiteUX.closeModal();toast('Organizational assignments saved. Enforcement is not yet enabled.');
+        SuiteUX.closeModal();toast('Organizational assignments saved. Supported Personnel and Field Training access rules will apply.');
       }catch(error){box.querySelector('#orgError').textContent=error.message;button.disabled=false;}
     };
   }

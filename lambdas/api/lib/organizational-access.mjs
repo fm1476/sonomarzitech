@@ -17,7 +17,8 @@ export function normalizeOrganizationalScope(raw = {}) {
 export function effectiveOrganizationalScope({ grants = [], administrator = false } = {}) {
   if (administrator) return normalizeOrganizationalScope({mode:'agency'});
   const normalized = grants.map(normalizeOrganizationalScope);
-  if (normalized.some(g => g.mode === 'agency')) return normalizeOrganizationalScope({mode:'agency'});
+  // A stored or caller-supplied grant never confers administrator authority.
+  // Only the separately verified administrator flag can unlock agency-wide scope.
   return {
     mode: normalized.some(g => g.mode === 'selected') ? 'selected' : normalized.some(g => g.mode === 'self') ? 'self' : 'none',
     unitIds: asIds(normalized.flatMap(g => g.mode === 'selected' ? g.unitIds : [])),
@@ -39,6 +40,17 @@ export function canAccessOrganizationalRecord(scopeInput, record, { actorPersonI
   return Boolean((unitId && eligibleUnits.has(unitId)) ||
     (divisionId && scope.divisionIds.includes(divisionId)) ||
     (groupId && scope.workGroupIds.includes(groupId)));
+}
+
+/** Evaluate explicit, independently validated assignments without treating conflicting
+ * legacy single-unit fields as proof of additional membership. */
+export function canAccessAssignedOrganizationalRecord(scope, personId, assignments, options = {}) {
+  if (!personId || !Array.isArray(assignments) || !assignments.length) return false;
+  const requestedPersonId=String(personId);
+  return assignments.some(a => a && typeof a === 'object' &&
+    String(a.personId || '') === requestedPersonId &&
+    (a.active === undefined || a.active === true) &&
+    canAccessOrganizationalRecord(scope, a, options));
 }
 
 export function effectiveAccessSummary({ scope, capabilities = [] } = {}) {

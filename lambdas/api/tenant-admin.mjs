@@ -1,3 +1,4 @@
+import { canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import { californiaCivilApi } from "./civil-california.mjs";
 import { civilAdminSettingsApi } from "./civil-admin-settings.mjs";
 import { validateTestIntake, validateTestTransition } from "./lib/civil-test-validation.mjs";
@@ -787,6 +788,16 @@ async function tenantAdminDbApi(client, auth, body) {
       updated_by UUID NOT NULL,
       PRIMARY KEY(tenant_id,agency_id,user_id)
     )`);
+    const canonicalReady=await canonicalOrganizationReady(client,tenantId,agencyId);
+    // Canonical grants MUST be configurable before agency rollout activation.
+    // A populated agency-local node catalog is independent of enforcement state.
+    const canonicalTable=await client.query("SELECT to_regclass('suite_organization_nodes') AS nodes");
+    const canonicalCatalogAvailable=Boolean(canonicalTable.rows[0]?.nodes);
+    const canonicalNodes=canonicalCatalogAvailable ? await client.query(
+      `SELECT id, kind, name FROM suite_organization_nodes
+        WHERE tenant_id=$1 AND agency_id=$2 AND active=true
+        ORDER BY kind,name`, [tenantId,agencyId]
+    ) : null;
     if (action === 'list_organizational_access') {
       const rows=await client.query(
         `SELECT g.user_id,g.scope,g.updated_at,g.updated_by
@@ -796,7 +807,13 @@ async function tenantAdminDbApi(client, auth, body) {
           WHERE g.tenant_id=$1 AND g.agency_id=$2 AND m.status='active'`,
         [tenantId,agencyId]
       );
-      return response(200,{success:true,data:{assignments:rows.rows}});
+      return response(200,{success:true,data:{assignments:rows.rows,canonicalActive:canonicalReady,
+        canonicalCatalogAvailable,
+        catalogs:canonicalCatalogAvailable?{
+          unitIds:canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>({id:n.id,name:n.name})),
+          divisionIds:canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>({id:n.id,name:n.name})),
+          workGroupIds:canonicalNodes.rows.filter(n=>n.kind==='work_group').map(n=>({id:n.id,name:n.name}))
+        }:null}});
     }
     const userId=String(body?.userId || '').trim();
     const scope=body?.scope;
@@ -816,6 +833,38 @@ async function tenantAdminDbApi(client, auth, body) {
     if (!member.rows.length) return response(404,{success:false,error:'User is not an active member of this agency.'});
     const clean={mode:scope.mode,unitIds:[...new Set(scope.unitIds||[])],
       divisionIds:[...new Set(scope.divisionIds||[])],workGroupIds:[...new Set(scope.workGroupIds||[])]};
+    // Validate every selected identifier against catalogs from this exact agency.
+    // Do not accept arbitrary strings or identifiers supplied by the caller as authority.
+    if (clean.mode==='selected' && canonicalCatalogAvailable && canonicalNodes.rows.length > 0) {
+      const known={
+        unitIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>String(n.id))),
+        divisionIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>String(n.id))),
+        workGroupIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='work_group').map(n=>String(n.id)))
+      };
+      const unknown=['unitIds','divisionIds','workGroupIds'].flatMap(kind=>clean[kind].filter(id=>!known[kind].has(id)).map(id=>({kind,id})));
+      if(unknown.length)return response(400,{success:false,error:'Selected organizations must be valid, active canonical IDs in this agency.'});
+    } else if (clean.mode==='selected') {
+      const catalogs=await client.query(
+        `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false`,
+        [tenantId,agencyId]
+      );
+      const known={unitIds:new Set(),divisionIds:new Set(),workGroupIds:new Set()};
+      for(const row of catalogs.rows) {
+        let decoded;
+        try { decoded=JSON.parse(row.key); } catch { continue; }
+        if(!Array.isArray(decoded)||!Array.isArray(decoded[0])||decoded[1]==='$order')continue;
+        const collection=decoded[0].join('.');
+        const entries=decoded[1]==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+        for(const item of entries) {
+          if(!item||typeof item!=='object')continue;
+          if(collection==='pm.records' && typeof item.unitId==='string' && item.unitId.trim())known.unitIds.add(item.unitId);
+          if(collection==='pm.divisions' && typeof item.id==='string' && item.id.trim())known.divisionIds.add(item.id);
+          if(collection==='pm.scheduleWorkGroups' && typeof item.id==='string' && item.id.trim() && item.active!==false)known.workGroupIds.add(item.id);
+        }
+      }
+      const unknown=['unitIds','divisionIds','workGroupIds'].flatMap(kind=>clean[kind].filter(id=>!known[kind].has(id)).map(id=>({kind,id})));
+      if(unknown.length) return response(400,{success:false,error:'Organizational assignments contain identifiers not found in this agency’s configured catalogs.'});
+    }
     await client.query(
       `INSERT INTO suite_organizational_access(tenant_id,agency_id,user_id,scope,updated_by)
        VALUES($1,$2,$3,$4::jsonb,$5)

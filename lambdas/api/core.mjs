@@ -1,3 +1,6 @@
+import { personnelSafeTemplate } from "./lib/workspace-template.mjs";
+import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY, AGENCY_PERSON_ORGANIZATION_QUERY, canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -1491,6 +1494,7 @@ async function resolveWorkspaceMembership(client, auth, tenantId, agencyId) {
   }
 
   return {
+    userId: auth.userId,
     tenantId,
     agencyId,
     personId,
@@ -1631,6 +1635,63 @@ const OFFICER_UNIVERSAL_READ = new Set([
   "pm.trainingCourses"
 ]);
 
+// Explicit organizational scopes are opt-in until all modules have migrated.
+const PERSONNEL_SCOPED_COLLECTIONS=new Set([
+  'pm.records','personnel','pm.trainingRecords','pm.trainingRequests',
+  'pm.disciplinaryActions','pm.inquiries','pm.instructors','pm.extraDutySignups'
+]);
+async function loadPersonnelScope(client, auth) {
+  if (auth.admin) return null;
+  if (!auth.userId) return {mode:'none'};
+  const result=await client.query(
+    `SELECT to_regclass('suite_organizational_access') AS relation`
+  );
+  if (!result.rows[0]?.relation) return await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId) ? {mode:'none'} : null;
+  const grants=await client.query(
+    `SELECT scope FROM suite_organizational_access
+      WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3`,
+    [auth.tenantId,auth.agencyId,auth.userId]
+  );
+  if (grants.rows.length) return grants.rows[0].scope ?? {mode:'none'};
+  // Once this agency explicitly activates enforcement, missing grants deny by default.
+  return await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId) ? {mode:'none'} : null;
+}
+function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
+  if (!scope) return true; // Existing unconfigured accounts retain legacy behavior.
+  if (scope.mode==='agency') return false; // Only authenticated administrators may have agency scope.
+  if (!value || typeof value!=='object') return false;
+  const personId=value.personId||value.id;
+  // A contradictory personnel identity-to-unit mapping must deny even when
+  // the individual record contains an otherwise authorized unit identifier.
+  if(personId && unitsByPerson.has(String(personId)) && unitsByPerson.get(String(personId))===null) return false;
+  // When an agency Personnel mapping exists, it is authoritative over unit claims
+  // carried on related training, inquiry, or disciplinary records.
+  const unitId=String(personId && unitsByPerson.has(String(personId))
+    ? unitsByPerson.get(String(personId)) || ''
+    : value.unitId || value.unit || '');
+  return canAccessOrganizationalRecord(scope,{personId,unitId,divisionId:value.divisionId||''},{actorPersonId:auth.personId});
+}
+
+// Canonical assignments override legacy unit claims whenever both tables exist.
+async function canonicalPersonnelScope(client, auth, scope) {
+  if (!scope) return null;
+  if(!await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId,scope))return null;
+  const result=await client.query(AGENCY_PERSON_ORGANIZATION_QUERY,[auth.tenantId,auth.agencyId]);
+  const byPerson=new Map();
+  for(const row of result.rows) {
+    const id=String(row.person_id||'');
+    if(!id)continue;
+    if(!byPerson.has(id))byPerson.set(id,[]);
+    byPerson.get(id).push(row);
+  }
+  return value => {
+    const personId=String(value?.personId||value?.id||'');
+    return Boolean(personId && authorizedPersonFromAssignments(scope,byPerson.get(personId)||[],{
+      tenantId:auth.tenantId,agencyId:auth.agencyId,personId,actorPersonId:auth.personId
+    }));
+  };
+}
+
 async function filterOfficerWorkspaceRecords(
   client,
   workspaceAuth,
@@ -1750,6 +1811,30 @@ async function filterOfficerWorkspaceRecords(
     } catch { /* Malformed keys are excluded by the reader. */ }
   }
 
+  const personnelScope=await loadPersonnelScope(client,workspaceAuth);
+  const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,personnelScope);
+  const personnelUnits=new Map();
+  for (const row of records) {
+    try {
+      const parsed=collectionFromRecordKey(row.key);
+      if(parsed.collection==='personnel' && parsed.itemId!=='$order') {
+        const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+        for(const entry of entries)if(entry?.id) {
+          const id=String(entry.id), unit=String(entry.unitId||entry.unit||'');
+          if(personnelUnits.has(id) && personnelUnits.get(id)!==unit) personnelUnits.set(id,null);
+          else if(!personnelUnits.has(id)) personnelUnits.set(id,unit);
+        }
+      }
+      if(parsed.collection==='pm.records' && parsed.itemId!=='$order') {
+        const entries=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+        for(const entry of entries)if(entry?.personId&&entry?.unitId) {
+          const id=String(entry.personId), unit=String(entry.unitId);
+          if(personnelUnits.has(id) && personnelUnits.get(id)!==unit) personnelUnits.set(id,null);
+          else if(!personnelUnits.has(id)) personnelUnits.set(id,unit);
+        }
+      }
+    } catch {}
+  }
   const visible = [];
 
   for (const record of records) {
@@ -1762,6 +1847,26 @@ async function filterOfficerWorkspaceRecords(
     }
 
     const { collection, itemId } = parsed;
+    // Respect module licensing before any scope-specific aggregate projection.
+    if (!moduleLicensed(workspaceAuth.enabledModules, collection)) continue;
+    if(personnelScope && PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
+      // Collection-wide ordering and legacy aggregate arrays can reveal hidden identities.
+      if(itemId==='$order')continue;
+      if(itemId==='$value') {
+        if(collection==='pm.records'&&!roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view'))continue;
+        if(!Array.isArray(record.value))continue;
+        const scoped=record.value.filter(value=>canonicalAllows ? canonicalAllows(value) : personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
+        // Retain the standard module permission gate for linked HR collections.
+        if(collection!=='personnel'&&collection!=='pm.records'&&
+           !pmRecordReadable(workspaceAuth,abilityMap,collection,itemId,record.value))continue;
+        const safeValue=collection==='personnel'?scoped.map(limitPersonnelRecord):
+          collection==='pm.records'?scoped.map(value=>redactPmRecord(value,abilityMap,workspaceAuth.roleIds)):scoped;
+        visible.push({...record,value:safeValue});
+        continue;
+      }
+      if(!(canonicalAllows ? canonicalAllows(record.value) : personnelScopeAllows(personnelScope,record.value,workspaceAuth,personnelUnits)))continue;
+    }
+
 
     if (!moduleLicensed(workspaceAuth.enabledModules, collection)) {
       continue;
@@ -4557,6 +4662,23 @@ async function authorizePersonnelSharedChange(
   const deleting = change.deleted === true;
   const afterValue = change.value;
 
+  if(PERSONNEL_SCOPED_COLLECTIONS.has(collection)) {
+    const scope=await loadPersonnelScope(client,workspaceAuth);
+    const canonicalAllows=await canonicalPersonnelScope(client,workspaceAuth,scope);
+    const allowed=value=>canonicalAllows ? canonicalAllows(value) : personnelScopeAllows(scope,value,workspaceAuth);
+    // A scoped editor cannot rebind an existing record to a different person.
+    // Otherwise an authorized record could be used to overwrite someone else's file.
+    if(scope && beforeValue && afterValue && !deleting &&
+      String(beforeValue.personId||beforeValue.id||'') !== String(afterValue.personId||afterValue.id||'')) {
+      return {allowed:false,error:'A restricted editor cannot change the record person identity.'};
+    }
+    if(scope && (!allowed(afterValue||beforeValue) ||
+      (beforeValue && !allowed(beforeValue)) ||
+      (afterValue && !allowed(afterValue)))) {
+      return {allowed:false,error:'The record is outside your authorized organizational scope.'};
+    }
+  }
+
   // An ordinary personnel editor may submit a redacted record. Restore the
   // authoritative protected fields, never applying values from that editor.
   if (collection === "pm.records" && afterValue && typeof afterValue === "object" &&
@@ -4818,6 +4940,51 @@ function attachmentKeyAllowed(
   );
 }
 
+async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enrollment) {
+  const scope=await loadPersonnelScope(client,workspaceAuth);
+  if(!scope)return true;
+  const membership=await client.query(
+    `SELECT person_id FROM suite_memberships
+      WHERE tenant_id=$1 AND agency_id=$2 AND user_id=$3 AND status='active'`,
+    [workspaceAuth.tenantId,workspaceAuth.agencyId,enrollment.trainee_user]
+  );
+  const personId=String(membership.rows[0]?.person_id||'');
+  if(!personId)return false;
+  // Historical enrollment must still belong to this membership's person identity.
+  if(enrollment.trainee_person && String(enrollment.trainee_person)!==personId)return false;
+  const canonicalReady=await canonicalOrganizationReady(client,workspaceAuth.tenantId,workspaceAuth.agencyId,scope);
+  if(canonicalReady) {
+    const assigned=await client.query(PERSON_ORGANIZATION_QUERY,[workspaceAuth.tenantId,workspaceAuth.agencyId,personId]);
+    return authorizedPersonFromAssignments(scope,assigned.rows,{
+      tenantId:workspaceAuth.tenantId,agencyId:workspaceAuth.agencyId,
+      personId,actorPersonId:workspaceAuth.personId
+    });
+  }
+  // Temporary legacy fallback applies only before both canonical tables exist.
+  const rows=await client.query(
+    `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
+      AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
+    [workspaceAuth.tenantId,workspaceAuth.agencyId]
+  );
+  let unitId='', conflictingUnits=false;
+  for(const row of rows.rows){
+    try {
+      const parsed=collectionFromRecordKey(row.key);
+      if(!['personnel','pm.records'].includes(parsed.collection)||parsed.itemId==='$order')continue;
+      const values=parsed.itemId==='$value'&&Array.isArray(row.value)?row.value:[row.value];
+      for(const value of values){
+        if(String(value?.personId||value?.id||'')===personId && (value?.unitId||value?.unit)) {
+          const candidate=String(value.unitId||value.unit);
+          if(unitId && candidate!==unitId) conflictingUnits=true;
+          else if(!unitId) unitId=candidate;
+        }
+      }
+    }catch {}
+  }
+  if(conflictingUnits)return false; // Never mint signed download URLs on ambiguous organizational identity.
+  return canAccessOrganizationalRecord(scope,{personId,unitId},{actorPersonId:workspaceAuth.personId});
+}
+
 async function attachmentReadAllowed(
   client,
   auth,
@@ -4909,6 +5076,10 @@ async function attachmentReadAllowed(
       ? state.enrollments.find(item => item?.id === report.enrollment_id)
       : null;
     if (!enrollment) continue;
+
+    // Signed download URLs must enforce the same organizational boundary as
+    // Field Training list/read and mutation APIs.
+    if(!await fieldTrainingAttachmentScopeAllowed(client,workspaceAuth,enrollment))continue;
 
     if (
       fieldTrainingManager ||
@@ -5597,7 +5768,7 @@ async function getWorkspace(client, auth, event) {
     role_ids: roleIds,
     mfa_policy: workspaceAuth.mfaPolicy,
     records: workspaceRecords,
-    template: schedulingSafeTemplate(templateResult.rows[0]?.empty_state || {},workspaceAuth.admin),
+    template: personnelSafeTemplate(schedulingSafeTemplate(templateResult.rows[0]?.empty_state || {},workspaceAuth.admin),workspaceAuth.admin),
     tenant: tenantResult.rows[0],
     agency: agencyResult.rows[0]
   });

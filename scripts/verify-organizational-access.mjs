@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeOrganizationalScope, effectiveOrganizationalScope, canAccessOrganizationalRecord, effectiveAccessSummary } from '../lambdas/api/lib/organizational-access.mjs';
+import { normalizeOrganizationalScope, effectiveOrganizationalScope, canAccessOrganizationalRecord, effectiveAccessSummary, canAccessAssignedOrganizationalRecord } from '../lambdas/api/lib/organizational-access.mjs';
 
 assert.deepEqual(normalizeOrganizationalScope().mode,'none');
 assert.equal(canAccessOrganizationalRecord({}, {personId:'a',unitId:'patrol'}),false);
@@ -18,8 +18,33 @@ assert.equal(canAccessOrganizationalRecord(combined,{unitId:'dispatch-night'}),f
 assert.equal(canAccessOrganizationalRecord(combined,{workGroupId:'dispatch'}),true);
 assert.equal(canAccessOrganizationalRecord(combined,{unitId:'dispatch-night'},{unitDivisionMap:{'dispatch-night':'support'}}),true);
 assert.equal(canAccessOrganizationalRecord({mode:'selected',unitIds:['communications']},{unitId:'comms-2'},{unitDescendants:{communications:['comms-2']}}),true);
-assert.equal(effectiveOrganizationalScope({grants:[{mode:'selected',unitIds:['communications']},{mode:'agency'}]}).mode,'agency');
+assert.equal(effectiveOrganizationalScope({grants:[{mode:'selected',unitIds:['communications']},{mode:'agency'}]}).mode,'selected', 'Untrusted grants must not elevate a nonadministrator');
+assert.equal(effectiveOrganizationalScope({grants:[{mode:'agency'}]}).mode,'none', 'An agency grant alone must not convey agency authority');
+assert.equal(effectiveOrganizationalScope({administrator:true,grants:[{mode:'agency'}]}).mode,'agency');
 assert.equal(effectiveOrganizationalScope({administrator:true}).mode,'agency');
 assert.equal(effectiveOrganizationalScope({grants:[]}).mode,'none');
 assert.equal(effectiveAccessSummary({scope:combined,capabilities:['pm_records_view']}).capabilities[0],'pm_records_view');
 console.log('Organizational access policy checks passed.');
+
+// One manager may hold multiple independently granted organizational areas.
+const multi=effectiveOrganizationalScope({grants:[
+ {mode:'selected',unitIds:['dispatch-day','dispatch-night']},
+ {mode:'selected',unitIds:['patrol-special'],divisionIds:['support-services'],workGroupIds:['communications-admin']}
+]});
+for(const id of ['dispatch-day','dispatch-night','patrol-special'])assert.equal(canAccessOrganizationalRecord(multi,{unitId:id}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{unitId:'patrol-other'}),false);
+assert.equal(canAccessOrganizationalRecord(multi,{unitId:'forensics',divisionId:'support-services'}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'communications-admin'}),true);
+assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'fire-admin'}),false);
+console.log('Multiple independent organization grant combinations passed.');
+
+const multiPerson=[{personId:'p',unitId:'dispatch'},{personId:'p',unitId:'patrol'}];
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',multiPerson),true);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['fire']},'p',multiPerson),false);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'other',multiPerson),false);
+console.log('Explicit assignment policy tests passed.');
+
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'p',unitId:'dispatch',active:false}]),false);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'p',unitId:'dispatch',active:true}]),true);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',[{personId:'other',unitId:'dispatch'}]),false);
+console.log('Inactive and unrelated assignments are excluded.');
