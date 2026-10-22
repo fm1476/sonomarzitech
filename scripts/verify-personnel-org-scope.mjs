@@ -23,3 +23,8 @@ console.log('Related employee collection organizational checks passed.');
 
 const gated=source.slice(source.indexOf('const { collection, itemId } = parsed;',source.indexOf('const personnelScope=await loadPersonnelScope')),source.indexOf('if(personnelScope && PERSONNEL_SCOPED_COLLECTIONS.has(collection))'));
 assert.match(gated,/moduleLicensed\(workspaceAuth\.enabledModules, collection\)/,'Licensed modules must be checked before scoped aggregate projections');
+
+// Conflicting agency personnel unit assignments must be rejected rather than last-write-wins.
+const conflictPattern=/if\(personnelUnits\.has\(id\) && personnelUnits\.get\(id\)!==unit\) personnelUnits\.set\(id,null\)/g;
+assert.equal([...source.matchAll(conflictPattern)].length,2,'Both Personnel and PM unit mappings must fail closed on conflicts');
+console.log('Personnel unit conflict handling checks passed.');
