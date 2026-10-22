@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {canAccessOrganizationalRecord} from '../lambdas/api/lib/organizational-access.mjs';
+import {authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY} from '../lambdas/api/lib/organization-assignments.mjs';
 import {readFileSync} from 'node:fs';
 const source=readFileSync(new URL('../lambdas/api/field-training.mjs',import.meta.url),'utf8');
 for(const expected of [
@@ -35,7 +36,7 @@ const rows=[
   {key:JSON.stringify([['pm','records'],'b']),value:{personId:'person-2',unitId:'communications'}},
   {key:JSON.stringify([['pm','records'],'c']),value:{personId:'person-3',unitId:'patrol'}}
 ];
-const context={canAccessOrganizationalRecord,ftLoadOrgScope:async()=>scope};
+const context={canAccessOrganizationalRecord,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,ftLoadOrgScope:async()=>scope};
 vm.createContext(context);
 vm.runInContext(source.slice(begin,end),context);
 const client={query:async()=>({rows})};
@@ -67,3 +68,27 @@ assert.equal((await loaderContext.ftLoadOrgScope(await mockScope({mode:'selected
 console.log('Field Training configured-grant fail-closed behavior passed.');
 
 assert.match(source,/ctx\.orgPersonByUser=org\.personByUser/,'Both Field Training routes must retain membership-to-person binding');
+
+const canonicalRows=[
+  {tenant_id:'tenant',agency_id:'agency',person_id:'person-1',organization_id:'communications',node_kind:'unit',active:true,node_active:true},
+  {tenant_id:'tenant',agency_id:'agency',person_id:'person-2',organization_id:'patrol',node_kind:'unit',active:true,node_active:true},
+  {tenant_id:'tenant',agency_id:'agency',person_id:'person-2',organization_id:'communications',node_kind:'unit',active:true,node_active:true}
+];
+const canonicalCalls=[];
+const canonicalClient={query:async(sql,args=[])=>{
+  canonicalCalls.push({sql,args});
+  if(sql.includes('to_regclass'))return {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes'}]};
+  if(sql===PERSON_ORGANIZATION_QUERY)return {rows:canonicalRows.filter(x=>x.person_id===args[2])};
+  throw Error('Unexpected canonical query');
+}};
+const canon=await context.ftOrgMembers(canonicalClient,{tenantId:'tenant',agencyId:'agency',personId:'person-1',userId:'dispatch-manager'},members);
+assert.deepEqual([...canon.allowed].sort(),['dispatch-manager','dispatcher'],'An explicitly cross-assigned person must be visible');
+assert.equal(canon.allowed.has('patrol'),false,'Patrol-only staff remain outside scope');
+assert.equal(canonicalCalls.filter(x=>x.sql===PERSON_ORGANIZATION_QUERY).length,3);
+assert.equal(canonicalCalls.filter(x=>x.sql.includes('suite_records')).length,0,'Canonical assignments must override legacy unit fields');
+const disabledClient={query:async(sql,args=[])=>sql.includes('to_regclass')?
+ {rows:[{assignments:'suite_person_organization_assignments',nodes:'suite_organization_nodes'}]}:
+ {rows:canonicalRows.filter(x=>x.person_id===args[2]).map(x=>({...x,active:false}))}};
+const disabled=await context.ftOrgMembers(disabledClient,{tenantId:'tenant',agencyId:'agency',personId:'person-1',userId:'dispatch-manager'},members);
+assert.equal(disabled.allowed.size,0,'Inactive canonical assignments must deny');
+console.log('Field Training canonical multi-assignment integration checks passed.');
