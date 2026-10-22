@@ -6,6 +6,7 @@ function validateStaffingRequirements(requirements=[]) {
     const name=String(row?.name||'').trim(),key=name.toLowerCase();
     if(!row?.id||typeof row.id!=='string'||row.id.length>120||!name||name.length>100||(!row.requiredSkill||typeof row.requiredSkill!=='string'||!row.requiredSkill.trim()||row.requiredSkill.length>100)||!Number.isSafeInteger(row.count)||row.count<1||row.count>5000||ids.has(row.id)||names.has(key))throw new Error('Each staffing category needs a unique name, required skill, and a positive whole-number requirement.');
     if(row.preferredCount!==undefined&&(!Number.isSafeInteger(row.preferredCount)||row.preferredCount<row.count||row.preferredCount>5000))throw new Error('Preferred staffing must be a whole number at least equal to minimum staffing.');
+    if(row.requiredRank!==undefined&&(typeof row.requiredRank!=='string'||row.requiredRank.length>100))throw new Error('Staffing rank must be valid.');
     ids.add(row.id);names.add(key);
   }
   return requirements;
@@ -13,8 +14,10 @@ function validateStaffingRequirements(requirements=[]) {
 function staffingPersonHasSkill(records,personId,requirement){
   if(!requirement)return true;
   const required=String(requirement.requiredSkill||'').trim();
-  if(required==='any')return true;
   const record=(records||[]).find(r=>r.personId===personId);
+  const rank=String(requirement.requiredRank||'').trim().toLowerCase();
+  if(rank&&(!record||String(record.rank||'').trim().toLowerCase()!==rank))return false;
+  if(required==='any')return true;
   if(required.startsWith('rank:'))return !!record&&String(record.rank||'').trim().toLowerCase()===required.slice(5).trim().toLowerCase();
   const skill=required.toLowerCase();
   return !!skill&&Array.isArray(record?.specialSkills)&&record.specialSkills.some(value=>String(value).trim().toLowerCase()===skill);
