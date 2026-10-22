@@ -28,12 +28,17 @@ export function authorizedPersonFromAssignments(scopeInput, rows, context = {}) 
   if (scope.mode === 'agency') return context.verifiedAdministrator === true;
   if (scope.mode === 'self') return Boolean(actorPersonId && String(actorPersonId) === String(personId));
   const assignments = activePersonAssignments(rows, context);
-  return assignments.some(row => canAccessOrganizationalRecord(scope, {
-    personId: String(personId),
-    unitId: row.node_kind === 'unit' ? row.organization_id : '',
-    divisionId: row.node_kind === 'division' ? row.organization_id : '',
-    workGroupId: row.node_kind === 'work_group' ? row.organization_id : ''
-  }, {actorPersonId}));
+  return assignments.some(row => {
+    const divisions = row.node_kind === 'division' ? [row.organization_id] :
+      (Array.isArray(row.ancestor_division_ids) ? row.ancestor_division_ids : []);
+    return canAccessOrganizationalRecord(scope, {
+      personId: String(personId),
+      unitId: row.node_kind === 'unit' ? row.organization_id : '',
+      divisionId: row.node_kind === 'division' ? row.organization_id : '',
+      workGroupId: row.node_kind === 'work_group' ? row.organization_id : ''
+    }, {actorPersonId}) || (scope.mode === 'selected' &&
+      divisions.some(id => scope.divisionIds.includes(String(id))));
+  });
 }
 
 /**
@@ -43,7 +48,25 @@ export function authorizedPersonFromAssignments(scopeInput, rows, context = {}) 
 export const PERSON_ORGANIZATION_QUERY = `
 SELECT a.tenant_id, a.agency_id, a.person_id, a.organization_id,
        a.active, a.effective_from, a.effective_to,
-       n.kind AS node_kind, n.active AS node_active
+       n.kind AS node_kind, n.active AS node_active,
+       ARRAY(
+         WITH RECURSIVE ancestor_chain AS (
+           SELECT parent.id, parent.parent_id, parent.kind, parent.active,
+                  ARRAY[n.id, parent.id]::uuid[] AS visited
+           FROM suite_organization_nodes parent
+           WHERE parent.tenant_id=a.tenant_id
+             AND parent.agency_id=a.agency_id AND parent.id=n.parent_id
+           UNION ALL
+           SELECT parent.id, parent.parent_id, parent.kind, parent.active,
+                  child.visited || parent.id
+           FROM ancestor_chain child
+           JOIN suite_organization_nodes parent
+             ON parent.tenant_id=a.tenant_id AND parent.agency_id=a.agency_id
+            AND parent.id=child.parent_id
+           WHERE NOT parent.id=ANY(child.visited)
+         )
+         SELECT id FROM ancestor_chain WHERE kind='division' AND active=true
+       ) AS ancestor_division_ids
 FROM suite_person_organization_assignments a
 JOIN suite_organization_nodes n
   ON n.tenant_id=a.tenant_id
@@ -56,7 +79,25 @@ WHERE a.tenant_id=$1 AND a.agency_id=$2 AND a.person_id=$3
 export const AGENCY_PERSON_ORGANIZATION_QUERY = `
 SELECT a.tenant_id, a.agency_id, a.person_id, a.organization_id,
        a.active, a.effective_from, a.effective_to,
-       n.kind AS node_kind, n.active AS node_active
+       n.kind AS node_kind, n.active AS node_active,
+       ARRAY(
+         WITH RECURSIVE ancestor_chain AS (
+           SELECT parent.id, parent.parent_id, parent.kind, parent.active,
+                  ARRAY[n.id, parent.id]::uuid[] AS visited
+           FROM suite_organization_nodes parent
+           WHERE parent.tenant_id=a.tenant_id
+             AND parent.agency_id=a.agency_id AND parent.id=n.parent_id
+           UNION ALL
+           SELECT parent.id, parent.parent_id, parent.kind, parent.active,
+                  child.visited || parent.id
+           FROM ancestor_chain child
+           JOIN suite_organization_nodes parent
+             ON parent.tenant_id=a.tenant_id AND parent.agency_id=a.agency_id
+            AND parent.id=child.parent_id
+           WHERE NOT parent.id=ANY(child.visited)
+         )
+         SELECT id FROM ancestor_chain WHERE kind='division' AND active=true
+       ) AS ancestor_division_ids
 FROM suite_person_organization_assignments a
 JOIN suite_organization_nodes n
   ON n.tenant_id=a.tenant_id
