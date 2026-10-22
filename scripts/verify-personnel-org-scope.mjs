@@ -10,3 +10,9 @@ for(const fragment of [
 ]) assert.ok(source.includes(fragment),fragment);
 assert.match(source,/The record is outside your authorized organizational scope/);
 console.log('Personnel organizational authorization integration checks passed.');
+
+const attachments=source.slice(source.indexOf('async function fieldTrainingAttachmentScopeAllowed('),source.indexOf('async function attachmentParentWriteAllowed('));
+assert.match(attachments,/suite_memberships/);
+assert.match(attachments,/canAccessOrganizationalRecord\(scope/);
+assert.match(attachments,/if\(!await fieldTrainingAttachmentScopeAllowed\(client,workspaceAuth,enrollment\)\)continue/);
+console.log('Field Training signed URL scope checks passed.');
