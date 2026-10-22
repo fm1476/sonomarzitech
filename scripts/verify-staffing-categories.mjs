@@ -142,6 +142,13 @@ assert.match(shiftWizard,/\.onclick=dismissShiftEditor/);
 assert.match(source,/function scheduleShiftRunsOnDate\(/);
 assert.match(source,/displayedShifts\.filter\(shift=>scheduleShiftRunsOnDate\(shift,dateStr\)\)/);
 assert.match(source,/shifts\.filter\(shift=>canViewScheduleShift\(shift\)&&scheduleShiftRunsOnDate\(shift,date\)\)/);
+assert.match(source,/pm-visual-rank-picker/);
+assert.match(source,/data-quick-rank/);
+assert.match(source,/data-toggle-all-ranks/);
+assert.match(source,/rankPicker\?\.addEventListener\('click'/);
+assert.match(source,/rankPicker\?\.addEventListener\('dragstart'/);
+assert.match(source,/dropZone\?\.addEventListener\('drop'/);
+assert.match(source,/groupSelector\?\.addEventListener\('change'/);
 console.log('Preferred thresholds and non-mutating, approval-required backfill proposals passed.');
 
 // Focused Scheduling QA matrix: rank-only, rank+skill, single occupancy, overrides, rotations.
