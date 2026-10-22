@@ -45,7 +45,10 @@ export function canAccessOrganizationalRecord(scopeInput, record, { actorPersonI
  * legacy single-unit fields as proof of additional membership. */
 export function canAccessAssignedOrganizationalRecord(scope, personId, assignments, options = {}) {
   if (!personId || !Array.isArray(assignments) || !assignments.length) return false;
-  return assignments.some(a => a && a.personId === personId &&
+  const requestedPersonId=String(personId);
+  return assignments.some(a => a && typeof a === 'object' &&
+    String(a.personId || '') === requestedPersonId &&
+    (a.active === undefined || a.active === true) &&
     canAccessOrganizationalRecord(scope, a, options));
 }
 
