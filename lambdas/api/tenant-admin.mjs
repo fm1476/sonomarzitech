@@ -1,3 +1,4 @@
+import { canonicalOrganizationReady } from "./lib/organization-assignments.mjs";
 import { californiaCivilApi } from "./civil-california.mjs";
 import { civilAdminSettingsApi } from "./civil-admin-settings.mjs";
 import { validateTestIntake, validateTestTransition } from "./lib/civil-test-validation.mjs";
@@ -787,6 +788,12 @@ async function tenantAdminDbApi(client, auth, body) {
       updated_by UUID NOT NULL,
       PRIMARY KEY(tenant_id,agency_id,user_id)
     )`);
+    const canonicalReady=await canonicalOrganizationReady(client,tenantId,agencyId);
+    const canonicalNodes=canonicalReady ? await client.query(
+      `SELECT id, kind, name FROM suite_organization_nodes
+        WHERE tenant_id=$1 AND agency_id=$2 AND active=true
+        ORDER BY kind,name`, [tenantId,agencyId]
+    ) : null;
     if (action === 'list_organizational_access') {
       const rows=await client.query(
         `SELECT g.user_id,g.scope,g.updated_at,g.updated_by
@@ -796,7 +803,12 @@ async function tenantAdminDbApi(client, auth, body) {
           WHERE g.tenant_id=$1 AND g.agency_id=$2 AND m.status='active'`,
         [tenantId,agencyId]
       );
-      return response(200,{success:true,data:{assignments:rows.rows}});
+      return response(200,{success:true,data:{assignments:rows.rows,canonicalActive:canonicalReady,
+        catalogs:canonicalReady?{
+          unitIds:canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>({id:n.id,name:n.name})),
+          divisionIds:canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>({id:n.id,name:n.name})),
+          workGroupIds:canonicalNodes.rows.filter(n=>n.kind==='work_group').map(n=>({id:n.id,name:n.name}))
+        }:null}});
     }
     const userId=String(body?.userId || '').trim();
     const scope=body?.scope;
@@ -818,7 +830,15 @@ async function tenantAdminDbApi(client, auth, body) {
       divisionIds:[...new Set(scope.divisionIds||[])],workGroupIds:[...new Set(scope.workGroupIds||[])]};
     // Validate every selected identifier against catalogs from this exact agency.
     // Do not accept arbitrary strings or identifiers supplied by the caller as authority.
-    if (clean.mode==='selected') {
+    if (clean.mode==='selected' && canonicalReady) {
+      const known={
+        unitIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='unit').map(n=>String(n.id))),
+        divisionIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='division').map(n=>String(n.id))),
+        workGroupIds:new Set(canonicalNodes.rows.filter(n=>n.kind==='work_group').map(n=>String(n.id)))
+      };
+      const unknown=['unitIds','divisionIds','workGroupIds'].flatMap(kind=>clean[kind].filter(id=>!known[kind].has(id)).map(id=>({kind,id})));
+      if(unknown.length)return response(400,{success:false,error:'Selected organizations must be valid, active canonical IDs in this agency.'});
+    } else if (clean.mode==='selected') {
       const catalogs=await client.query(
         `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false`,
         [tenantId,agencyId]
