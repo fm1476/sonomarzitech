@@ -1,4 +1,5 @@
 import { canAccessOrganizationalRecord } from "./lib/organizational-access.mjs";
+import { authorizedPersonFromAssignments, PERSON_ORGANIZATION_QUERY } from "./lib/organization-assignments.mjs";
 import { filterSchedulingRecords, schedulingSafeTemplate, biddingSeniorityProjection, schedulingSkillsProjection } from "./lib/scheduling-access.mjs";
 import { cleanAgencySubdomain, ensureAgencySubdomainSchema } from "./lib/agency-subdomains.mjs";
 
@@ -4917,6 +4918,16 @@ async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enroll
   if(!personId)return false;
   // Historical enrollment must still belong to this membership's person identity.
   if(enrollment.trainee_person && String(enrollment.trainee_person)!==personId)return false;
+  const canonical=await client.query(`SELECT to_regclass('suite_person_organization_assignments') AS assignments,
+    to_regclass('suite_organization_nodes') AS nodes`);
+  if(canonical.rows[0]?.assignments && canonical.rows[0]?.nodes) {
+    const assigned=await client.query(PERSON_ORGANIZATION_QUERY,[workspaceAuth.tenantId,workspaceAuth.agencyId,personId]);
+    return authorizedPersonFromAssignments(scope,assigned.rows,{
+      tenantId:workspaceAuth.tenantId,agencyId:workspaceAuth.agencyId,
+      personId,actorPersonId:workspaceAuth.personId
+    });
+  }
+  // Temporary legacy fallback applies only before both canonical tables exist.
   const rows=await client.query(
     `SELECT key,value FROM suite_records WHERE tenant_id=$1 AND agency_id=$2 AND deleted=false
       AND (key LIKE '%"pm","records"%' OR key LIKE '%"personnel"%')`,
