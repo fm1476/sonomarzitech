@@ -1805,6 +1805,7 @@ async function filterOfficerWorkspaceRecords(
       // Collection-wide ordering and legacy aggregate arrays can reveal hidden identities.
       if(itemId==='$order')continue;
       if(itemId==='$value') {
+        if(collection==='pm.records'&&!roleHasAbility(abilityMap,workspaceAuth.roleIds,'pm_records_view'))continue;
         if(!Array.isArray(record.value))continue;
         const scoped=record.value.filter(value=>personnelScopeAllows(personnelScope,value,workspaceAuth,personnelUnits));
         visible.push({...record,value:collection==='personnel'?scoped.map(limitPersonnelRecord):scoped.map(value=>redactPmRecord(value,abilityMap,workspaceAuth.roleIds))});
