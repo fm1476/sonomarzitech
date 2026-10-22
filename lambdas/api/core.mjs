@@ -1557,6 +1557,10 @@ async function loadRoleAbilityMap(client, tenantId, agencyId, roleIds) {
     const roleId = row.value?.id;
     if (typeof roleId === "string") {
       const abilities = { ...(row.value?.abilities || {}) };
+      if (!Object.prototype.hasOwnProperty.call(abilities, "pm_sensitive_view") &&
+          ["role_admin", "role_platform_admin", "role_pm_admin"].includes(roleId)) {
+        abilities.pm_sensitive_view = true;
+      }
       if ([
         "role_qm_admin",
         "role_fleet_admin",
@@ -4471,6 +4475,12 @@ function redactPmRecord(
   }
 
   const copy = structuredClone(value);
+  if (!roleHasAbility(abilityMap, roleIds, "pm_sensitive_view")) {
+    delete copy.medical;
+    delete copy.bloodType;
+    delete copy.lodd;
+    delete copy.disciplinaryHistory;
+  }
 
   if (
     !roleHasAbility(
