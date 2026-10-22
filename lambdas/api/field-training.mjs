@@ -114,7 +114,7 @@ async function ftOrgMembers(client, ctx, members) {
   const scope=await ftLoadOrgScope(client,ctx);
   if(!scope)return {scope:null,allowed:new Set(members.map(m=>m.user_id)),personByUser:new Map(members.map(m=>[m.user_id,String(m.person_id||'')]))};
   // Prefer validated multi-assignments when the canonical schema is installed.
-  const canonicalReady=await canonicalOrganizationReady(client,ctx.tenantId,ctx.agencyId);
+  const canonicalReady=await canonicalOrganizationReady(client,ctx.tenantId,ctx.agencyId,scope);
   if(canonicalReady) {
     const personByUser=new Map(members.map(m=>[m.user_id,String(m.person_id||'')]));
     const allowed=new Set();
