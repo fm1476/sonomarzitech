@@ -66,3 +66,36 @@ for(const block of [core.slice(coreStart,coreEnd),ft.slice(ftStart,ftEnd)]) {
   assert.match(block,/\? \{mode:'none'\} : null/);
 }
 console.log('Activated-agency missing-scope fail-closed structural checks passed.');
+
+import vm from 'node:vm';
+const testScopes=async(source,fnName,endMarker,authInput)=>{
+  const start=source.indexOf('async function '+fnName+'(');
+  const end=source.indexOf(endMarker,start);
+  assert.ok(start>=0 && end>start);
+  let active=false;
+  const sandbox={canonicalOrganizationReady:async()=>active};
+  vm.createContext(sandbox);
+  vm.runInContext(source.slice(start,end),sandbox);
+  const ctx={tenantId:'tenant',agencyId:'agency',userId:'user',admin:false,...authInput};
+  const run=async({enabled=false,grants=[],table=true}={})=>{
+    active=enabled;
+    const client={query:async(sql,args=[])=>{
+      if(sql.includes('to_regclass'))return {rows:[{relation:table?'suite_organizational_access':null}]};
+      if(sql.includes('SELECT scope FROM suite_organizational_access')) {
+        assert.deepEqual(Array.from(args),['tenant','agency','user']);
+        return {rows:grants};
+      }
+      throw Error('Unexpected access scope SQL');
+    }};
+    return sandbox[fnName](client,ctx);
+  };
+  assert.equal(await run(),null,'Before activation unconfigured accounts retain legacy behavior');
+  assert.equal((await run({enabled:true}))?.mode,'none','After activation unconfigured accounts deny');
+  assert.equal((await run({enabled:true,table:false}))?.mode,'none','After activation absent grant table must deny');
+  assert.equal((await run({enabled:true,grants:[{scope:null}]}))?.mode,'none','Explicit null grant must deny');
+  assert.equal((await run({enabled:true,grants:[{scope:{mode:'selected',unitIds:['dispatch']}}]}))?.mode,'selected','Configured scope retained');
+  assert.equal((await run({enabled:false,grants:[{scope:{mode:'none'}}]}))?.mode,'none','Explicit deny works before activation');
+};
+await testScopes(core,'loadPersonnelScope','function personnelScopeAllows(');
+await testScopes(ft,'ftLoadOrgScope','async function ftOrgMembers(');
+console.log('Executable missing-grant activation boundaries passed for Personnel and Field Training.');
