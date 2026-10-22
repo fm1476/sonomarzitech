@@ -352,7 +352,7 @@ export function validateSchedulingBatch(snapshot,changes) {
       try{validateStaffingRequirements(value.staffingRequirements||[]);}catch(error){fail(error.message);}
       const minimum=(value.staffingRequirements||[]).reduce((sum,r)=>sum+r.count,0);
       const catalog=(final['pm.refData']||[]).flatMap(r=>r.skillsCatalog||[]);
-      if((value.staffingRequirements||[]).some(r=>!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a required skill from the Personnel Special Skills Catalog.');
+      if((value.staffingRequirements||[]).some(r=>r.requiredSkill!=='any'&&!String(r.requiredSkill||'').startsWith('rank:')&&!catalog.some(skill=>normalize(skill)===normalize(r.requiredSkill))))fail('Choose a rank or required skill from the Personnel catalog.');
       if(minimum>0&&Number(collection==='pm.specialEvents'?value.staffNeeded:value.minStaff)!==minimum)fail('The total staffing requirement must equal the category requirements.');
     }
     const previousAssignment=(snapshot[collection]||[]).find(row=>row.id===change.itemId);
