@@ -1114,6 +1114,28 @@ function openVehicleModal(id){
     </div>
   `;
   openModal();
+  // In-place organization deliberately preserves existing edit inputs and
+  // event handlers, avoiding the modal regression fixed in Quartermaster.
+  const fleetEditBody=document.querySelector('#modalBox .modal-body');
+  if(fleetEditBody){
+    fleetEditBody.classList.add('fleet-edit-body');
+    const groups=[
+      ['fUnitNumber','01 · Vehicle identity','Unit, registration, make and model'],
+      ['fVehType','02 · Operations','Vehicle class, condition and current location'],
+      ['fIsShared','03 · Assignment & visibility','Agency access and current custody'],
+      ['fPurchase','04 · Lifecycle','Service and acquisition dates'],
+      ['fNotes','05 · Notes','Additional information about this vehicle']
+    ];
+    groups.forEach(([id,title,sub])=>{
+      const input=fleetEditBody.querySelector('#'+id);
+      const row=input?.closest('.form-row, .form-2col');
+      if(!row)return;
+      const heading=document.createElement('div');heading.className='fleet-edit-section-heading';
+      const h=document.createElement('h4');h.textContent=title;heading.appendChild(h);
+      const hint=document.createElement('p');hint.textContent=sub;heading.appendChild(hint);
+      row.before(heading);
+    });
+  }
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('btnGenVin').addEventListener('click', ()=>{
@@ -1213,7 +1235,7 @@ function renderVehicleDetailModal(id){
   box.innerHTML = `
     <div class="modal-head">
       <div>
-        <h3 style="margin-bottom:2px;">${escapeHtml(v.unitNumber)} — ${escapeHtml(v.make)} ${escapeHtml(v.model)} (${v.year})</h3>
+        <div class="fleet-detail-eyebrow">FLEET / VEHICLE RECORD</div><h3 class="fleet-detail-title">${escapeHtml(v.unitNumber)} · ${escapeHtml(v.make)} ${escapeHtml(v.model)} (${v.year})</h3>
         <div class="mono" style="font-size:11.5px;color:var(--text-dim);">VIN ${v.vin} &bull; ${escapeHtml(v.licensePlate)}</div>
       </div>
       <button class="modal-close" id="mClose">&times;</button>
@@ -1238,18 +1260,39 @@ function renderVehDetailTabContent(v){
 
   if(VEH_DETAIL_TAB==='overview'){
     body.innerHTML = `
-      ${canEdit ? `<div style="margin-bottom:14px;"><button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Vehicle</button></div>` : ''}
-      <div class="detail-grid" style="margin-bottom:14px;">
-        <div><div class="k">Vehicle Type</div><div class="v">${escapeHtml(v.vehicleType)}</div></div>
-        <div><div class="k">Status</div><div class="v"><span class="badge ${statusBadgeClass(v.status)}">${v.status}</span></div></div>
-        <div><div class="k">Mileage</div><div class="v">${v.mileage.toLocaleString()} mi</div></div>
-        <div><div class="k">Fuel Type / Level</div><div class="v">${v.fuelType} &bull; ${v.currentFuelLevel}%</div></div>
-        <div><div class="k">Location</div><div class="v">${escapeHtml(v.location)}</div></div>
-        <div><div class="k">Agency</div><div class="v">${escapeHtml(v.agency)}</div></div>
-        <div><div class="k">Assigned To</div><div class="v">${assignmentLabel(v)}</div></div>
-        <div><div class="k">License Plate</div><div class="v">${escapeHtml(v.licensePlate)}</div></div>
-        <div><div class="k">Purchase Date</div><div class="v">${v.purchaseDate}</div></div>
-        <div><div class="k">In-Service Date</div><div class="v">${v.inServiceDate}</div></div>
+      <div class="fleet-detail-toolbar">
+        <span class="badge ${statusBadgeClass(v.status)}">${escapeHtml(v.status)}</span>
+        <div class="fleet-detail-buttons">
+          <button type="button" class="btn btn-sm btn-outline" id="fleetGoInspections">Inspection History</button>
+          <button type="button" class="btn btn-sm btn-outline" id="fleetGoMaintenance">Maintenance</button>
+          ${canEdit? `<button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Vehicle</button>`:''}
+        </div>
+      </div>
+      <div class="fleet-detail-metrics">
+        <div class="fleet-metric"><small>Odometer</small><strong>${Number(v.mileage||0).toLocaleString()}</strong><span>miles recorded</span></div>
+        <div class="fleet-metric"><small>Fuel level</small><strong>${Number(v.currentFuelLevel||0)}%</strong><span>${escapeHtml(v.fuelType||'Fuel type unknown')}</span></div>
+        <div class="fleet-metric"><small>Assignment</small><strong>${assignmentLabel(v)}</strong><span>Current custodian</span></div>
+        <div class="fleet-metric"><small>Location</small><strong>${escapeHtml(v.location||'Not recorded')}</strong><span>${escapeHtml(v.agency||'Agency unknown')}</span></div>
+      </div>
+      <div class="fleet-detail-panels">
+        <section class="fleet-detail-card">
+          <h4>Vehicle identity</h4>
+          <div class="fleet-facts">
+            <div><small>Vehicle type</small><strong>${escapeHtml(v.vehicleType||'Not recorded')}</strong></div>
+            <div><small>Year / Make / Model</small><strong>${escapeHtml([v.year,v.make,v.model].filter(Boolean).join(' ')||'Not recorded')}</strong></div>
+            <div><small>License plate</small><strong>${escapeHtml(v.licensePlate||'Not recorded')}</strong></div>
+            <div><small>VIN</small><strong class="mono">${escapeHtml(v.vin||'Not recorded')}</strong></div>
+          </div>
+        </section>
+        <section class="fleet-detail-card">
+          <h4>Service and accountability</h4>
+          <div class="fleet-facts">
+            <div><small>Operational status</small><strong>${escapeHtml(v.status||'Unknown')}</strong></div>
+            <div><small>In-service date</small><strong>${escapeHtml(v.inServiceDate||'Not recorded')}</strong></div>
+            <div><small>Purchase date</small><strong>${escapeHtml(v.purchaseDate||'Not recorded')}</strong></div>
+            <div><small>Agency</small><strong>${escapeHtml(v.agency||'Not recorded')}</strong></div>
+          </div>
+        </section>
       </div>
       ${v.disposal ? `
         <div class="panel" style="box-shadow:none;border-color:var(--callout-red-border);">
@@ -1275,6 +1318,8 @@ function renderVehDetailTabContent(v){
       renderVehicleDetailModal(v.id);
       if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
     });
+    document.getElementById('fleetGoInspections')?.addEventListener('click',()=>{VEH_DETAIL_TAB='inspections';renderVehicleDetailModal(v.id);});
+    document.getElementById('fleetGoMaintenance')?.addEventListener('click',()=>{VEH_DETAIL_TAB='maintenance';renderVehicleDetailModal(v.id);});
     const editFromDetailBtn = document.getElementById('btnEditFromDetail');
     if(editFromDetailBtn) editFromDetailBtn.addEventListener('click', ()=> openVehicleModal(v.id));
 
@@ -2572,3 +2617,9 @@ window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData
 
 })();
 
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')){
+ const style=document.createElement('style');style.id='fleet-modern-style';
+ style.textContent='.fleet-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim);margin-bottom:5px}.fleet-detail-title{font-size:23px;margin:0 0 5px}.fleet-detail-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:17px}.fleet-detail-buttons{display:flex;gap:8px;flex-wrap:wrap}.fleet-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.fleet-metric,.fleet-detail-card{border:1px solid var(--border);border-radius:13px;background:rgba(105,143,187,.055);padding:17px;min-width:0}.fleet-metric small,.fleet-facts small{font-size:11px;color:var(--text-dim);display:block;margin-bottom:7px}.fleet-metric strong{font-size:18px;font-weight:800;display:block;overflow-wrap:anywhere}.fleet-metric span{font-size:11px;color:var(--text-dim);display:block;margin-top:6px}.fleet-detail-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fleet-detail-card h4{font-size:14px;margin:0 0 16px;font-weight:800}.fleet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fleet-facts strong{display:block;font-size:13px;overflow-wrap:anywhere}.fleet-edit-body{max-width:1080px;margin:0 auto;padding:22px 25px!important}.fleet-edit-section-heading{border-top:1px solid var(--border);padding-top:18px;margin:20px 0 15px}.fleet-edit-section-heading:first-child{margin-top:0;border-top:0;padding-top:0}.fleet-edit-section-heading h4{font-size:15px;margin:0 0 5px;font-weight:800}.fleet-edit-section-heading p{font-size:12px;color:var(--text-dim);margin:0}@media(max-width:800px){.fleet-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.fleet-detail-metrics,.fleet-detail-panels{grid-template-columns:1fr}.fleet-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.fleet-edit-body{padding:14px!important}}';
+ document.head.appendChild(style);
+}
