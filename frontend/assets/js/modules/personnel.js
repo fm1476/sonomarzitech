@@ -974,6 +974,12 @@ function openRecordEditModal(personId){
   editBox.classList.add('pm-modern-editor');
   const editBody=editBox.querySelector('.modal-body');
   editBody?.classList.add('pm-modern-editor-body');
+  if(!can('pm_sensitive_view')){
+    ['fSex','fDlNumber'].forEach(id=>{
+      const section=editBody?.querySelector('#'+id)?.closest('.panel');
+      if(section)section.hidden=true;
+    });
+  }
   editBody?.querySelectorAll(':scope > .panel').forEach((panel,index)=>{
     panel.classList.add('pm-modern-section');
     const title=panel.querySelector('.panel-head h2');
@@ -1016,6 +1022,9 @@ function openRecordEditModal(personId){
       driversLicense: { number: document.getElementById('fDlNumber').value.trim(), licenseClass: document.getElementById('fDlClass').value, state: r.driversLicense.state||'NV', expiration: document.getElementById('fDlExpiration').value },
       specialSkills: Array.from(document.querySelectorAll('.fSkill:checked')).map(el=>el.value),
     };
+    if(!can('pm_sensitive_view')){
+      ['sex','race','maritalStatus','bloodType','phones','address','driversLicense'].forEach(key=>delete nextValues[key]);
+    }
     const publicFields = ['agency','employeeId','unitId','assignment','rank','badgeNumber','employmentStatus','supervisorIds','hireDate','swornDate','terminationDate','specialSkills'];
     const restrictedFields = ['sex','race','maritalStatus','bloodType','phones','address','driversLicense','photoDataUrl'];
     const formatAuditValue = value=>value==null || value==='' ? '(empty)' : Array.isArray(value) ? value.join(', ') || '(empty)' : String(value).slice(0,120);
@@ -1027,6 +1036,7 @@ function openRecordEditModal(personId){
       logActivity(`Updated ${field} for ${personName(personId)}: "${formatAuditValue(previousValues[field])}" to "${formatAuditValue(nextValues[field])}".`, "personnel_record", personId);
     });
     restrictedFields.forEach(field=>{
+      if(!Object.prototype.hasOwnProperty.call(nextValues,field))return;
       if(JSON.stringify(previousValues[field] ?? null)===JSON.stringify(nextValues[field] ?? null)) return;
       updatedFields.push(field);
       logActivity(`Updated restricted personnel field ${field} for ${personName(personId)} (values withheld).`, "personnel_record", personId);
@@ -1070,7 +1080,7 @@ function renderRecordDetailModal(){
   const personId = RECORD_DETAIL_PERSON_ID;
   const r = recordFor(personId);
   if(!r){ closeModal(); return; }
-  const canSensitive = can('pm_sensitive_view') || ['role_admin','role_platform_admin','role_pm_admin'].some(id=>(STATE.currentRoleIds||[]).includes(id));
+  const canSensitive = can('pm_sensitive_view');
   const canLodd = canSensitive && can('pm_lodd_view');
   const tabs = [
     ['overview','Overview'], ['promotions','Promotion History'],
@@ -1113,7 +1123,7 @@ function renderRecordDetailTabContent(r){
   const canDocs = can('pm_documents_manage');
   const canLoddEdit = can('pm_lodd_manage');
   const canDiscManage = can('pm_discipline_manage');
-  const sensitiveAllowed=can('pm_sensitive_view')||['role_admin','role_platform_admin','role_pm_admin'].some(id=>(STATE.currentRoleIds||[]).includes(id));
+  const sensitiveAllowed=can('pm_sensitive_view');
   if(['medical','disciplinary','lodd'].includes(RECORD_DETAIL_TAB)&&!sensitiveAllowed){
     body.innerHTML=permissionBlockedView('Sensitive personnel access is required.');
     return;
