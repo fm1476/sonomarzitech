@@ -86,7 +86,7 @@ SELECT a.tenant_id, a.agency_id, a.person_id, a.organization_id,
                   ARRAY[n.id, parent.id]::uuid[] AS visited
            FROM suite_organization_nodes parent
            WHERE parent.tenant_id=a.tenant_id
-             AND parent.agency_id=a.agency_id AND parent.id=n.parent_id
+             AND parent.agency_id=a.agency_id AND parent.id=n.parent_id AND parent.active=true
            UNION ALL
            SELECT parent.id, parent.parent_id, parent.kind, parent.active,
                   child.visited || parent.id
@@ -94,7 +94,7 @@ SELECT a.tenant_id, a.agency_id, a.person_id, a.organization_id,
            JOIN suite_organization_nodes parent
              ON parent.tenant_id=a.tenant_id AND parent.agency_id=a.agency_id
             AND parent.id=child.parent_id
-           WHERE NOT parent.id=ANY(child.visited)
+           WHERE child.active=true AND parent.active=true AND NOT parent.id=ANY(child.visited)
          )
          SELECT id FROM ancestor_chain WHERE kind='division' AND active=true
        ) AS ancestor_division_ids
