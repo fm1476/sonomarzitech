@@ -36,7 +36,7 @@ const rows=[
   {key:JSON.stringify([['pm','records'],'b']),value:{personId:'person-2',unitId:'communications'}},
   {key:JSON.stringify([['pm','records'],'c']),value:{personId:'person-3',unitId:'patrol'}}
 ];
-const context={canAccessOrganizationalRecord,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,ftLoadOrgScope:async()=>scope};
+const context={canAccessOrganizationalRecord,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY,canonicalOrganizationReady:async(client)=>Boolean((await client.query('to_regclass')).rows[0]?.assignments),ftLoadOrgScope:async()=>scope};
 vm.createContext(context);
 vm.runInContext(source.slice(begin,end),context);
 const client={query:async()=>({rows})};
