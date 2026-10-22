@@ -1070,10 +1070,13 @@ function renderRecordDetailModal(){
   const personId = RECORD_DETAIL_PERSON_ID;
   const r = recordFor(personId);
   if(!r){ closeModal(); return; }
-  const canLodd = can('pm_lodd_view');
+  const canSensitive = can('pm_sensitive_view') || ['role_admin','role_platform_admin','role_pm_admin'].some(id=>(STATE.currentRoleIds||[]).includes(id));
+  const canLodd = canSensitive && can('pm_lodd_view');
   const tabs = [
-    ['overview','Overview'], ['promotions','Promotion History'], ['disciplinary','Disciplinary'],
-    ['medical','Medical'], ['training','Training'], ['inquiries','Inquiries'], ['documents','Documents'],
+    ['overview','Overview'], ['promotions','Promotion History'],
+    ...(canSensitive&&can('pm_discipline_view')?[['disciplinary','Disciplinary']]:[]),
+    ...(canSensitive&&can('pm_medical_view')?[['medical','Medical']]:[]),
+    ['training','Training'], ['inquiries','Inquiries'], ['documents','Documents'],
   ];
   if(canLodd) tabs.push(['lodd','LODD']);
   tabs.push(['history','Change History']);
@@ -1110,6 +1113,11 @@ function renderRecordDetailTabContent(r){
   const canDocs = can('pm_documents_manage');
   const canLoddEdit = can('pm_lodd_manage');
   const canDiscManage = can('pm_discipline_manage');
+  const sensitiveAllowed=can('pm_sensitive_view')||['role_admin','role_platform_admin','role_pm_admin'].some(id=>(STATE.currentRoleIds||[]).includes(id));
+  if(['medical','disciplinary','lodd'].includes(RECORD_DETAIL_TAB)&&!sensitiveAllowed){
+    body.innerHTML=permissionBlockedView('Sensitive personnel access is required.');
+    return;
+  }
   const canMedManage = can('pm_medical_manage');
   const canInqManage = can('pm_inquiries_manage');
 
@@ -2953,8 +2961,9 @@ function staffingCategoryOptions(record,selected=''){
 function wireStaffingPersonPicker(shiftId,categoryId,personId,existing){
   const shiftSelect=document.getElementById(shiftId),categorySelect=document.getElementById(categoryId),personSelect=document.getElementById(personId);
   const update=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===shiftSelect.value),category=(shift?.staffingRequirements||[]).find(c=>c.id===categorySelect.value),selected=personSelect.value;
-    const people=STATE.personnel.filter(p=>(!(shift?.staffingRequirements||[]).length||category)&&staffingPersonHasSkill(STATE.pm.records,p.id,category));
-    personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+    const people=STATE.personnel;
+    const eligible=person=>staffingPersonHasSkill(STATE.pm.records,person.id,category);
+    personSelect.innerHTML='<option value="">Select personnel</option>'+people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${escapeHtml(p.name)}${eligible(p)?'':' · qualification review'}</option>`).join('');
   };
   categorySelect.addEventListener('change',update);shiftSelect.addEventListener('change',update);update();
 }
@@ -4581,6 +4590,21 @@ function openAssignmentFormModal(existing){
   openModal();
   const syncCategory=()=>{const shift=STATE.pm.scheduleShifts.find(s=>s.id===document.getElementById('fAssignShift').value);document.getElementById('fAssignCategory').innerHTML=staffingCategoryOptions(shift,existing?.staffingCategoryId||'');};
   document.getElementById('fAssignShift').addEventListener('change',syncCategory);syncCategory();wireStaffingPersonPicker('fAssignShift','fAssignCategory','fAssignPerson',existing);
+  const advisory=document.createElement('div');
+  advisory.id='pmQualificationAdvisory';
+  advisory.className='pm-qualification-advisory';
+  advisory.setAttribute('role','status');
+  document.getElementById('fAssignPerson').closest('.form-row')?.after(advisory);
+  const updateAdvisory=()=>{
+    const shift=STATE.pm.scheduleShifts.find(x=>x.id===document.getElementById('fAssignShift').value);
+    const category=(shift?.staffingRequirements||[]).find(x=>x.id===document.getElementById('fAssignCategory').value);
+    const personId=document.getElementById('fAssignPerson').value;
+    const issue=!!category&&!!personId&&!staffingPersonHasSkill(STATE.pm.records,personId,category);
+    advisory.textContent=issue?'Advisory: qualification not verified for this position. Authorized scheduling staff may assign this employee; the exception is logged.':'Qualifications are informational; assignments remain at scheduler discretion.';
+    advisory.classList.toggle('pm-qualification-warning',issue);
+  };
+  ['fAssignShift','fAssignCategory','fAssignPerson'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>queueMicrotask(updateAdvisory)));
+  updateAdvisory();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('mSave').onclick = ()=>{
@@ -4594,7 +4618,11 @@ function openAssignmentFormModal(existing){
     };
     const selectedShift=STATE.pm.scheduleShifts.find(s=>s.id===data.shiftId);
     if((selectedShift?.staffingRequirements||[]).length&&!data.staffingCategoryId){toast('Select the staffing category this employee will fill.',true);return;}
-    if(!data.personId||!staffingPersonHasSkill(STATE.pm.records,data.personId,(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId))){toast('Select personnel with the required skill.',true);return;}
+    if(!data.personId){toast('Select an employee.',true);return;}
+    const requirement=(selectedShift?.staffingRequirements||[]).find(c=>c.id===data.staffingCategoryId);
+    if(requirement&&!staffingPersonHasSkill(STATE.pm.records,data.personId,requirement)){
+      logActivity('Advisory: '+personName(data.personId)+' assigned to '+requirement.name+' with an unverified or missing qualification.','schedule');
+    }
     if(!canManageScheduleShift(selectedShift))return;
     if(editing){
       Object.assign(existing, data);
@@ -5358,5 +5386,11 @@ if(typeof document!=='undefined'&&!document.getElementById('pm-full-modernizatio
 if(typeof document!=='undefined'&&!document.getElementById('pm-roster-modern-style')){
  const st=document.createElement('style');st.id='pm-roster-modern-style';
  st.textContent='.pm-roster-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:15px}.pm-roster-intro small{font-size:10px;letter-spacing:.11em;color:var(--text-dim);font-weight:800}.pm-roster-intro h2{font-size:23px;margin:4px 0}.pm-roster-intro p{font-size:12px;color:var(--text-dim);margin:0}.pm-roster-counter{background:rgba(59,134,215,.1);border-radius:13px;padding:14px 20px;display:flex;flex-direction:column;min-width:130px}.pm-roster-counter strong{font-size:24px}.pm-roster-counter span{font-size:11px;color:var(--text-dim)}.pm-roster-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}.pm-roster-metrics>div{background:rgba(100,140,190,.05);border:1px solid var(--border);border-radius:12px;padding:14px 17px}.pm-roster-metrics small{display:block;font-size:11px;color:var(--text-dim);margin-bottom:7px}.pm-roster-metrics strong{font-size:20px}.pm-roster-toolbar{border:1px solid var(--border);background:rgba(85,126,173,.04);border-radius:12px;padding:12px!important}.pm-roster-toolbar .btn{border-radius:9px}@media(max-width:600px){.pm-roster-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.pm-roster-metrics>div{padding:11px}.pm-roster-intro h2{font-size:19px}}';
+ document.head.append(st);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('pm-eligibility-advisory-style')){
+ const st=document.createElement('style');st.id='pm-eligibility-advisory-style';
+ st.textContent='.pm-qualification-advisory{font-size:12px;line-height:1.5;border-radius:10px;border-left:3px solid #4b86d7;background:rgba(75,134,215,.09);padding:12px 14px;margin:12px 0}.pm-qualification-warning{border-left-color:#dfa137;background:rgba(223,161,55,.13)}';
  document.head.append(st);
 }
