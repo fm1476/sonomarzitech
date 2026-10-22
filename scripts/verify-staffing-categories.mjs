@@ -79,6 +79,15 @@ const manager=schedulingSkillsProjection(persisted,'manager',true);assert.equal(
 const foreign=schedulingSkillsProjection(persisted,'outsideManager',true);assert.equal(foreign.length,0);
 console.log('Definable staffing categories: advisory qualification warnings, multi-skill matching, wrong-mix shortages, duplicate people, leave/coverage, history, browser/API category slots, and scoped HR projection passed.');
 
+// Existing variable rotations and effective windows must remain backwards-compatible.
+const variable={id:'rotation',patternType:'rotation',daysOn:3,daysOff:4,startDate:'2099-01-01',endDate:'2099-01-14'};
+const roAssignment={personId:'multi',shiftId:'rotation',startDate:'2099-01-01',endDate:null};
+assert.equal(assignmentOnDuty(roAssignment,variable,'2098-12-31'),false);
+assert.equal(assignmentOnDuty(roAssignment,variable,'2099-01-01'),true);
+assert.equal(assignmentOnDuty(roAssignment,variable,'2099-01-03'),true);
+assert.equal(assignmentOnDuty(roAssignment,variable,'2099-01-04'),false);
+assert.equal(assignmentOnDuty(roAssignment,variable,'2099-01-08'),true);
+assert.equal(assignmentOnDuty(roAssignment,variable,'2099-01-15'),false);
 // Preferred coverage never changes the minimum staffing pass/fail decision.
 const preferred=[{id:'law',name:'Law Dispatcher',requiredSkill:'Law Dispatch',count:1,preferredCount:2},{id:'fire',name:'Fire Dispatcher',requiredSkill:'Fire Dispatch',count:1,preferredCount:2}];
 assert.equal(staffingSummary(preferred,[{personId:'multi',staffingCategoryId:'law'},{personId:'fire1',staffingCategoryId:'fire'}],2,records).ok,true);
