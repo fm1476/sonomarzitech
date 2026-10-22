@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeOrganizationalScope, effectiveOrganizationalScope, canAccessOrganizationalRecord, effectiveAccessSummary } from '../lambdas/api/lib/organizational-access.mjs';
+import { normalizeOrganizationalScope, effectiveOrganizationalScope, canAccessOrganizationalRecord, effectiveAccessSummary, canAccessAssignedOrganizationalRecord } from '../lambdas/api/lib/organizational-access.mjs';
 
 assert.deepEqual(normalizeOrganizationalScope().mode,'none');
 assert.equal(canAccessOrganizationalRecord({}, {personId:'a',unitId:'patrol'}),false);
@@ -35,3 +35,9 @@ assert.equal(canAccessOrganizationalRecord(multi,{unitId:'forensics',divisionId:
 assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'communications-admin'}),true);
 assert.equal(canAccessOrganizationalRecord(multi,{workGroupId:'fire-admin'}),false);
 console.log('Multiple independent organization grant combinations passed.');
+
+const multiPerson=[{personId:'p',unitId:'dispatch'},{personId:'p',unitId:'patrol'}];
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'p',multiPerson),true);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['fire']},'p',multiPerson),false);
+assert.equal(canAccessAssignedOrganizationalRecord({mode:'selected',unitIds:['dispatch']},'other',multiPerson),false);
+console.log('Explicit assignment policy tests passed.');
