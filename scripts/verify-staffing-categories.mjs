@@ -28,20 +28,20 @@ const change=(collection,value)=>({path:collection.split('.'),itemId:value.id,va
 assert.doesNotThrow(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleShifts',shift)]));
 assert.throws(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleShifts',{...shift,minStaff:6})]),/total staffing/);
 assert.throws(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleShifts',{...shift,staffingRequirements:[{...requirements[0],requiredSkill:'Unknown'}],minStaff:2})]),/Catalog/);
-assert.throws(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleAssignments',{...assignments[0],staffingCategoryId:'fire'})]),/required staffing skill/);
-assert.throws(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleCoverages',{id:'cov',shiftId:'s',personId:'multi',date:'2099-01-01',staffingCategoryId:'fire'})]),/required staffing skill/);
+assert.doesNotThrow(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleAssignments',{...assignments[0],staffingCategoryId:'fire'})])); // Advisory only
+assert.doesNotThrow(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleCoverages',{id:'cov',shiftId:'s',personId:'multi',date:'2099-01-01',staffingCategoryId:'fire'})]));
 assert.throws(()=>validateSchedulingBatch(snapshot,[change('pm.scheduleAssignments',{...assignments[0],staffingCategoryId:''})]),/required staffing category/);
 const legacyBad={...assignments[0],staffingCategoryId:'fire',endDate:null};
 const legacySnapshot={...snapshot,'pm.scheduleAssignments':[legacyBad]};
 assert.doesNotThrow(()=>validateSchedulingBatch(legacySnapshot,[change('pm.scheduleAssignments',{...legacyBad,endDate:'2099-01-01'})]));
-assert.throws(()=>validateSchedulingBatch(legacySnapshot,[change('pm.scheduleAssignments',{...legacyBad,endDate:'2099-01-01',personId:'wrong'})]),/required staffing skill/);
+assert.doesNotThrow(()=>validateSchedulingBatch(legacySnapshot,[change('pm.scheduleAssignments',{...legacyBad,endDate:'2099-01-01',personId:'wrong'})]));
 const event={id:'event',eligibleWorkGroupIds:['g'],startDate:'2099-01-01',endDate:'2099-01-02',status:'published',staffNeeded:5,staffingRequirements:requirements,requests:[{personId:'multi',status:'awarded',staffingCategoryId:'law'}]};
 const off={...snapshot,'pm.scheduleAssignments':[]};
 assert.doesNotThrow(()=>validateSchedulingBatch(off,[change('pm.specialEvents',event)]));
-assert.throws(()=>validateSchedulingBatch(off,[change('pm.specialEvents',{...event,requests:[{personId:'multi',status:'awarded',staffingCategoryId:'fire'}]})]),/required event staffing skill/);
-assert.throws(()=>validateSchedulingBatch(off,[change('pm.specialEvents',{...event,requests:[{personId:'multi',status:'pending',staffingCategoryId:'fire'}]})]),/required event staffing skill/);
+assert.doesNotThrow(()=>validateSchedulingBatch(off,[change('pm.specialEvents',{...event,requests:[{personId:'multi',status:'awarded',staffingCategoryId:'fire'}]})]));
+assert.doesNotThrow(()=>validateSchedulingBatch(off,[change('pm.specialEvents',{...event,requests:[{personId:'multi',status:'pending',staffingCategoryId:'fire'}]})]));
 assert.throws(()=>validateSchedulingBatch(off,[change('pm.specialEvents',{...event,requests:[{personId:'multi',status:'awarded',staffingCategoryId:'law'},{personId:'law2',status:'awarded',staffingCategoryId:'law'},{personId:'wrong',status:'awarded',staffingCategoryId:'law'}]})]),/category is already fully staffed/);
-assert.throws(()=>validateSchedulingBatch(off,[change('pm.overtimeOpportunities',{id:'ot',shiftId:'s',date:'2099-01-01',staffingCategoryId:'fire',status:'open',requests:[{personId:'multi',status:'pending'}]})]),/required overtime staffing skill/);
+assert.doesNotThrow(()=>validateSchedulingBatch(off,[change('pm.overtimeOpportunities',{id:'ot',shiftId:'s',date:'2099-01-01',staffingCategoryId:'fire',status:'open',requests:[{personId:'multi',status:'pending'}]})]));
 // Actual browser daily staffing and gaps honor class shortages and exclusive assignment ends.
 const source=fs.readFileSync('frontend/assets/js/modules/personnel.js','utf8');
 const context={STATE:{personnel,pm:{records,scheduleWorkGroups:[group],scheduleShifts:[shift],scheduleAssignments:structuredClone(assignments),scheduleExceptions:[],scheduleCoverages:[],specialEvents:[],refData:{skillsCatalog:skills}}},staffingSummary,validateStaffingRequirements,staffingPersonHasSkill,isOnDutyOnDate:assignmentOnDuty,fmt:d=>d.toISOString().slice(0,10),addDays:(d,n)=>new Date(d.getTime()+n*86400000),shiftPatternStatus:()=> 'current',CURRENT_USER_ID:'manager',currentRole:()=>({id:'role_scheduler'}),can:a=>a==='pm_schedule_manage',personName:id=>id,toast:()=>{},logActivity:()=>{},persist:()=>{},openSpecialEventDetail:()=>{},renderSpecialEventsSub:()=>{}};
@@ -57,7 +57,7 @@ context.STATE.pm.scheduleCoverages=[{id:'fill',personId:'newFire',shiftId:'s',da
 assert.equal(context.computeCoverageGaps(1).length,0);
 vm.runInContext(source.slice(source.indexOf('function canManageSpecialEvent('),source.indexOf('function openSpecialEventAssignmentModal(')),context);
 context.STATE.pm.scheduleAssignments=[];context.STATE.pm.scheduleExceptions=[];context.STATE.pm.scheduleCoverages=[];
-assert.throws(()=>context.planSpecialEventAssignments(event,['multi'],false,true,'fire'),/required skill/);
+assert.equal(context.planSpecialEventAssignments(event,['law2'],false,true,'fire').requests.find(r=>r.personId==='law2').staffingCategoryId,'fire');
 assert.equal(context.planSpecialEventAssignments(event,['law2'],false,true,'law').requests.find(r=>r.personId==='law2').staffingCategoryId,'law');
 // Operational projection contains skills only; ordinary staff cannot read coworkers' skills.
 const key=(collection,id)=>JSON.stringify([collection.split('.'),id]);
@@ -65,4 +65,4 @@ const persisted=Object.entries(snapshot).flatMap(([collection,values])=>values.m
 const own=schedulingSkillsProjection(persisted,'multi',false);assert.equal(own.length,1);assert.deepEqual(Object.keys(own[0].value),['id','personId','specialSkills']);
 const manager=schedulingSkillsProjection(persisted,'manager',true);assert.equal(manager.length,personnel.length);
 const foreign=schedulingSkillsProjection(persisted,'outsideManager',true);assert.equal(foreign.length,0);
-console.log('Definable staffing categories: required skills, multi-skill matching, wrong-mix shortages, duplicate people, leave/coverage, history, browser/API category slots, and scoped HR projection passed.');
+console.log('Definable staffing categories: advisory qualification warnings, multi-skill matching, wrong-mix shortages, duplicate people, leave/coverage, history, browser/API category slots, and scoped HR projection passed.');
