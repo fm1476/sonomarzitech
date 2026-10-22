@@ -1655,7 +1655,10 @@ function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
   if (scope.mode==='agency') return false; // Only authenticated administrators may have agency scope.
   if (!value || typeof value!=='object') return false;
   const personId=value.personId||value.id;
-  const unitId=String(value.unitId || value.unit || unitsByPerson.get(personId) || '');
+  // A contradictory personnel identity-to-unit mapping must deny even when
+  // the individual record contains an otherwise authorized unit identifier.
+  if(personId && unitsByPerson.has(String(personId)) && unitsByPerson.get(String(personId))===null) return false;
+  const unitId=String(value.unitId || value.unit || unitsByPerson.get(String(personId)) || '');
   return canAccessOrganizationalRecord(scope,{personId,unitId,divisionId:value.divisionId||''},{actorPersonId:auth.personId});
 }
 
