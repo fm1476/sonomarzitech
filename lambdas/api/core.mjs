@@ -1658,7 +1658,11 @@ function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
   // A contradictory personnel identity-to-unit mapping must deny even when
   // the individual record contains an otherwise authorized unit identifier.
   if(personId && unitsByPerson.has(String(personId)) && unitsByPerson.get(String(personId))===null) return false;
-  const unitId=String(value.unitId || value.unit || unitsByPerson.get(String(personId)) || '');
+  // When an agency Personnel mapping exists, it is authoritative over unit claims
+  // carried on related training, inquiry, or disciplinary records.
+  const unitId=String(personId && unitsByPerson.has(String(personId))
+    ? unitsByPerson.get(String(personId)) || ''
+    : value.unitId || value.unit || '');
   return canAccessOrganizationalRecord(scope,{personId,unitId,divisionId:value.divisionId||''},{actorPersonId:auth.personId});
 }
 
