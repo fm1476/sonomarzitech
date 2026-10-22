@@ -1353,6 +1353,84 @@ function openEquipmentModal(id){
     </div>
   `;
   openModal();
+  // Reorganize the existing form controls without replacing input IDs or
+  // their original save/validation handlers. Keeps new and edit flows in sync.
+  const equipmentBody=document.querySelector('#modalBox .modal-body');
+  if(equipmentBody){
+    equipmentBody.classList.add('qm-edit-workspace');
+    const rows=[...equipmentBody.children];
+    const identity=document.createElement('section');
+    identity.className='qm-edit-section';
+    identity.innerHTML='<h4>01 · Equipment identity</h4><p>What is this item and how is it identified?</p>';
+    const tracking=document.createElement('section');
+    tracking.className='qm-edit-section';
+    tracking.innerHTML='<h4>02 · Inventory & tracking</h4><p>Manage serialized equipment or quantity-based consumables.</p>';
+    const assignment=document.createElement('section');
+    assignment.className='qm-edit-section';
+    assignment.innerHTML='<h4>03 · Assignment & visibility</h4><p>Where this item belongs and which agencies can see it.</p>';
+    const purchasing=document.createElement('section');
+    purchasing.className='qm-edit-section';
+    purchasing.innerHTML='<h4>04 · Procurement & lifecycle</h4><p>Cost, purchasing details and replacement planning.</p>';
+    const supporting=document.createElement('section');
+    supporting.className='qm-edit-section';
+    supporting.innerHTML='<h4>05 · Additional details</h4><p>Images, notes and disposal information.</p>';
+    // Split Asset ID and Value so unrelated information no longer shares a row.
+    const idRow=rows[0];
+    const costInput=idRow?.querySelector('#fValue')?.closest('.form-row');
+    if(costInput)costInput.remove();
+    if(idRow)identity.append(idRow);
+    [1,2].forEach(i=>rows[i]&&identity.append(rows[i]));
+    [12,13,14,3,4].forEach(i=>rows[i]&&tracking.append(rows[i]));
+    [5,6,7].forEach(i=>rows[i]&&assignment.append(rows[i]));
+    if(costInput){const costRow=document.createElement('div');costRow.className='form-row';costRow.append(costInput);purchasing.append(costRow);}
+    [8,9,10,11].forEach(i=>rows[i]&&purchasing.append(rows[i]));
+    [15,16,17].forEach(i=>rows[i]&&supporting.append(rows[i]));
+    equipmentBody.append(identity,tracking,assignment,purchasing,supporting);
+    const trackingCheckbox=equipmentBody.querySelector('#fIsConsumable');
+    const stockHint=document.createElement('div');
+    stockHint.className='qm-edit-tracking-hint';
+    trackingCheckbox?.closest('.form-row')?.after(stockHint);
+    const refreshTrackingHint=()=>{
+      const consumable=trackingCheckbox?.checked;
+      stockHint.textContent=consumable
+        ?'Consumable: issue stock by quantity from the equipment record. Set the reorder threshold to activate low-stock warnings.'
+        :'Serialized asset: use Assign Item to record checkout to a person, unit or location.';
+      stockHint.dataset.mode=consumable?'consumable':'serialized';
+    };
+    trackingCheckbox?.addEventListener('change',refreshTrackingHint);
+    refreshTrackingHint();
+    const homeUnitLabel=equipmentBody.querySelector('#fHomeUnit')?.closest('.form-row')?.querySelector('label');
+    if(homeUnitLabel){
+      homeUnitLabel.textContent='Home Unit';
+      const hint=document.createElement('small');
+      hint.className='qm-edit-field-hint';
+      hint.textContent='Optional. Used to scope equipment visibility by unit.';
+      homeUnitLabel.after(hint);
+    }
+    const sharedLabel=equipmentBody.querySelector('#fIsShared')?.closest('label');
+    if(sharedLabel){
+      const checkbox=sharedLabel.querySelector('input');
+      sharedLabel.textContent='Shared task-force asset';
+      sharedLabel.prepend(checkbox);
+      const hint=document.createElement('small');
+      hint.className='qm-edit-field-hint';
+      hint.textContent='Visible across agencies regardless of unit scope.';
+      sharedLabel.after(hint);
+    }
+    const heading=document.querySelector('#modalBox .modal-head h3');
+    if(heading)heading.textContent=(editing?'Edit':'Add')+' Equipment · '+(item.name||'New item');
+    const footer=document.querySelector('#modalBox .modal-foot');
+    if(footer&&!editing){
+      const saveAssign=document.createElement('button');
+      saveAssign.type='button';saveAssign.className='btn btn-outline';
+      saveAssign.id='qmSaveAndAssign';
+      saveAssign.textContent='Save & Assign';
+      saveAssign.hidden=item.isConsumable||!can('qm_assign_checkout');
+      trackingCheckbox?.addEventListener('change',()=>saveAssign.hidden=trackingCheckbox.checked);
+      footer.insertBefore(saveAssign,footer.querySelector('#mSave'));
+      saveAssign.addEventListener('click',()=>{const save=footer.querySelector('#mSave');save.dataset.assignAfterSave='true';save.click();});
+    }
+  }
   let pendingPhotoDataUrl = item.photoDataUrl || null;
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1441,6 +1519,16 @@ function openEquipmentModal(id){
         reason: document.getElementById('fDisposalReason').value.trim(),
       } : null,
     };
+    // Stock on hand and reorder thresholds must be whole, nonnegative units.
+    if(isConsumable && (!Number.isSafeInteger(data.quantity)||data.quantity<0||
+       (data.minQuantity!=null&&(!Number.isSafeInteger(data.minQuantity)||data.minQuantity<0)))){
+      toast("Enter valid whole-number stock quantities and reorder thresholds.",true);return;
+    }
+    if(editing && item.isConsumable && data.quantity!==item.quantity &&
+       STATE.qm.consumptionLog.some(log=>log.equipmentId===item.id)){
+      // Existing edits can still correct inventory, but never silently change recorded issues.
+      logActivity(item.name+" stock reconciled from "+item.quantity+" to "+data.quantity+" through equipment editing.","consumption",item.id);
+    }
     if(editing){
       const photoChanged = item.photoDataUrl!==data.photoDataUrl;
       const changes = Object.keys(data).filter(key=>key!=='photoDataUrl' && JSON.stringify(item[key] ?? null)!==JSON.stringify(data[key] ?? null));
@@ -1463,9 +1551,12 @@ function openEquipmentModal(id){
       logActivity(`${newItem.name} (${newItem.assetId}) added to inventory.`, "equipment", newItem.id);
       toast("Equipment added to inventory.");
     }
+    const nextId=editing?item.id:STATE.qm.equipment[STATE.qm.equipment.length-1]?.id;
+    const assignAfterSave=!editing&&!isConsumable&&document.getElementById('mSave')?.dataset.assignAfterSave==='true'&&status==='Available';
     persist();
     closeModal();
     renderInventory();
+    if(assignAfterSave&&nextId)openCheckoutModal(nextId);
   };
 }
 
@@ -3775,3 +3866,9 @@ if(typeof document!=='undefined'&&!document.getElementById('qm-detail-modern-sty
 }
 
 if(typeof document!=='undefined'&&!document.getElementById('qm-stock-alert-styles')){const st=document.createElement('style');st.id='qm-stock-alert-styles';st.textContent='.qm-stock-success{background:rgba(28,167,111,.12);color:#43d59b}.qm-stock-warning{background:rgba(242,161,37,.14);color:#f7b44a}.qm-stock-danger{background:rgba(230,74,74,.14);color:#ff8585}';document.head.appendChild(st);}
+
+if(typeof document!=='undefined'&&!document.getElementById('qm-form-modern-style')){
+ const style=document.createElement('style');style.id='qm-form-modern-style';
+ style.textContent='.qm-edit-workspace{max-width:1120px;margin:0 auto;padding:20px 24px!important;display:grid;gap:18px}.qm-edit-section{padding:20px;border:1px solid var(--border);border-radius:14px;background:rgba(112,140,180,.045);min-width:0}.qm-edit-section h4{font-weight:800;font-size:15px;margin:0 0 5px;color:var(--heading)}.qm-edit-section>p{font-size:12px;color:var(--text-dim);margin:0 0 18px}.qm-edit-tracking-hint{background:rgba(56,120,220,.09);border-left:3px solid #4f8fea;padding:11px 14px;margin:6px 0 16px;border-radius:5px;font-size:12px;color:var(--text)}.qm-edit-tracking-hint[data-mode=consumable]{border-left-color:#2fbf95;background:rgba(35,177,125,.1)}.qm-edit-field-hint{display:block;color:var(--text-dim);font-size:11px;margin:2px 0 10px}.qm-edit-section>.form-row:last-child,.qm-edit-section>.form-2col:last-child{margin-bottom:0}@media(max-width:650px){.qm-edit-workspace{padding:12px!important;gap:12px}.qm-edit-section{padding:14px}}';
+ document.head.append(style);
+}
