@@ -1494,6 +1494,7 @@ async function resolveWorkspaceMembership(client, auth, tenantId, agencyId) {
   }
 
   return {
+    userId: auth.userId,
     tenantId,
     agencyId,
     personId,
@@ -1641,6 +1642,7 @@ const PERSONNEL_SCOPED_COLLECTIONS=new Set([
 ]);
 async function loadPersonnelScope(client, auth) {
   if (auth.admin) return null;
+  if (!auth.userId) return {mode:'none'};
   const result=await client.query(
     `SELECT to_regclass('suite_organizational_access') AS relation`
   );
@@ -1673,7 +1675,7 @@ function personnelScopeAllows(scope, value, auth, unitsByPerson = new Map()) {
 // Canonical assignments override legacy unit claims whenever both tables exist.
 async function canonicalPersonnelScope(client, auth, scope) {
   if (!scope) return null;
-  if(!await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId))return null;
+  if(!await canonicalOrganizationReady(client,auth.tenantId,auth.agencyId,scope))return null;
   const result=await client.query(AGENCY_PERSON_ORGANIZATION_QUERY,[auth.tenantId,auth.agencyId]);
   const byPerson=new Map();
   for(const row of result.rows) {
@@ -4950,7 +4952,7 @@ async function fieldTrainingAttachmentScopeAllowed(client, workspaceAuth, enroll
   if(!personId)return false;
   // Historical enrollment must still belong to this membership's person identity.
   if(enrollment.trainee_person && String(enrollment.trainee_person)!==personId)return false;
-  const canonicalReady=await canonicalOrganizationReady(client,workspaceAuth.tenantId,workspaceAuth.agencyId);
+  const canonicalReady=await canonicalOrganizationReady(client,workspaceAuth.tenantId,workspaceAuth.agencyId,scope);
   if(canonicalReady) {
     const assigned=await client.query(PERSON_ORGANIZATION_QUERY,[workspaceAuth.tenantId,workspaceAuth.agencyId,personId]);
     return authorizedPersonFromAssignments(scope,assigned.rows,{
