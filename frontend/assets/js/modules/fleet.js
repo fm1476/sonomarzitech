@@ -1114,6 +1114,28 @@ function openVehicleModal(id){
     </div>
   `;
   openModal();
+  // In-place organization deliberately preserves existing edit inputs and
+  // event handlers, avoiding the modal regression fixed in Quartermaster.
+  const fleetEditBody=document.querySelector('#modalBox .modal-body');
+  if(fleetEditBody){
+    fleetEditBody.classList.add('fleet-edit-body');
+    const groups=[
+      ['fUnitNumber','01 · Vehicle identity','Unit, registration, make and model'],
+      ['fVehType','02 · Operations','Vehicle class, condition and current location'],
+      ['fIsShared','03 · Assignment & visibility','Agency access and current custody'],
+      ['fPurchase','04 · Lifecycle','Service and acquisition dates'],
+      ['fNotes','05 · Notes','Additional information about this vehicle']
+    ];
+    groups.forEach(([id,title,sub])=>{
+      const input=fleetEditBody.querySelector('#'+id);
+      const row=input?.closest('.form-row, .form-2col');
+      if(!row)return;
+      const heading=document.createElement('div');heading.className='fleet-edit-section-heading';
+      const h=document.createElement('h4');h.textContent=title;heading.appendChild(h);
+      const hint=document.createElement('p');hint.textContent=sub;heading.appendChild(hint);
+      row.before(heading);
+    });
+  }
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
   document.getElementById('btnGenVin').addEventListener('click', ()=>{
@@ -1189,6 +1211,60 @@ function deleteVehicle(id){
   renderVehicles();
 }
 
+function openFleetAssignmentModal(vehicleId){
+ const v=vehicleById(vehicleId);
+ if(!v||!can('fleet_vehicle_edit')||!canSeeVehicle(v)){toast('You cannot change this vehicle assignment.',true);return;}
+ const people=STATE.personnel.map(p=>({id:p.id,label:p.name}));
+ const units=(STATE.pm?.refData?.units||[]).map(u=>({id:u,label:u}));
+ const box=document.getElementById('modalBox');box.className='modal fleet-assign-modal';
+ box.innerHTML='<div class="modal-head"><div><small class="fleet-detail-eyebrow">FLEET / CUSTODY</small><h3>Assign '+escapeHtml(v.unitNumber)+'</h3><span>Manage the current vehicle custodian</span></div><button class="modal-close" id="mClose" aria-label="Close">&times;</button></div>'+
+ '<div class="modal-body fleet-assign-body"><div class="fleet-assignment-current"><small>CURRENT ASSIGNMENT</small><strong>'+escapeHtml(v.assignedToType?assignmentLabel(v):'Unassigned')+'</strong><span>'+escapeHtml(v.status)+'</span></div>'+
+ '<h4>Assign this vehicle to</h4><div class="fleet-assign-choices" role="group" aria-label="Recipient type">'+
+ '<button type="button" data-fleet-assign="person">Person</button><button type="button" data-fleet-assign="unit">Unit / Team</button><button type="button" data-fleet-assign="none">Unassigned</button></div>'+
+ '<div class="form-row"><label for="fleetAssignTarget">Recipient</label><select id="fleetAssignTarget"></select></div>'+
+ '<p class="fleet-assignment-notice" id="fleetAssignSummary" role="status" aria-live="polite"></p></div>'+
+ '<div class="modal-foot"><button class="btn btn-outline" id="mCancel">Cancel</button><button class="btn btn-primary" id="fleetSaveAssignment">Save Assignment</button></div>';
+ openModal();
+ let type=v.assignedToType==='person'||v.assignedToType==='unit'?v.assignedToType:'none';
+ const select=box.querySelector('#fleetAssignTarget'),recipientRow=select.closest('.form-row');
+ const choose=(next)=>{
+   type=next;
+   const options=type==='person'?people:type==='unit'?units:[];
+   select.innerHTML=options.map(o=>'<option value="'+escapeHtml(o.id)+'">'+escapeHtml(o.label)+'</option>').join('');
+   if(options.some(o=>o.id===v.assignedTo))select.value=v.assignedTo;
+   recipientRow.hidden=type==='none';
+   box.querySelectorAll('[data-fleet-assign]').forEach(b=>{const on=b.dataset.fleetAssign===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
+   refresh();
+ };
+ const refresh=()=>{
+   const options=type==='person'?people:type==='unit'?units:[];
+   const recipient=options.find(o=>o.id===select.value);
+   const valid=type==='none'||!!recipient;
+   box.querySelector('#fleetAssignSummary').textContent=type==='none'?
+     'This vehicle will be marked unassigned. Existing history is retained.':
+     valid?'Assign '+v.unitNumber+' to '+recipient.label+'. The change will appear in the activity log.':
+     'No recipients available for this assignment type.';
+   box.querySelector('#fleetSaveAssignment').disabled=!valid;
+ };
+ box.querySelectorAll('[data-fleet-assign]').forEach(b=>b.onclick=()=>choose(b.dataset.fleetAssign));
+ select.onchange=refresh;
+ box.querySelector('#mClose').onclick=closeModal;
+ box.querySelector('#mCancel').onclick=closeModal;
+ box.querySelector('#fleetSaveAssignment').onclick=()=>{
+   const options=type==='person'?people:type==='unit'?units:[];
+   const target=type==='none'?null:select.value;
+   if(!can('fleet_vehicle_edit')||!canSeeVehicle(v)||type!=='none'&&!options.some(o=>o.id===target)){toast('Choose a valid vehicle assignment.',true);return;}
+   const before=assignmentLabel(v);
+   v.assignedToType=type==='none'?null:type;
+   v.assignedTo=target;
+   const after=assignmentLabel(v);
+   logActivity(v.unitNumber+' assignment changed from '+before+' to '+after+'.','vehicle',v.id);
+   persist();toast('Vehicle assignment updated.');renderVehicleDetailModal(v.id);
+   if(ACTIVE_VIEW==='fleet-vehicles')renderVehicles();
+ };
+ choose(type);
+}
+
 /* ---------- Vehicle detail: overview / inspections / maintenance / equipment / activity ---------- */
 let VEH_DETAIL_TAB = 'overview';
 
@@ -1213,7 +1289,7 @@ function renderVehicleDetailModal(id){
   box.innerHTML = `
     <div class="modal-head">
       <div>
-        <h3 style="margin-bottom:2px;">${escapeHtml(v.unitNumber)} — ${escapeHtml(v.make)} ${escapeHtml(v.model)} (${v.year})</h3>
+        <div class="fleet-detail-eyebrow">FLEET / VEHICLE RECORD</div><h3 class="fleet-detail-title">${escapeHtml(v.unitNumber)} · ${escapeHtml(v.make)} ${escapeHtml(v.model)} (${v.year})</h3>
         <div class="mono" style="font-size:11.5px;color:var(--text-dim);">VIN ${v.vin} &bull; ${escapeHtml(v.licensePlate)}</div>
       </div>
       <button class="modal-close" id="mClose">&times;</button>
@@ -1237,19 +1313,54 @@ function renderVehDetailTabContent(v){
   const canEdit = can('fleet_vehicle_edit');
 
   if(VEH_DETAIL_TAB==='overview'){
+    const missingEquipment=(v.equipmentChecklist||[]).filter(e=>e.required&&e.present===false).length;
+    const openWork=STATE.fleet.maintenance.filter(m=>m.vehicleId===v.id&&['Open','Scheduled'].includes(m.status));
+    const unresolved=openWork.filter(m=>m.status==='Open').length;
+    const inspectionIssues=STATE.fleet.inspections.filter(i=>i.vehicleId===v.id).slice().sort((a,b)=>b.dateTime.localeCompare(a.dateTime))[0];
+    const issueReported=!!inspectionIssues?.bodyDamage;
+    const unhealthy=v.status==='Out of Service'||v.status==='Retired'||unresolved>0||missingEquipment>0||issueReported;
+    const alertTone=v.status==='Out of Service'||v.status==='Retired'?'danger':unhealthy?'warning':'success';
+    const readinessTitle=v.status==='Out of Service'?'Out of service':v.status==='Retired'?'Retired vehicle':unhealthy?'Attention needed':'Operational status normal';
     body.innerHTML = `
-      ${canEdit ? `<div style="margin-bottom:14px;"><button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Vehicle</button></div>` : ''}
-      <div class="detail-grid" style="margin-bottom:14px;">
-        <div><div class="k">Vehicle Type</div><div class="v">${escapeHtml(v.vehicleType)}</div></div>
-        <div><div class="k">Status</div><div class="v"><span class="badge ${statusBadgeClass(v.status)}">${v.status}</span></div></div>
-        <div><div class="k">Mileage</div><div class="v">${v.mileage.toLocaleString()} mi</div></div>
-        <div><div class="k">Fuel Type / Level</div><div class="v">${v.fuelType} &bull; ${v.currentFuelLevel}%</div></div>
-        <div><div class="k">Location</div><div class="v">${escapeHtml(v.location)}</div></div>
-        <div><div class="k">Agency</div><div class="v">${escapeHtml(v.agency)}</div></div>
-        <div><div class="k">Assigned To</div><div class="v">${assignmentLabel(v)}</div></div>
-        <div><div class="k">License Plate</div><div class="v">${escapeHtml(v.licensePlate)}</div></div>
-        <div><div class="k">Purchase Date</div><div class="v">${v.purchaseDate}</div></div>
-        <div><div class="k">In-Service Date</div><div class="v">${v.inServiceDate}</div></div>
+      <div class="fleet-readiness-banner fleet-readiness-${alertTone}">
+        <div><small>OPERATIONAL READINESS</small><strong>${readinessTitle}</strong><span>${missingEquipment} missing required equipment · ${unresolved} open maintenance items${issueReported?' · Damage reported on latest inspection':''}</span></div>
+        ${openWork.length?'<span class="fleet-readiness-count">'+openWork.length+' active service items</span>':''}
+      </div>
+      <div class="fleet-detail-toolbar">
+        <span class="badge ${statusBadgeClass(v.status)}">${escapeHtml(v.status)}</span>
+        <div class="fleet-detail-buttons">
+          ${can('fleet_inspection_conduct')?'<button type="button" class="btn btn-sm btn-primary" id="fleetStartInspection">New Inspection</button>':''}
+          ${canEdit?'<button type="button" class="btn btn-sm btn-outline" id="fleetAssignFromDetail">Assign Vehicle</button>':''}
+          <button type="button" class="btn btn-sm btn-outline" id="fleetGoInspections">Inspection History</button>
+          <button type="button" class="btn btn-sm btn-outline" id="fleetGoMaintenance">Maintenance</button>
+          ${canEdit? `<button class="btn btn-sm btn-primary" id="btnEditFromDetail">${ICONS.edit} Edit Vehicle</button>`:''}
+        </div>
+      </div>
+      <div class="fleet-detail-metrics">
+        <div class="fleet-metric"><small>Odometer</small><strong>${Number(v.mileage||0).toLocaleString()}</strong><span>miles recorded</span></div>
+        <div class="fleet-metric"><small>Fuel level</small><strong>${Number(v.currentFuelLevel||0)}%</strong><span>${escapeHtml(v.fuelType||'Fuel type unknown')}</span></div>
+        <div class="fleet-metric"><small>Assignment</small><strong>${assignmentLabel(v)}</strong><span>Current custodian</span></div>
+        <div class="fleet-metric"><small>Location</small><strong>${escapeHtml(v.location||'Not recorded')}</strong><span>${escapeHtml(v.agency||'Agency unknown')}</span></div>
+      </div>
+      <div class="fleet-detail-panels">
+        <section class="fleet-detail-card">
+          <h4>Vehicle identity</h4>
+          <div class="fleet-facts">
+            <div><small>Vehicle type</small><strong>${escapeHtml(v.vehicleType||'Not recorded')}</strong></div>
+            <div><small>Year / Make / Model</small><strong>${escapeHtml([v.year,v.make,v.model].filter(Boolean).join(' ')||'Not recorded')}</strong></div>
+            <div><small>License plate</small><strong>${escapeHtml(v.licensePlate||'Not recorded')}</strong></div>
+            <div><small>VIN</small><strong class="mono">${escapeHtml(v.vin||'Not recorded')}</strong></div>
+          </div>
+        </section>
+        <section class="fleet-detail-card">
+          <h4>Service and accountability</h4>
+          <div class="fleet-facts">
+            <div><small>Operational status</small><strong>${escapeHtml(v.status||'Unknown')}</strong></div>
+            <div><small>In-service date</small><strong>${escapeHtml(v.inServiceDate||'Not recorded')}</strong></div>
+            <div><small>Purchase date</small><strong>${escapeHtml(v.purchaseDate||'Not recorded')}</strong></div>
+            <div><small>Agency</small><strong>${escapeHtml(v.agency||'Not recorded')}</strong></div>
+          </div>
+        </section>
       </div>
       ${v.disposal ? `
         <div class="panel" style="box-shadow:none;border-color:var(--callout-red-border);">
@@ -1275,6 +1386,10 @@ function renderVehDetailTabContent(v){
       renderVehicleDetailModal(v.id);
       if(ACTIVE_VIEW==='fleet-vehicles') renderVehicles();
     });
+    document.getElementById('fleetStartInspection')?.addEventListener('click',()=>openNewInspectionModal(v.id));
+    document.getElementById('fleetAssignFromDetail')?.addEventListener('click',()=>openFleetAssignmentModal(v.id));
+    document.getElementById('fleetGoInspections')?.addEventListener('click',()=>{VEH_DETAIL_TAB='inspections';renderVehicleDetailModal(v.id);});
+    document.getElementById('fleetGoMaintenance')?.addEventListener('click',()=>{VEH_DETAIL_TAB='maintenance';renderVehicleDetailModal(v.id);});
     const editFromDetailBtn = document.getElementById('btnEditFromDetail');
     if(editFromDetailBtn) editFromDetailBtn.addEventListener('click', ()=> openVehicleModal(v.id));
 
@@ -1291,7 +1406,8 @@ function renderVehDetailTabContent(v){
         <td>${i.bodyDamage ? `<span class="badge badge-overdue">Damage noted</span>` : `<span class="badge badge-available">Clean</span>`}</td>
         <td><button class="btn btn-sm btn-outline" data-view-insp="${i.id}">View</button></td>
       </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No inspections recorded for this vehicle yet.</td></tr>`;
-    body.innerHTML = `<table><thead><tr><th>Date/Time</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    body.classList.add('fleet-history-workspace');
+    body.innerHTML = `<div class="fleet-history-intro"><strong>Inspection history</strong><span>${list.length} recorded inspection${list.length===1?'':'s'}</span></div><table><thead><tr><th>Date/Time</th><th>Personnel</th><th>Shift</th><th>Fuel</th><th>Damage</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
     document.querySelectorAll('[data-view-insp]').forEach(b=>b.addEventListener('click', ()=>viewInspectionDetail(b.dataset.viewInsp)));
 
   } else if(VEH_DETAIL_TAB==='maintenance'){
@@ -1312,6 +1428,7 @@ function renderVehDetailTabContent(v){
         ${canLog ? `<button class="btn btn-sm btn-primary" id="btnLogMaint">${ICONS.plus} Log Maintenance</button>` : ''}
         ${canSchedule ? `<button class="btn btn-sm btn-outline" id="btnScheduleMaint">${ICONS.plus} Schedule Maintenance</button>` : ''}
       </div>
+      <div class="fleet-history-intro"><strong>Maintenance history</strong><span>${list.length} recorded service item${list.length===1?'':'s'}</span></div>
       <table><thead><tr><th>Type</th><th>Date</th><th>Vendor</th><th>Cost</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
     `;
     const logBtn = document.getElementById('btnLogMaint');
@@ -1344,6 +1461,17 @@ function renderVehDetailTabContent(v){
     if(!v.photos) v.photos = [];
     const canManage = can('fleet_vehicle_edit');
     body.innerHTML = photoManagerHtml(v.photos, 'fleetVeh', canManage);
+    body.classList.add('fleet-photo-workspace');
+    const uploadZone=body.querySelector('#fleetVehPhotoDropZone');
+    if(uploadZone){
+      uploadZone.setAttribute('role','button');uploadZone.setAttribute('tabindex','0');
+      uploadZone.setAttribute('aria-label','Upload vehicle photos');
+      const title=uploadZone.querySelector('div');
+      if(title)title.textContent='Add vehicle photos';
+      uploadZone.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){event.preventDefault();uploadZone.click();}
+      });
+    }
     wirePhotoManager('vehDetailBody', v.photos, 'fleetVeh', canManage, (action)=>{
       logActivity(`${action==='add'?'Added a photo to':action==='remove'?'Removed a photo from':'Updated a photo description on'} ${v.unitNumber}.`, "vehicle", v.id);
       persist();
@@ -1536,6 +1664,30 @@ function openMaintenanceForm(v, isSchedule){
     </div>
   `;
   openModal();
+  const maintenanceBox=document.getElementById('modalBox');
+  maintenanceBox.classList.add('fleet-maintenance-workspace');
+  const maintenanceBody=maintenanceBox.querySelector('.modal-body');
+  maintenanceBody?.classList.add('fleet-maintenance-body');
+  const fields=maintenanceBody?.querySelectorAll('.form-row, .form-2col');
+  if(fields?.length){
+    const header=document.createElement('div');
+    header.className='fleet-maintenance-heading';
+    header.innerHTML='<h4>Service details</h4><p>Specify the work and service date before saving.</p>';
+    maintenanceBody.prepend(header);
+    const summary=document.createElement('div');
+    summary.className='fleet-maintenance-summary';summary.setAttribute('aria-live','polite');
+    maintenanceBody.appendChild(summary);
+    const update=()=>{
+      const kind=maintenanceBox.querySelector('#fMType')?.value||'Maintenance';
+      const date=maintenanceBox.querySelector('#fMDate')?.value||'No date';
+      const labor=Number(maintenanceBox.querySelector('#fMLabor')?.value||0);
+      const parts=Number(maintenanceBox.querySelector('#fMParts')?.value||0);
+      summary.textContent=kind+' / '+date+' / Estimated recorded costs: USD '+(Math.max(0,labor)+Math.max(0,parts)).toFixed(2);
+    };
+    maintenanceBox.addEventListener('change',update);
+    maintenanceBox.addEventListener('input',update);
+    update();
+  }
   wireMaintenanceFormCommon();
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1726,7 +1878,48 @@ function openNewInspectionModal(prefillVehicleId){
     document.getElementById('fIFuel').value = v ? v.currentFuelLevel : 100;
   };
   openModal();
+  // Decorate existing inspection controls in place; do not detach them.
+  const inspectionBox=document.getElementById('modalBox');
+  inspectionBox.classList.add('fleet-inspection-workspace');
+  const inspectionBody=inspectionBox.querySelector('.modal-body');
+  inspectionBody?.classList.add('fleet-inspection-body');
+  const inspectionGroups=[
+    ['fIVehicle','01 · Vehicle & inspector','Confirm the vehicle, shift and inspection team'],
+    ['fIMileage','02 · Vehicle readings','Record odometer, fuel and fluids'],
+    ['fIVehCondition','03 · Vehicle condition','Assess condition, cleanliness and damage'],
+    ['fINarrative','04 · Final notes','Document any additional observations']
+  ];
+  inspectionGroups.forEach(([id,title,hint])=>{
+    const field=inspectionBody?.querySelector('#'+id);
+    const row=field?.closest('.form-row, .form-2col');
+    if(!row)return;
+    const section=document.createElement('div');section.className='fleet-inspection-heading';
+    const h=document.createElement('h4');h.textContent=title;
+    const p=document.createElement('p');p.textContent=hint;
+    section.append(h,p);row.before(section);
+  });
+  const checklist=inspectionBody?.querySelector('.panel');
+  if(checklist){
+    const h=checklist.querySelector('.panel-head h2');
+    if(h)h.textContent='03 · Equipment checklist';
+    checklist.classList.add('fleet-inspection-checklist');
+  }
+  const inspectionSummary=document.createElement('div');
+  inspectionSummary.className='fleet-inspection-summary';inspectionSummary.setAttribute('aria-live','polite');
+  inspectionBody?.appendChild(inspectionSummary);
+  const refreshInspectionSummary=()=>{
+    const sel=inspectionBox.querySelector('#fIVehicle');
+    const vehicle=vehicleById(sel?.value);
+    const mileage=inspectionBox.querySelector('#fIMileage')?.value||'Not recorded';
+    const fuel=inspectionBox.querySelector('#fIFuel')?.value||'0';
+    const damaged=inspectionBox.querySelector('#fIBodyDamage')?.checked;
+    inspectionSummary.textContent=(vehicle?.unitNumber||'Vehicle')+' · '+mileage+' miles · '+fuel+'% fuel'+(damaged?' · Body damage flagged':' · No body damage flagged');
+    inspectionSummary.classList.toggle('fleet-inspection-alert',!!damaged);
+  };
+  inspectionBox.addEventListener('change',refreshInspectionSummary);
+  inspectionBox.addEventListener('input',refreshInspectionSummary);
   setMileageDefault();
+  refreshInspectionSummary();
   vSel.addEventListener('change', setMileageDefault);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -2572,3 +2765,26 @@ window.FLEET = { start: startFleetModule, buildData: buildFleetData, migrateData
 
 })();
 
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-modern-style')){
+ const style=document.createElement('style');style.id='fleet-modern-style';
+ style.textContent='.fleet-detail-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:800;color:var(--text-dim);margin-bottom:5px}.fleet-detail-title{font-size:23px;margin:0 0 5px}.fleet-detail-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:17px}.fleet-detail-buttons{display:flex;gap:8px;flex-wrap:wrap}.fleet-detail-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.fleet-metric,.fleet-detail-card{border:1px solid var(--border);border-radius:13px;background:rgba(105,143,187,.055);padding:17px;min-width:0}.fleet-metric small,.fleet-facts small{font-size:11px;color:var(--text-dim);display:block;margin-bottom:7px}.fleet-metric strong{font-size:18px;font-weight:800;display:block;overflow-wrap:anywhere}.fleet-metric span{font-size:11px;color:var(--text-dim);display:block;margin-top:6px}.fleet-detail-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fleet-detail-card h4{font-size:14px;margin:0 0 16px;font-weight:800}.fleet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fleet-facts strong{display:block;font-size:13px;overflow-wrap:anywhere}.fleet-edit-body{max-width:1080px;margin:0 auto;padding:22px 25px!important}.fleet-edit-section-heading{border-top:1px solid var(--border);padding-top:18px;margin:20px 0 15px}.fleet-edit-section-heading:first-child{margin-top:0;border-top:0;padding-top:0}.fleet-edit-section-heading h4{font-size:15px;margin:0 0 5px;font-weight:800}.fleet-edit-section-heading p{font-size:12px;color:var(--text-dim);margin:0}@media(max-width:800px){.fleet-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.fleet-detail-metrics,.fleet-detail-panels{grid-template-columns:1fr}.fleet-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.fleet-edit-body{padding:14px!important}}';
+ document.head.appendChild(style);
+}
+if(typeof document!=='undefined'&&!document.getElementById('fleet-inspection-maintenance-polish')){
+ const style=document.createElement('style');style.id='fleet-inspection-maintenance-polish';
+ style.textContent='.fleet-inspection-workspace{max-width:890px!important;width:min(890px,calc(100vw - 28px))!important}.fleet-inspection-workspace .fleet-inspection-body{max-width:730px!important;padding:20px!important;box-sizing:border-box}.fleet-inspection-heading{border-top:1px solid var(--border);padding-top:19px;margin:21px 0 13px}.fleet-inspection-heading:first-child{border:0;padding-top:0;margin-top:0}.fleet-inspection-heading h4,.fleet-maintenance-heading h4{font-weight:800;font-size:15px;margin:0 0 5px}.fleet-inspection-heading p,.fleet-maintenance-heading p{margin:0;color:var(--text-dim);font-size:12px}.fleet-inspection-checklist{border-radius:13px;overflow:hidden}.fleet-inspection-summary,.fleet-maintenance-summary{margin:18px 0 8px;border-left:3px solid #4b86d7;border-radius:9px;background:rgba(54,118,224,.1);padding:14px 16px;font-size:13px;line-height:1.5}.fleet-inspection-alert{border-left-color:#f0a144;background:rgba(240,161,68,.13)}.fleet-maintenance-workspace{max-width:760px!important;width:min(760px,calc(100vw - 28px))!important}.fleet-maintenance-workspace .fleet-maintenance-body{padding:20px 24px!important}.fleet-maintenance-heading{margin-bottom:18px}.fleet-maintenance-workspace .form-row textarea,.fleet-inspection-workspace .form-row textarea{display:block;min-height:84px;width:100%;box-sizing:border-box}@media(max-width:580px){.fleet-inspection-workspace .fleet-inspection-body,.fleet-maintenance-workspace .fleet-maintenance-body{padding:13px!important}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-final-polish-style')){
+ const style=document.createElement('style');style.id='fleet-final-polish-style';
+ style.textContent='.fleet-assign-modal{max-width:720px!important;width:min(720px,calc(100vw - 28px))!important}.fleet-assign-modal .modal-head h3{font-size:22px;margin:5px 0}.fleet-assign-modal .modal-head span{font-size:12px;color:var(--text-dim)}.fleet-assign-body{padding:22px 26px!important}.fleet-assignment-current{display:flex;flex-direction:column;gap:7px;padding:17px;margin-bottom:23px;border:1px solid var(--border);border-radius:13px;background:rgba(100,140,190,.08)}.fleet-assignment-current small{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--text-dim)}.fleet-assignment-current strong{font-size:18px}.fleet-assignment-current span{font-size:12px;color:var(--text-dim)}.fleet-assign-body h4{font-size:14px;margin:0 0 12px}.fleet-assign-choices{display:flex;gap:9px;margin-bottom:17px;flex-wrap:wrap}.fleet-assign-choices button{border-radius:10px;padding:11px 16px;border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;cursor:pointer}.fleet-assign-choices button.active{background:rgba(54,118,224,.18);border-color:#4b86d7;color:#98c2ff}.fleet-assignment-notice{border-left:3px solid #4b86d7;background:rgba(54,118,224,.09);padding:14px;border-radius:8px;font-size:13px;line-height:1.55}.fleet-photo-workspace [id=fleetVehPhotoDropZone]{border-radius:14px!important;background:rgba(54,118,224,.075)!important;border-color:#5c8dc9!important;transition:background .15s ease}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:hover{background:rgba(54,118,224,.13)!important}.fleet-photo-workspace [id=fleetVehPhotoDropZone]:focus-visible{outline:3px solid #85b7ff;outline-offset:3px}.fleet-photo-workspace .civil-photo-card{border-radius:12px;overflow:hidden}.fleet-history-intro{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;border-radius:12px;background:rgba(96,140,193,.075);padding:14px 17px;margin-bottom:14px}.fleet-history-intro strong{font-size:14px}.fleet-history-intro span{font-size:12px;color:var(--text-dim)}.fleet-history-workspace table{width:100%}@media(max-width:560px){.fleet-assign-body{padding:14px!important}.fleet-assign-choices button{flex:1}}';
+ document.head.appendChild(style);
+}
+
+if(typeof document!=='undefined'&&!document.getElementById('fleet-readiness-style')){
+ const style=document.createElement('style');style.id='fleet-readiness-style';
+ style.textContent='.fleet-readiness-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-radius:12px;padding:15px 18px;margin-bottom:17px;border-left:4px solid}.fleet-readiness-banner>div{display:flex;flex-direction:column;gap:5px}.fleet-readiness-banner small{font-size:10px;letter-spacing:.09em;font-weight:800;opacity:.82}.fleet-readiness-banner strong{font-size:16px}.fleet-readiness-banner span{font-size:12px}.fleet-readiness-success{border-color:#29b784;background:rgba(31,164,116,.1);color:#4edaaf}.fleet-readiness-warning{border-color:#e8a23e;background:rgba(232,162,62,.1);color:#edba72}.fleet-readiness-danger{border-color:#e56b65;background:rgba(225,84,80,.12);color:#ff9f99}.fleet-readiness-count{border:1px solid currentColor;border-radius:999px;padding:7px 12px;font-weight:700}@media(max-width:580px){.fleet-readiness-banner{align-items:flex-start}}';
+ document.head.appendChild(style);
+}
