@@ -54,6 +54,7 @@ const attachmentEnd=source.indexOf('async function attachmentReadAllowed(',attac
 assert.ok(attachmentStart>=0 && attachmentEnd>attachmentStart);
 const attachmentSandbox={
   loadPersonnelScope:async()=>dispatchScope,
+  canonicalOrganizationReady:async(client)=>Boolean((await client.query('to_regclass')).rows[0]?.assignments),
   collectionFromRecordKey:key=>{const decoded=JSON.parse(key);return {collection:decoded[0].join('.'),itemId:decoded[1]};},
   canAccessOrganizationalRecord,authorizedPersonFromAssignments,PERSON_ORGANIZATION_QUERY
 };
@@ -117,7 +118,7 @@ console.log('Canonical Field Training attachment negative tests passed.');
 const canonicalStart=source.indexOf('async function canonicalPersonnelScope(');
 const canonicalEnd=source.indexOf('async function filterOfficerWorkspaceRecords(',canonicalStart);
 assert.ok(canonicalStart>0 && canonicalEnd>canonicalStart);
-const canonicalSandbox={authorizedPersonFromAssignments,AGENCY_PERSON_ORGANIZATION_QUERY};
+const canonicalSandbox={authorizedPersonFromAssignments,AGENCY_PERSON_ORGANIZATION_QUERY,canonicalOrganizationReady:async(client)=>Boolean((await client.query('to_regclass')).rows[0]?.assignments)}
 vm.createContext(canonicalSandbox);
 vm.runInContext(source.slice(canonicalStart,canonicalEnd),canonicalSandbox);
 const canonicalScope={mode:'selected',unitIds:['dispatch']};
