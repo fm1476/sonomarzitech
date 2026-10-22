@@ -17,7 +17,8 @@ export function normalizeOrganizationalScope(raw = {}) {
 export function effectiveOrganizationalScope({ grants = [], administrator = false } = {}) {
   if (administrator) return normalizeOrganizationalScope({mode:'agency'});
   const normalized = grants.map(normalizeOrganizationalScope);
-  if (normalized.some(g => g.mode === 'agency')) return normalizeOrganizationalScope({mode:'agency'});
+  // A stored or caller-supplied grant never confers administrator authority.
+  // Only the separately verified administrator flag can unlock agency-wide scope.
   return {
     mode: normalized.some(g => g.mode === 'selected') ? 'selected' : normalized.some(g => g.mode === 'self') ? 'self' : 'none',
     unitIds: asIds(normalized.flatMap(g => g.mode === 'selected' ? g.unitIds : [])),
