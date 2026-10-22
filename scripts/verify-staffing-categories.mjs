@@ -61,7 +61,7 @@ const flexibleShift={...shift,staffingOverrides:[
 ]};
 assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').find(r=>r.id==='call'),undefined);
 assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-02').reduce((n,r)=>n+r.count,0),3);
-assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-03').reduce((n,r)=>n+r.count,0),3);
+assert.equal(context.effectiveStaffingRequirements(flexibleShift,'2099-01-09').reduce((n,r)=>n+r.count,0),3);
 assert.equal(context.shiftStaffingSummary(shift,'2099-01-01').ok,true);assert.equal(context.onDutyRoster(shift,'2099-01-01').length,5);assert.equal(context.onDutyRoster(shift,'2999-01-01').length,0);
 context.STATE.pm.scheduleExceptions=[{id:'off',personId:'fire1',startDate:context.fmt(new Date()),endDate:context.fmt(new Date()),code:'VDO'}];
 const gaps=context.computeCoverageGaps(1);assert.equal(gaps.length,1);assert.equal(gaps[0].staffingCategoryId,'fire');assert.equal(gaps[0].needed,1);
