@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import {canAccessOrganizationalRecord} from '../lambdas/api/lib/organizational-access.mjs';
 const source=readFileSync(new URL('../lambdas/api/core.mjs',import.meta.url),'utf8');
 for(const fragment of [
  'loadPersonnelScope(client,workspaceAuth)',
@@ -28,3 +30,17 @@ assert.match(gated,/moduleLicensed\(workspaceAuth\.enabledModules, collection\)/
 const conflictPattern=/if\(personnelUnits\.has\(id\) && personnelUnits\.get\(id\)!==unit\) personnelUnits\.set\(id,null\)/g;
 assert.equal([...source.matchAll(conflictPattern)].length,2,'Both Personnel and PM unit mappings must fail closed on conflicts');
 console.log('Personnel unit conflict handling checks passed.');
+
+// Exercise the actual scoped Personnel read predicate using contradictory source records.
+const predicateStart=source.indexOf('function personnelScopeAllows(');
+const predicateEnd=source.indexOf('async function filterOfficerWorkspaceRecords(',predicateStart);
+assert.ok(predicateStart>=0&&predicateEnd>predicateStart);
+const sandbox={canAccessOrganizationalRecord,Map};
+vm.createContext(sandbox);
+vm.runInContext(source.slice(predicateStart,predicateEnd),sandbox);
+const dispatchScope={mode:'selected',unitIds:['dispatch'],divisionIds:[],workGroupIds:[]};
+const auth={personId:'dispatch-supervisor'};
+assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'dispatch'},auth,new Map([['dispatcher','dispatch']])),true);
+assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'patrol-officer',unitId:'patrol'},auth,new Map([['patrol-officer','patrol']])),false);
+assert.equal(sandbox.personnelScopeAllows(dispatchScope,{personId:'dispatcher',unitId:'dispatch'},auth,new Map([['dispatcher',null]])),false,'Conflicting unit mapping must deny even when record claims Dispatch');
+console.log('Runtime Personnel scope predicate negative cases passed.');
