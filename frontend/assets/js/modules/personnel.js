@@ -961,6 +961,19 @@ function openRecordEditModal(personId){
     </div>
   `;
   openModal();
+  const editBox=document.getElementById('modalBox');
+  editBox.classList.add('pm-modern-editor');
+  const editBody=editBox.querySelector('.modal-body');
+  editBody?.classList.add('pm-modern-editor-body');
+  editBody?.querySelectorAll(':scope > .panel').forEach((panel,index)=>{
+    panel.classList.add('pm-modern-section');
+    const title=panel.querySelector('.panel-head h2');
+    if(title)title.textContent=String(index+1).padStart(2,'0')+' · '+title.textContent;
+  });
+  const intro=document.createElement('div');
+  intro.className='pm-editor-intro';
+  intro.textContent='Employee service record · Staffing, identity, qualifications and career history';
+  editBody?.prepend(intro);
   wirePhotoDropZone('fPmPhoto', (dataUrl)=>{ pendingPhoto = dataUrl; });
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mCancel').onclick = closeModal;
@@ -1279,6 +1292,29 @@ function renderRecordDetailTabContent(r){
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Every change to key fields (rank, unit, employment status) is captured here with who made the change and the before/after values. Every other action on this record is also in the Platform Audit Log under Admin.</div>
       <table><thead><tr><th>Date</th><th>Field</th><th>Before</th><th>After</th><th>Changed By</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
+  if(RECORD_DETAIL_TAB!=='overview'){
+    body.classList.add('pm-record-tab-workspace');
+    const titles={
+      promotions:['Career progression','Promotion and classification history'],
+      disciplinary:['Disciplinary actions','Access-controlled personnel documentation'],
+      medical:['Medical history','Sensitive personnel records, restricted by role'],
+      training:['Training and certifications','Courses, outcomes and recertification'],
+      inquiries:['Professional standards inquiries','Documented inquiries and outcomes'],
+      documents:['Personnel documents','Supporting documents and records'],
+      lodd:['Line-of-duty information','Restricted contingency records'],
+      history:['Change history','Auditable changes to record information']
+    };
+    const heading=titles[RECORD_DETAIL_TAB]||['Personnel information','Employee records'];
+    const title=document.createElement('div');title.className='pm-record-tab-intro';
+    const h=document.createElement('h3');h.textContent=heading[0];
+    const p=document.createElement('p');p.textContent=heading[1];
+    title.append(h,p);body.prepend(title);
+    body.querySelectorAll('table').forEach(table=>{
+      if(table.closest('.pm-record-table-scroll'))return;
+      const wrap=document.createElement('div');wrap.className='pm-record-table-scroll';
+      table.before(wrap);wrap.append(table);
+    });
+  }
 }
 
 function openPhotoUploadModal(r){
@@ -1288,7 +1324,7 @@ function openPhotoUploadModal(r){
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         ${r.photoDataUrl ? `<img src="${r.photoDataUrl}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">` : `<div style="width:64px;height:64px;border-radius:50%;background:var(--lightgray);"></div>`}
-        <input type="file" id="fPhotoFile" accept="image/*">
+        <div class="pm-photo-upload-actions"><button type="button" class="btn btn-outline" id="pmChoosePhoto">Upload Photo</button><span id="pmPhotoSelected">No new photo selected</span><input type="file" id="fPhotoFile" accept="image/*" class="pm-photo-file-input"></div>
       </div>
       <div style="font-size:11px;color:var(--text-dim);">Stored as a small resized thumbnail in this prototype's data record.</div>
     </div>
