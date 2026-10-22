@@ -3007,13 +3007,16 @@ function staffingNeedsRow(row={}){
     <div class="form-row" style="margin-bottom:12px;">
       <label>Operational position <span style="color:var(--red)">*</span></label>
       <input data-staffing-name aria-label="Operational position name" placeholder="e.g. Patrol Deputy, Fire Dispatcher" value="${escapeHtml(name)}" autocomplete="off">
-      <small class="hint">The role being staffed, not necessarily the employee's rank.</small>
+      <small class="hint">Enter this once. Examples: Sergeant, Patrol Officer, Fire Dispatcher. No second selection is required.</small>
     </div>
-    <div class="form-row" style="margin-bottom:12px;">
-      <label>Qualification or rank <span class="hint">(advisory)</span></label>
-      <select data-staffing-skill aria-label="Qualification or rank">${staffingSkillOptions(row.requiredSkill||'any')}</select>
-      <small class="hint">Optional eligibility guidance. Authorized schedulers may override a mismatch.</small>
-    </div>
+    <details class="pm-staff-eligibility" style="margin-bottom:12px;" ${row.requiredSkill&&row.requiredSkill!=='any'?'open':''}>
+      <summary style="cursor:pointer;color:var(--text-dim);font-size:13px;">Advanced: qualification or rank preference ${row.requiredSkill&&row.requiredSkill!=='any'?'(configured)':'(optional)'}</summary>
+      <div class="form-row" style="margin:10px 0 0;">
+        <label>Advisory eligibility rule</label>
+        <select data-staffing-skill aria-label="Optional qualification or rank">${staffingSkillOptions(row.requiredSkill||'any')}</select>
+        <small class="hint">Only configure this if a specific rank, certification, or skill should be flagged for review. The position name above is all you need for normal staffing.</small>
+      </div>
+    </details>
     <div class="form-2col" style="gap:12px;">
       <div class="form-row"><label>Minimum people</label><input data-staffing-count aria-label="Minimum staffing" type="number" min="1" max="5000" step="1" value="${row.count??1}"></div>
       <div class="form-row"><label>Preferred people</label><input data-staffing-preferred aria-label="Preferred staffing" type="number" min="1" max="5000" step="1" value="${row.preferredCount??row.count??1}"></div>
