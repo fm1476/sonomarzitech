@@ -16,3 +16,7 @@ assert.match(attachments,/suite_memberships/);
 assert.match(attachments,/canAccessOrganizationalRecord\(scope/);
 assert.match(attachments,/if\(!await fieldTrainingAttachmentScopeAllowed\(client,workspaceAuth,enrollment\)\)continue/);
 console.log('Field Training signed URL scope checks passed.');
+
+for(const name of ['pm.trainingRecords','pm.trainingRequests','pm.disciplinaryActions','pm.inquiries','pm.instructors'])assert.ok(source.includes("'"+name+"'"),name);
+assert.match(source,/PERSONNEL_SCOPED_COLLECTIONS\.has\(collection\)/);
+console.log('Related employee collection organizational checks passed.');
