@@ -468,21 +468,21 @@ function renderUnifiedCivilDashboard(){
   const showLocalCounts=SuiteStore.mode()!=='shared';
   root.innerHTML=`<style>
     .civil-home{padding:24px 12px 36px;max-width:1460px;margin:auto}
-    .civil-home-hero{border:1px solid var(--border);background:linear-gradient(115deg,rgba(45,113,215,.17),rgba(18,154,137,.08)),var(--panel-bg,var(--bg-card,#172335));border-radius:20px;padding:28px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+    .civil-home-hero{border:1px solid var(--border);background:linear-gradient(115deg,rgba(45,113,215,.09),rgba(18,154,137,.04)),var(--surface);border-radius:20px;padding:28px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
     .civil-home-kicker{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--blue);margin:0 0 10px}
     .civil-home h2{margin:0 0 8px;color:var(--heading);font-size:clamp(23px,2.5vw,34px);letter-spacing:-.035em}
     .civil-home-sub{margin:0;color:var(--text-dim);max-width:620px;line-height:1.6;font-size:14px}
     .civil-home-quick{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .civil-home-quick .btn{border-radius:10px;min-height:43px;display:inline-flex;align-items:center;gap:8px;padding:0 17px}
     .civil-home-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:13px;margin-bottom:24px}
-    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:13px;padding:15px 17px;background:var(--panel-bg,var(--bg-card,#172335))}
+    .civil-home-metric{border:1px solid var(--border);border-left:4px solid var(--metric-color);border-radius:13px;padding:15px 17px;background:var(--surface)}
     .civil-home-metric strong{display:block;font-size:28px;color:var(--metric-color);margin:6px 0;line-height:1.2}
     .civil-home-metric span{font-size:12px;color:var(--text-dim)}
     .civil-home-section-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px}
     .civil-home-section-heading h3{margin:0;font-size:17px;color:var(--heading)}
     .civil-home-section-heading span{font-size:12px;color:var(--text-dim)}
     .civil-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,295px),1fr));gap:14px}
-    .civil-home-tile{background:var(--panel-bg,var(--bg-card,#172335));border:1px solid var(--border);border-radius:15px;padding:21px;text-align:left;color:var(--text);cursor:pointer;min-height:153px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;transition:transform .16s,border-color .16s,box-shadow .16s}
+    .civil-home-tile{background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:21px;text-align:left;color:var(--text);cursor:pointer;min-height:153px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;transition:transform .16s,border-color .16s,box-shadow .16s}
     .civil-home-tile:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 12px 24px rgba(0,0,0,.1)}
     .civil-home-tile:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
     .civil-home-icon{width:43px;height:43px;border-radius:12px;background:color-mix(in srgb,var(--tile-color) 17%,transparent);color:var(--tile-color);display:grid;place-items:center}
