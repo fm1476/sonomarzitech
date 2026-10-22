@@ -51,3 +51,18 @@ assert.match(PERSON_ORGANIZATION_QUERY,/WITH RECURSIVE ancestor_chain/);
 assert.match(PERSON_ORGANIZATION_QUERY,/NOT parent.id=ANY\(child.visited\)/,'Organizational hierarchy traversal must reject cycles');
 assert.match(PERSON_ORGANIZATION_QUERY,/parent.active=true/,'Inactive ancestors must not confer inherited grants');
 console.log('Canonical parent-division inheritance tests passed.');
+
+// Activated agencies must fail closed for non-administrators with no scope row.
+import {readFileSync} from 'node:fs';
+const core=readFileSync(new URL('../lambdas/api/core.mjs',import.meta.url),'utf8');
+const ft=readFileSync(new URL('../lambdas/api/field-training.mjs',import.meta.url),'utf8');
+const coreStart=core.indexOf('async function loadPersonnelScope(');
+const coreEnd=core.indexOf('function personnelScopeAllows(',coreStart);
+const ftStart=ft.indexOf('async function ftLoadOrgScope(');
+const ftEnd=ft.indexOf('async function ftOrgMembers(',ftStart);
+assert.ok(coreStart>=0 && coreEnd>coreStart && ftStart>=0 && ftEnd>ftStart);
+for(const block of [core.slice(coreStart,coreEnd),ft.slice(ftStart,ftEnd)]) {
+  assert.match(block,/canonicalOrganizationReady\(client,/);
+  assert.match(block,/\? \{mode:'none'\} : null/);
+}
+console.log('Activated-agency missing-scope fail-closed structural checks passed.');
